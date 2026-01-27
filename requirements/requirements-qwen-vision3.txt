@@ -1,0 +1,31 @@
+# Qwen3-VL-8B 环境依赖
+# 适用于 Image Expert 和 UML Expert (对比实验)
+# Python 3.10
+
+# 核心依赖 - Transformers 4.45.0
+transformers==4.47.0
+torch==2.0.0
+peft>=0.5.0
+bitsandbytes>=0.40.0
+accelerate>=0.20.0
+
+# Qwen VL 特定依赖
+qwen_vl_utils>=0.0.14
+tiktoken>=0.5.0
+einops>=0.8.0
+
+# 图像处理
+pillow>=10.0.0
+opencv-python>=4.8.0
+
+# 数据处理
+pandas>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+
+# 工具库
+tqdm>=4.65.0
+loguru>=0.7.0
+
+# 其他可能需要的依赖
+sentencepiece>=0.1.99
