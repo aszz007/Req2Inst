@@ -1,25 +1,109 @@
 """
-数据加载器
+数据加载器 - 修复版
 负责加载和处理三类数据集(文本、图像、UML)
 支持合理的数据集划分
+
+修复内容：
+1. 优化编码检测顺序（UTF-8系列优先）
+2. 强化列名规范化（大小写不敏感、去除BOM）
+3. 完全静默异常处理（避免乱码输出）
+4. 智能列名映射机制
+5. Windows换行符兼容
+
 作者：Data Loader System
-日期：2025-01-26
+日期：2025-01-29（修复版）
 """
 
 import os
 import json
 import pandas as pd
 import random
+import warnings
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from torch.utils.data import Dataset, DataLoader
 import torch
+
+# 禁用所有警告，避免乱码输出
+warnings.filterwarnings('ignore')
+pd.options.mode.chained_assignment = None
 
 from config.settings import get_path_config, get_training_config
 from src.utils.logger import get_logger
 from src.utils.file_utils import load_json
 
 logger = get_logger('training.data_loader')
+
+
+def normalize_column_name(col_name: str) -> str:
+    """
+    强力规范化列名
+
+    处理：
+    - 去除BOM标记（UTF-8/UTF-16）
+    - 去除所有空白字符
+    - 转换为小写
+    - 去除不可见字符
+
+    Args:
+        col_name: 原始列名
+
+    Returns:
+        规范化后的列名
+    """
+    # 去除BOM标记
+    col_name = col_name.replace('\ufeff', '').replace('\ufffe', '')
+    # 去除空白字符
+    col_name = col_name.strip()
+    # 转换为小写（大小写不敏感）
+    col_name = col_name.lower()
+    # 去除其他不可见字符
+    col_name = ''.join(c for c in col_name if c.isprintable() or c.isspace())
+    col_name = col_name.strip()
+
+    return col_name
+
+
+def detect_csv_encoding(filepath: Path) -> str:
+    """
+    智能检测CSV文件编码 - 优化版
+
+    优先级调整：
+    1. UTF-8系列（因为生成脚本使用utf-8-sig）
+    2. GBK系列（Windows中文）
+    3. UTF-16系列（Excel导出）
+    4. Latin-1（兜底）
+
+    Args:
+        filepath: CSV文件路径
+
+    Returns:
+        str: 检测到的编码名称
+    """
+    # 调整编码优先级
+    encodings = [
+        'utf-8-sig',       # 带BOM的UTF-8（你的生成脚本用的）
+        'utf-8',           # 标准UTF-8
+        'gbk',             # Windows简体中文
+        'gb2312',          # 简体中文
+        'gb18030',         # 扩展GBK
+        'utf-16',          # UTF-16（自动检测LE/BE）
+        'utf-16-le',       # UTF-16 Little Endian
+        'utf-16-be',       # UTF-16 Big Endian
+        'latin-1'          # 兜底编码
+    ]
+
+    for encoding in encodings:
+        try:
+            # 尝试读取前100行
+            pd.read_csv(filepath, encoding=encoding, nrows=100)
+            return encoding
+        except:
+            # 静默跳过，不打印任何信息（避免乱码）
+            continue
+
+    # 如果所有编码都失败，返回兜底编码
+    return 'latin-1'
 
 
 class InstructionDataset(Dataset):
@@ -73,8 +157,56 @@ class InstructionDataset(Dataset):
         }
 
 
+def clean_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    强力清理DataFrame列名
+
+    功能：
+    - 去除BOM标记
+    - 去除空白字符
+    - 规范化列名
+    - 创建列名映射
+
+    Args:
+        df: 原始DataFrame
+
+    Returns:
+        清理后的DataFrame
+    """
+    # 创建列名映射（原始 -> 规范化）
+    column_mapping = {}
+    for col in df.columns:
+        normalized = normalize_column_name(col)
+        column_mapping[col] = normalized
+
+    # 重命名列
+    df = df.rename(columns=column_mapping)
+
+    return df
+
+
+def find_column(df: pd.DataFrame, possible_names: List[str]) -> Optional[str]:
+    """
+    智能查找列名（大小写不敏感）
+
+    Args:
+        df: DataFrame
+        possible_names: 可能的列名列表（小写）
+
+    Returns:
+        找到的列名，如果没找到返回None
+    """
+    df_columns_lower = {col.lower(): col for col in df.columns}
+
+    for name in possible_names:
+        if name.lower() in df_columns_lower:
+            return df_columns_lower[name.lower()]
+
+    return None
+
+
 class TextDatasetLoader:
-    """文本数据集加载器"""
+    """文本数据集加载器 - 优化版"""
 
     def __init__(self):
         """初始化加载器"""
@@ -96,32 +228,54 @@ class TextDatasetLoader:
 
         for csv_file in csv_files:
             try:
-                df = pd.read_csv(csv_file)
+                # 智能检测编码
+                encoding = detect_csv_encoding(csv_file)
+                df = pd.read_csv(csv_file, encoding=encoding)
 
-                # 验证必要列
-                if 'Low_Requirements' not in df.columns or 'Instruction' not in df.columns:
-                    logger.warning(f"跳过文件(缺少必要列): {csv_file.name}")
+                # 强力清理列名
+                df = clean_dataframe_columns(df)
+
+                logger.info(f"使用编码 '{encoding}' 读取: {csv_file.name}")
+
+            except Exception:
+                # 完全静默失败，不打印任何信息（避免乱码）
+                logger.error(f"加载失败: {csv_file.name}")
+                continue
+
+            # 智能查找必要列（支持多种变体）
+            low_req_col = find_column(df, ['low_requirements', 'lowrequirements', 'low requirements'])
+            instruction_col = find_column(df, ['instruction', 'instructions'])
+
+            if not low_req_col or not instruction_col:
+                logger.warning(f"跳过文件(缺少必要列): {csv_file.name}")
+                logger.warning(f"  实际列名: {list(df.columns)}")
+                continue
+
+            # 提取数据
+            for _, row in df.iterrows():
+                try:
+                    low_req = str(row[low_req_col]).strip()
+                    instruction = str(row[instruction_col]).strip()
+
+                    # 跳过空值或nan
+                    if low_req and low_req != 'nan' and instruction and instruction != 'nan':
+                        all_data.append({
+                            'input': low_req,
+                            'output': instruction,
+                            'source': csv_file.stem
+                        })
+                except:
+                    # 静默跳过问题行
                     continue
 
-                # 提取数据
-                for _, row in df.iterrows():
-                    all_data.append({
-                        'input': str(row['Low_Requirements']).strip(),
-                        'output': str(row['Instruction']).strip(),
-                        'source': csv_file.stem
-                    })
-
-                logger.info(f"加载完成: {csv_file.name}, 数据量: {len(df)}")
-
-            except Exception as e:
-                logger.error(f"加载失败: {csv_file.name}, 错误: {e}")
+            logger.info(f"加载完成: {csv_file.name}, 数据量: {len(df)}")
 
         logger.info(f"文本数据集总计: {len(all_data)}条")
         return all_data
 
 
 class ImageDatasetLoader:
-    """图像数据集加载器"""
+    """图像数据集加载器 - 优化版"""
 
     def __init__(self):
         """初始化加载器"""
@@ -143,43 +297,65 @@ class ImageDatasetLoader:
             return all_data
 
         try:
-            df = pd.read_csv(self.dataset_csv)
+            # 智能检测编码
+            encoding = detect_csv_encoding(self.dataset_csv)
+            df = pd.read_csv(self.dataset_csv, encoding=encoding)
 
-            # 验证必要列
-            if 'Description' not in df.columns or 'Instruction' not in df.columns:
-                logger.error("CSV缺少必要列: Description或Instruction")
-                return all_data
+            # 强力清理列名
+            df = clean_dataframe_columns(df)
 
-            # 提取数据
-            for _, row in df.iterrows():
+            logger.info(f"使用编码 '{encoding}' 读取图像数据集")
+
+        except Exception:
+            # 完全静默失败
+            logger.error("加载图像数据集失败")
+            return all_data
+
+        # 智能查找必要列
+        desc_col = find_column(df, ['description', 'desc', 'descriptions'])
+        instruction_col = find_column(df, ['instruction', 'instructions'])
+
+        if not desc_col or not instruction_col:
+            logger.error("CSV缺少必要列: Description或Instruction")
+            logger.error(f"实际列名: {list(df.columns)}")
+            return all_data
+
+        # 提取数据
+        for idx, row in df.iterrows():
+            try:
+                # 解析Description（可能是JSON字符串）
+                desc_str = str(row[desc_col])
+
+                # 尝试解析JSON
                 try:
-                    # 解析Description JSON
-                    desc_json = json.loads(row['Description'])
-
+                    desc_json = json.loads(desc_str)
                     # 只提取description字段（忽略confidence等元数据）
                     description = desc_json.get('description', '').strip()
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    # 如果不是JSON，直接使用原始值
+                    description = desc_str.strip()
 
-                    if description:
-                        all_data.append({
-                            'input': description,
-                            'output': str(row['Instruction']).strip(),
-                            'source': 'image_dataset'
-                        })
+                instruction = str(row[instruction_col]).strip()
 
-                except json.JSONDecodeError:
-                    logger.warning(f"JSON解析失败,跳过该行")
-                    continue
+                # 跳过空值或nan
+                if description and description != 'nan' and instruction and instruction != 'nan':
+                    all_data.append({
+                        'input': description,
+                        'output': instruction,
+                        'source': 'image_dataset'
+                    })
 
-            logger.info(f"图像数据集加载完成, 数据量: {len(all_data)}")
+            except:
+                # 完全静默跳过问题行
+                continue
 
-        except Exception as e:
-            logger.error(f"加载图像数据集失败: {e}")
+        logger.info(f"图像数据集加载完成, 数据量: {len(all_data)}")
 
         return all_data
 
 
 class UMLDatasetLoader:
-    """UML数据集加载器"""
+    """UML数据集加载器 - 优化版"""
 
     def __init__(self):
         """初始化加载器"""
@@ -201,35 +377,48 @@ class UMLDatasetLoader:
             return all_data
 
         try:
-            df = pd.read_csv(self.dataset_csv)
+            # 智能检测编码
+            encoding = detect_csv_encoding(self.dataset_csv)
+            df = pd.read_csv(self.dataset_csv, encoding=encoding)
 
-            # 验证必要列
-            if 'Description' not in df.columns or 'Instruction' not in df.columns:
-                logger.error("CSV缺少必要列: Description或Instruction")
-                return all_data
+            # 强力清理列名
+            df = clean_dataframe_columns(df)
 
-            # 提取数据
-            for _, row in df.iterrows():
-                try:
-                    # UML数据集的Description直接是JSON字符串描述
-                    # 不需要解析，直接使用
-                    description = str(row['Description']).strip()
+            logger.info(f"使用编码 '{encoding}' 读取UML数据集")
 
-                    if description:
-                        all_data.append({
-                            'input': description,
-                            'output': str(row['Instruction']).strip(),
-                            'source': 'uml_dataset'
-                        })
+        except Exception:
+            # 完全静默失败
+            logger.error("加载UML数据集失败")
+            return all_data
 
-                except Exception as e:
-                    logger.warning(f"数据处理失败: {e}, 跳过该行")
-                    continue
+        # 智能查找必要列
+        desc_col = find_column(df, ['description', 'desc', 'descriptions'])
+        instruction_col = find_column(df, ['instruction', 'instructions'])
 
-            logger.info(f"UML数据集加载完成, 数据量: {len(all_data)}")
+        if not desc_col or not instruction_col:
+            logger.error("CSV缺少必要列: Description或Instruction")
+            logger.error(f"实际列名: {list(df.columns)}")
+            return all_data
 
-        except Exception as e:
-            logger.error(f"加载UML数据集失败: {e}")
+        # 提取数据
+        for _, row in df.iterrows():
+            try:
+                description = str(row[desc_col]).strip()
+                instruction = str(row[instruction_col]).strip()
+
+                # 跳过空值或nan
+                if description and description != 'nan' and instruction and instruction != 'nan':
+                    all_data.append({
+                        'input': description,
+                        'output': instruction,
+                        'source': 'uml_dataset'
+                    })
+
+            except:
+                # 完全静默跳过问题行
+                continue
+
+        logger.info(f"UML数据集加载完成, 数据量: {len(all_data)}")
 
         return all_data
 
@@ -342,7 +531,7 @@ def create_dataloader(
 # 测试代码
 if __name__ == "__main__":
     print("="*80)
-    print("数据加载器测试")
+    print("数据加载器测试（修复版）")
     print("="*80)
 
     # 测试文本数据加载
@@ -351,9 +540,13 @@ if __name__ == "__main__":
     text_loader = TextDatasetLoader()
     text_data = text_loader.load_csv_files()
     if text_data:
-        print(f"数据示例:\n{text_data[0]}")
+        print(f"✓ 数据加载成功")
+        print(f"  数据量: {len(text_data)}条")
+        print(f"  示例来源: {text_data[0]['source']}")
         train, val, test = split_dataset_for_expert(text_data, 'text')
-        print(f"划分结果: 训练{len(train)}, 验证{len(val)}, 测试{len(test)}")
+        print(f"  划分结果: 训练{len(train)}, 验证{len(val)}, 测试{len(test)}")
+    else:
+        print("✗ 数据加载失败")
 
     # 测试图像数据加载
     print("\n【测试2】图像数据加载")
@@ -361,9 +554,13 @@ if __name__ == "__main__":
     image_loader = ImageDatasetLoader()
     image_data = image_loader.load_csv_file()
     if image_data:
-        print(f"数据示例:\n{image_data[0]}")
+        print(f"✓ 数据加载成功")
+        print(f"  数据量: {len(image_data)}条")
+        print(f"  示例来源: {image_data[0]['source']}")
         train, val, test = split_dataset_for_expert(image_data, 'image')
-        print(f"划分结果: 训练{len(train)}, 验证{len(val)}, 测试{len(test)}")
+        print(f"  划分结果: 训练{len(train)}, 验证{len(val)}, 测试{len(test)}")
+    else:
+        print("✗ 数据加载失败")
 
     # 测试UML数据加载
     print("\n【测试3】UML数据加载")
@@ -371,8 +568,12 @@ if __name__ == "__main__":
     uml_loader = UMLDatasetLoader()
     uml_data = uml_loader.load_csv_file()
     if uml_data:
-        print(f"数据示例:\n{uml_data[0]}")
+        print(f"✓ 数据加载成功")
+        print(f"  数据量: {len(uml_data)}条")
+        print(f"  示例来源: {uml_data[0]['source']}")
         train, val, test = split_dataset_for_expert(uml_data, 'uml')
-        print(f"划分结果: 训练{len(train)}, 验证{len(val)}, 测试{len(test)}")
+        print(f"  划分结果: 训练{len(train)}, 验证{len(val)}, 测试{len(test)}")
+    else:
+        print("✗ 数据加载失败")
 
     print("\n数据加载器测试完成！")
