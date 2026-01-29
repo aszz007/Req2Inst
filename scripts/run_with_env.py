@@ -32,12 +32,20 @@ ENV_MAP = {
 def run_in_env(env_name: str, script_path: str, args: list = None):
     """在指定环境中运行脚本"""
 
-    # 从环境名推断Qwen版本并设置环境变量
+    # 从环境名推断Qwen版本
     qwen_version = None
     if 'qwen3' in env_name or env_name == 'qwen_vision3':
         qwen_version = 'qwen3'
     elif 'qwen2.5' in env_name or 'qwen25' in env_name or env_name == 'qwen_vision25':
         qwen_version = 'qwen2.5'
+
+    # 初始化参数列表
+    if args is None:
+        args = []
+
+    # 自动添加 --version 参数（如果推断出了版本且参数中没有 --version）
+    if qwen_version and '--version' not in args:
+        args = ['--version', qwen_version] + args
 
     # 构建conda命令
     cmd = [

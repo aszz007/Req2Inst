@@ -323,28 +323,29 @@ if __name__ == "__main__":
     main()
 
 # 用法示例:
-# 使用 Qwen2.5-VL 模型
-# python scripts/run_with_env.py --env image_qwen2.5 --script scripts/raw_recognize_interim/image/image_raw_recognize_interim.py --version qwen2.5
+# 使用 Qwen2.5-VL 模型批量识别
+# python scripts/run_with_env.py --env image_qwen2.5 --script scripts/raw_recognize_interim/image/image_raw_recognize_interim.py
 
-# 使用 Qwen3-VL 模型
-# python scripts/run_with_env.py --env image_qwen3 --script scripts/raw_recognize_interim/image/image_raw_recognize_interim.py --version qwen3
+# 使用 Qwen3-VL 模型批量识别
+# python scripts/run_with_env.py --env image_qwen3 --script scripts/raw_recognize_interim/image/image_raw_recognize_interim.py
 
 # 使用 Qwen2.5 识别自定义文件夹
-# python scripts/run_with_env.py --env image_qwen2.5 --script scripts/raw_recognize_interim/image/image_raw_recognize_interim.py --version qwen2.5 --input /path/to/your/images
+# python scripts/run_with_env.py --env image_qwen2.5 --script scripts/raw_recognize_interim/image/image_raw_recognize_interim.py --input /path/to/your/images
 
 # 使用 Qwen3 识别自定义文件夹
-# python scripts/run_with_env.py --env image_qwen3 --script scripts/raw_recognize_interim/image/image_raw_recognize_interim.py --version qwen3 --input /path/to/your/images
+# python scripts/run_with_env.py --env image_qwen3 --script scripts/raw_recognize_interim/image/image_raw_recognize_interim.py --input /path/to/your/images
 
 # 使用 Qwen2.5 识别单张图片
-# python scripts/run_with_env.py --env image_qwen2.5 --script scripts/raw_recognize_interim/image/image_raw_recognize_interim.py --version qwen2.5 --single /path/to/single/image.jpg
+# python scripts/run_with_env.py --env image_qwen2.5 --script scripts/raw_recognize_interim/image/image_raw_recognize_interim.py --single /path/to/single/image.jpg
 
 # 使用 Qwen3 识别单张图片
-# python scripts/run_with_env.py --env image_qwen3 --script scripts/raw_recognize_interim/image/image_raw_recognize_interim.py --version qwen3 --single /path/to/single/image.jpg
+# python scripts/run_with_env.py --env image_qwen3 --script scripts/raw_recognize_interim/image/image_raw_recognize_interim.py --single /path/to/single/image.jpg
 
 # 自定义输出路径
-# python scripts/run_with_env.py --env image_qwen2.5 --script scripts/raw_recognize_interim/image/image_raw_recognize_interim.py --version qwen2.5 --output /path/to/output.json
+# python scripts/run_with_env.py --env image_qwen2.5 --script scripts/raw_recognize_interim/image/image_raw_recognize_interim.py --output /path/to/output.json
 
-# --version      模型版本，可选 qwen2.5 或 qwen3（默认: qwen2.5）
+# 参数说明:
 # --input        输入图片文件夹路径（默认: data/raw/image/coco_500/）
 # --output       输出JSON文件路径（默认: outputs/recognition_results/image/image_recognition_<version>_<timestamp>.json）
 # --single       单张图片路径，用于快速测试（可选）
+# 注意: --version 参数由 run_with_env.py 根据 --env 自动添加，无需手动指定

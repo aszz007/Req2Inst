@@ -333,24 +333,23 @@ if __name__ == "__main__":
     main()
 
 # 用法示例:
-# 使用 Qwen2.5-VL 模型
-# python scripts/run_with_env.py --env uml_qwen2.5 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --version qwen2.5
+# 使用 Qwen2.5-VL 模型批量识别
+# python scripts/run_with_env.py --env uml_qwen2.5 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py
 
-# 使用 Qwen3-VL 模型
-# python scripts/run_with_env.py --env uml_qwen3 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --version qwen3
+# 使用 Qwen3-VL 模型批量识别
+# python scripts/run_with_env.py --env uml_qwen3 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py
 
 # 使用 Qwen2.5 识别自定义文件夹
-# python scripts/run_with_env.py --env image_qwen2.5 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --version qwen2.5 --input /path/to/your/images
+# python scripts/run_with_env.py --env uml_qwen2.5 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --input /path/to/your/images
 
 # 使用 Qwen3 识别自定义文件夹
-# python scripts/run_with_env.py --env image_qwen3 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --version qwen3 --input /path/to/your/images
+# python scripts/run_with_env.py --env uml_qwen3 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --input /path/to/your/images
 
 # 使用 Qwen2.5 识别单张UML图
-# python scripts/run_with_env.py --env uml_qwen2.5 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --version qwen2.5 --single /path/to/single/uml.png
+# python scripts/run_with_env.py --env uml_qwen2.5 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --single /path/to/single/uml.png
 
 # 使用 Qwen3 识别单张UML图
-# python scripts/run_with_env.py --env uml_qwen3 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --version qwen3 --single /path/to/single/uml.png
+# python scripts/run_with_env.py --env uml_qwen3 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --single /path/to/single/uml.png
 
 # 自定义输出路径
-# python scripts/run_with_env.py --env uml_qwen2.5 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --version qwen2.5 --output /path/to/output.json
-
+# python scripts/run_with_env.py --env uml_qwen2.5 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --output /path/to/output.json
