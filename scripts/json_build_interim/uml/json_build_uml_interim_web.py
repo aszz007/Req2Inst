@@ -8,6 +8,7 @@ UML用例图数据集构建脚本 - 从图片和JSON识别结果构建CSV数据�
 5. 处理图片和JSON不匹配的情况，不终止程序
 6. 单独记录错误日志和处理统计
 7. Description列只保留UML描述内容（actors, use_cases, system_boundary, relationships, overall_description）
+8. 该代码基于uml_raw_recognize_interim_web_api.py实现json构建interim数据集
 """
 
 import json
@@ -320,13 +321,13 @@ def main():
     # 请根据实际情况修改以下路径
 
     # 图片文件夹路径（与uml_web_recognizer.py中的IMAGE_FOLDER相同）
-    IMAGE_FOLDER = r"D:\MyPyProject\crowdsourcing_instruction_generator\data\raw\uml_raw\roboflow_uml"
+    IMAGE_FOLDER = r"D:\MyPyProject\crowdsourcing_instruction_generator\data\raw\uml\roboflow_uml"
 
     # JSON识别结果文件（由 uml_web_recognizer.py 生成）
-    JSON_FILE = "usecase_recognition_results.json"
+    JSON_FILE = r"D:\MyPyProject\crowdsourcing_instruction_generator\outputs\recognition_results\uml\uml_recognition_qwen3_20260129_174404_fixed.json"
 
     # 输出CSV文件路径
-    OUTPUT_CSV = "uml.csv"
+    OUTPUT_CSV = r"D:\MyPyProject\crowdsourcing_instruction_generator\outputs\recognition_results\uml\uml_interim.csv"
 
     # 错误日志文件路径（可选）
     ERROR_LOG = "uml_dataset_errors.json"
@@ -374,4 +375,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# 运行方式: python build_uml_dataset.py
+# 运行方式: python scripts/json_build_interim/uml/json_build_uml_interim_web.py
