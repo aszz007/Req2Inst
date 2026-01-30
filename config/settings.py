@@ -344,6 +344,7 @@ class TrainingConfig:
     fp16: bool = True  # 混合精度训练
     max_grad_norm: float = 1.0
     seed: int = 42
+    max_seq_length: int = 2048  # 最大序列长度（适用于所有模型）
 
     # ==================== 数据集划分比例 ====================
     # 文本数据集（2400条）
