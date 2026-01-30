@@ -249,20 +249,32 @@ class ExpertTrainer:
 
             # 配置LoRA
             logger.info("配置LoRA参数...")
+
+            # 根据模型类型动态选择target_modules
+            # Qwen-7B-Chat使用c_attn, Qwen2.5-VL/Qwen3-VL使用标准命名
+            if self.expert_type in ['text', 'general']:
+                # Qwen-7B-Chat: 使用concatenated attention
+                target_modules = ["c_attn"]
+                logger.info("检测到文本模型(Qwen-7B-Chat), 使用target_modules: ['c_attn']")
+            else:  # image, uml
+                # Qwen2.5-VL / Qwen3-VL: 使用标准Transformers命名
+                target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+                logger.info("检测到视觉模型(Qwen2.5-VL/Qwen3-VL), 使用target_modules: ['q_proj', 'k_proj', 'v_proj', 'o_proj']")
+
             peft_config = LoraConfig(
                 task_type=TaskType.CAUSAL_LM,
                 inference_mode=False,
                 r=self.lora_cfg.rank,
                 lora_alpha=self.lora_cfg.alpha,
                 lora_dropout=self.lora_cfg.dropout,
-                target_modules=self.lora_cfg.target_modules,
+                target_modules=target_modules,
                 bias="none"
             )
 
             logger.info(f"LoRA配置: rank={self.lora_cfg.rank}, "
                         f"alpha={self.lora_cfg.alpha}, "
                         f"dropout={self.lora_cfg.dropout}")
-            logger.info(f"目标模块: {self.lora_cfg.target_modules}")
+            logger.info(f"最终目标模块: {target_modules}")
 
             # 应用LoRA
             self.model = get_peft_model(self.model, peft_config)
@@ -300,7 +312,7 @@ class ExpertTrainer:
                 gradient_accumulation_steps=self.train_cfg.gradient_accumulation_steps,
                 learning_rate=self.train_cfg.learning_rate,
                 weight_decay=self.train_cfg.weight_decay,
-                warmup_steps=self.train_cfg.warmup_steps,
+                warmup_ratio=self.train_cfg.warmup_ratio,
                 logging_dir=str(self.path_cfg.TRAINING_LOGS_DIR / f"{self.expert_type}_expert"),
                 logging_steps=10,
                 save_strategy="epoch",

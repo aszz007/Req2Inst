@@ -292,9 +292,18 @@ class LoRAConfig:
     bias: str = "none"
 
     def __post_init__(self):
-        """设置默认目标模块"""
+        """
+        设置默认目标模块
+
+        注意：不同模型使用不同的注意力层命名：
+        - Qwen-7B-Chat: 使用 ["c_attn"] (concatenated attention)
+        - Qwen2.5-VL/Qwen3-VL: 使用 ["q_proj", "k_proj", "v_proj", "o_proj"]
+
+        ExpertTrainer会根据模型类型自动选择正确的target_modules，
+        此处默认值主要用于视觉模型的兼容性。
+        """
         if self.target_modules is None:
-            # Qwen模型的注意力层
+            # 默认使用标准Transformers命名（适用于Qwen2.5-VL/Qwen3-VL）
             self.target_modules = [
                 "q_proj",  # Query投影层
                 "k_proj",  # Key投影层
