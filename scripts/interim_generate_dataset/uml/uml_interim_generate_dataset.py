@@ -27,11 +27,11 @@ import json
 
 # ==================== 配置参数 ====================
 CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-DATASET_PATH = r"/data/interim/uml"
+DATASET_PATH = r"dataset/uml"
 GPT_URL = "https://sass-node1.chatshare.biz/"
 
 # ✨ 修改：单个CSV文件
-CSV_FILE = "uml.csv"
+CSV_FILE = "uml_dataset_qwen3.csv"
 
 # ✨ 修改：优化批次参数
 BATCH_SIZE = 1  # 每批1条，质量优先
@@ -97,17 +97,9 @@ SYSTEM_PROMPT = """你是一个软件架构与众包任务设计专家。请根�
 
 请严格按照以下格式输出每条指令，不要添加额外说明：
 
-【图像1】
 Definition: ...
 Emphasis & Caution: ...
 Things to Avoid: ...
-
-【图像2】
-Definition: ...
-Emphasis & Caution: ...
-Things to Avoid: ...
-
-(依此类推)
 """
 
 # ==================== 工具函数 ====================

@@ -1,24 +1,17 @@
 """
-图像专家训练脚本
-功能：训练Image Expert，将图像描述转换为标注指令
-环境：qwen_vision25（transformers==4.37.0）或 qwen_vision3（transformers==4.45.0）
-基础模型：Qwen2.5-VL-7B 或 Qwen3-VL-8B
-输出：lora_weights/experts/image_expert_qwen2.5/ 或 image_expert_qwen3/
+通用专家训练脚本
+功能：训练General Expert，作为兜底专家处理各类需求
+环境：qwen_text（transformers==4.32.0）
+基础模型：Qwen-7B-Chat
+输出：lora_weights/experts/general_expert/
 
 使用方法：
   # 方法1: 通过环境管理脚本运行（推荐）
-  # 使用Qwen2.5-VL
-  python scripts/run_with_env.py --env image_qwen2.5 --script scripts/training/train_image_expert.py
+  python scripts/run_with_env.py --env text --script scripts/training/train_general_expert.py
 
-  # 使用Qwen3-VL
-  python scripts/run_with_env.py --env image_qwen3 --script scripts/training/train_image_expert.py
-
-  # 方法2: 直接在对应环境中运行（需手动指定版本）
-  conda activate qwen_vision25
-  python scripts/training/train_image_expert.py --version qwen2.5
-
-  conda activate qwen_vision3
-  python scripts/training/train_image_expert.py --version qwen3
+  # 方法2: 直接在qwen_text环境中运行
+  conda activate qwen_text
+  python scripts/training/train_general_expert.py
 
 作者：Training System
 日期：2025-01-30
@@ -26,7 +19,6 @@
 
 import sys
 import argparse
-import os
 from pathlib import Path
 
 # 添加项目根目录到路径
@@ -34,42 +26,33 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.training.expert_trainer import ExpertTrainer
-from config.settings import (
-    get_path_config,
-    get_training_config,
-    get_lora_config,
-    get_vision_model_config,
-    set_vision_model_version
-)
+from config.settings import get_path_config, get_training_config, get_lora_config
 from src.utils.logger import get_logger
 
-logger = get_logger('training.train_image_expert')
+logger = get_logger('training.train_general_expert')
 
 
-def print_header(version: str):
+def print_header():
     """打印训练开始的标题"""
     print("=" * 80)
-    print(" " * 18 + f"图像专家训练 (Image Expert Training - {version.upper()})")
+    print(" " * 18 + "通用专家训练 (General Expert Training)")
     print("=" * 80)
     print()
 
 
-def print_config(version: str):
+def print_config():
     """打印训练配置"""
     path_cfg = get_path_config()
     train_cfg = get_training_config()
     lora_cfg = get_lora_config('conservative')
 
-    # 根据版本获取模型路径
-    base_model_path = path_cfg.get_vision_model_path(version)
-    output_dir = path_cfg.get_expert_weight_path('image', vision_version=version)
-
     print("训练配置信息:")
     print("-" * 80)
-    print(f"专家类型: Image Expert")
-    print(f"视觉模型版本: {version}")
-    print(f"基础模型: {base_model_path}")
-    print(f"输出目录: {output_dir}")
+    print(f"专家类型: General Expert (兜底专家)")
+    print(f"基础模型: {path_cfg.QWEN_7B_CHAT_PATH}")
+    print(f"输出目录: {path_cfg.GENERAL_EXPERT_WEIGHTS}")
+    print()
+    print(f"数据来源: 文本 + 图像 + UML 混合数据")
     print()
     print(f"LoRA配置:")
     print(f"  - Rank: {lora_cfg.rank}")
@@ -88,26 +71,23 @@ def print_config(version: str):
     print()
 
 
-def validate_environment(version: str):
+def validate_environment():
     """验证运行环境"""
+    import os
+
     print("验证运行环境...")
     print("-" * 80)
 
     # 检查transformers版本
     try:
         import transformers
-        tf_version = transformers.__version__
+        version = transformers.__version__
+        print(f"Transformers版本: {version}")
 
-        print(f"Transformers版本: {tf_version}")
-
-        # 检查版本是否匹配
-        if version == 'qwen2.5' and not tf_version.startswith('4.37'):
-            logger.warning(f"警告：Qwen2.5-VL推荐使用transformers 4.37.x，当前版本：{tf_version}")
-            logger.warning("请确认是否在qwen_vision25环境中运行")
-        elif version == 'qwen3' and not tf_version.startswith('4.45'):
-            logger.warning(f"警告：Qwen3-VL推荐使用transformers 4.45.x，当前版本：{tf_version}")
-            logger.warning("请确认是否在qwen_vision3环境中运行")
-
+        # General Expert应该使用transformers 4.32.0
+        if not version.startswith('4.32'):
+            logger.warning(f"警告：当前transformers版本为{version}，推荐使用4.32.x")
+            logger.warning("请确认是否在qwen_text环境中运行")
     except ImportError:
         logger.error("未安装transformers库")
         return False
@@ -141,48 +121,29 @@ def validate_environment(version: str):
 def main():
     """主训练流程"""
     # 解析命令行参数
-    parser = argparse.ArgumentParser(description='训练图像专家（支持多版本）')
-    parser.add_argument(
-        '--version',
-        type=str,
-        choices=['qwen2.5', 'qwen3'],
-        help='视觉模型版本（qwen2.5 或 qwen3）'
-    )
+    parser = argparse.ArgumentParser(description='训练通用专家')
     parser.add_argument('--use_4bit', action='store_true', default=True,
                         help='使用4bit量化训练（默认：True）')
     parser.add_argument('--no_4bit', dest='use_4bit', action='store_false',
                         help='不使用4bit量化')
     args = parser.parse_args()
 
-    # 获取版本（优先级：命令行参数 > 环境变量 > 默认值）
-    if args.version:
-        version = args.version
-        logger.info(f"使用命令行参数指定的版本: {version}")
-    else:
-        # 从环境变量或默认值获取
-        vision_cfg = get_vision_model_config()
-        version = vision_cfg.version
-        logger.info(f"使用配置的版本: {version}")
-
-    # 设置视觉模型版本
-    set_vision_model_version(version)
-
     # 打印标题
-    print_header(version)
+    print_header()
 
     # 验证环境
-    if not validate_environment(version):
+    if not validate_environment():
         logger.error("环境验证失败，请检查依赖库")
         return 1
 
     # 打印配置
-    print_config(version)
+    print_config()
 
     # 创建训练器
-    logger.info(f"创建图像专家训练器（{version}）...")
+    logger.info("创建通用专家训练器...")
     try:
         trainer = ExpertTrainer(
-            expert_type='image',
+            expert_type='general',
             use_4bit=args.use_4bit
         )
     except Exception as e:
@@ -200,6 +161,8 @@ def main():
     print(f"数据统计:")
     print(f"  - 训练样本: {status['train_samples']}")
     print(f"  - 验证样本: {status['val_samples']}")
+    print()
+    print("注意：通用专家使用所有类型的数据（文本、图像、UML）")
     print()
 
     # 设置模型
@@ -225,17 +188,12 @@ def main():
         print()
 
         path_cfg = get_path_config()
-        output_path = path_cfg.get_expert_weight_path('image', vision_version=version)
-        print(f"LoRA权重已保存至: {output_path}")
-        print(f"检查点目录: {path_cfg.get_checkpoint_path('image_expert')}")
+        print(f"LoRA权重已保存至: {path_cfg.GENERAL_EXPERT_WEIGHTS}")
+        print(f"检查点目录: {path_cfg.get_checkpoint_path('general_expert')}")
         print()
         print("下一步:")
         print("  1. 可以使用该权重进行推理测试")
-        print(f"  2. 如需对比实验，可训练另一版本：")
-        if version == 'qwen2.5':
-            print("     python scripts/run_with_env.py --env image_qwen3 --script scripts/training/train_image_expert.py")
-        else:
-            print("     python scripts/run_with_env.py --env image_qwen2.5 --script scripts/training/train_image_expert.py")
+        print("  2. 所有专家训练已完成，可以进行MoE系统集成")
         print()
 
         return 0
@@ -255,22 +213,10 @@ if __name__ == "__main__":
 
 # 使用示例：
 # 方法1：通过环境管理脚本运行（推荐）
-# # 使用Qwen2.5-VL（默认）
-# python scripts/run_with_env.py --env image_qwen2.5 --script scripts/training/train_image_expert.py
+# python scripts/run_with_env.py --env text --script scripts/training/train_general_expert.py
 #
-# # 使用Qwen3-VL（对比实验）
-# python scripts/run_with_env.py --env image_qwen3 --script scripts/training/train_image_expert.py
+# 方法2：直接在qwen_text环境中运行
+# conda activate qwen_text
+# python scripts/training/train_general_expert.py
 #
-# 方法2：直接在对应环境中运行
-# conda activate qwen_vision25
-# python scripts/training/train_image_expert.py --version qwen2.5
-#
-# conda activate qwen_vision3
-# python scripts/training/train_image_expert.py --version qwen3
-#
-# 注意事项：
-# 1. 不同版本的训练需要在不同的Conda环境中进行
-# 2. 权重会自动保存到对应版本的目录：
-#    - Qwen2.5: lora_weights/experts/image_expert_qwen2.5/
-#    - Qwen3: lora_weights/experts/image_expert_qwen3/
-# 3. run_with_env.py会自动设置QWEN_VISION_VERSION环境变量
+# 注意：通用专家使用Qwen-7B-Chat模型，无需指定版本
