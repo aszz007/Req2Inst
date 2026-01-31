@@ -68,7 +68,7 @@ def mock_path_config(tmp_path):
     config.UML_DATASET_DIR = config.DATASET_DIR / "uml"
 
     config.IMAGE_DATASET_CSV = config.IMAGE_DATASET_DIR / "image_dataset.csv"
-    config.UML_DATASET_CSV = config.UML_DATASET_DIR / "uml_dataset.csv"
+    config.UML_DATASET_CSV = config.UML_DATASET_DIR / "uml_dataset_qwen235B_cloud.csv"
 
     config.TEXT_DATASET_FILES = {
         'TEST': config.TEXT_DATASET_DIR / "test_dataset.csv"

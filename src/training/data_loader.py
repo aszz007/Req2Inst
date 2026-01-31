@@ -355,72 +355,137 @@ class ImageDatasetLoader:
 
 
 class UMLDatasetLoader:
-    """UML数据集加载器 - 优化版"""
+    """
+    UML数据集加载器 - 支持多数据集版本
 
-    def __init__(self):
-        """初始化加载器"""
-        path_cfg = get_path_config()
-        self.dataset_csv = path_cfg.UML_DATASET_CSV
-        logger.info(f"初始化UMLDatasetLoader, 路径: {self.dataset_csv}")
+    支持三种数据集：
+    - 'qwen2.5': 本地Qwen2.5-VL识别的数据集
+    - 'qwen3': 本地Qwen3-VL识别的数据集
+    - 'qwen235B': 云端Qwen235B识别的数据集
+    """
+
+    def __init__(self, dataset_version: str = 'qwen2.5'):
+        """
+        初始化UML数据加载器
+
+        Args:
+            dataset_version: 数据集版本 ('qwen2.5', 'qwen3', 'qwen235B')
+        """
+        self.path_cfg = get_path_config()
+        self.dataset_version = dataset_version
+
+        # 数据集文件映射
+        self.dataset_files = {
+            'qwen2.5': 'uml_dataset_qwen25_local.csv',
+            'qwen3': 'uml_dataset_qwen3_local.csv',
+            'qwen235B': 'uml_dataset_qwen235B_cloud.csv'
+        }
+
+        # 验证版本有效性
+        if dataset_version not in self.dataset_files:
+            raise ValueError(
+                f"不支持的数据集版本: {dataset_version}, "
+                f"支持的版本: {list(self.dataset_files.keys())}"
+            )
+
+        logger.info(f"初始化UML数据加载器 - 数据集版本: {dataset_version}")
 
     def load_csv_file(self) -> List[Dict]:
         """
-        加载UML数据集CSV
+        加载UML CSV文件
 
         Returns:
-            数据列表,每项包含input(description)和output(Instruction)
+            数据列表，每项包含input和output
         """
-        all_data = []
+        # 获取对应版本的文件名
+        csv_filename = self.dataset_files[self.dataset_version]
+        csv_path = self.path_cfg.UML_DATASET_DIR / csv_filename
 
-        if not self.dataset_csv.exists():
-            logger.warning(f"UML数据集文件不存在: {self.dataset_csv}")
-            return all_data
+        logger.info(f"加载UML数据集: {csv_path}")
+
+        if not csv_path.exists():
+            logger.error(f"UML数据集文件不存在: {csv_path}")
+            logger.error(f"请确保数据集文件名为: {csv_filename}")
+            return []
 
         try:
-            # 智能检测编码
-            encoding = detect_csv_encoding(self.dataset_csv)
-            df = pd.read_csv(self.dataset_csv, encoding=encoding)
+            # 检测编码
+            encoding = detect_csv_encoding(csv_path)
+            logger.info(f"检测到编码: {encoding}")
 
-            # 强力清理列名
-            df = clean_dataframe_columns(df)
+            # 读取CSV
+            df = pd.read_csv(csv_path, encoding=encoding)
 
-            logger.info(f"使用编码 '{encoding}' 读取UML数据集")
+            # 规范化列名
+            df.columns = [normalize_column_name(col) for col in df.columns]
+            logger.info(f"规范化后的列名: {list(df.columns)}")
 
-        except Exception:
-            # 完全静默失败
-            logger.error("加载UML数据集失败")
-            return all_data
+            # 列名映射（灵活处理不同的命名）
+            column_map = {
+                'description': ['description', 'desc', 'uml_description', 'Description'],
+                'instruction': ['instruction', 'Instruction', 'output', 'Output']
+            }
 
-        # 智能查找必要列
-        desc_col = find_column(df, ['description', 'desc', 'descriptions'])
-        instruction_col = find_column(df, ['instruction', 'instructions'])
+            # 查找实际的列名
+            desc_col = None
+            inst_col = None
 
-        if not desc_col or not instruction_col:
-            logger.error("CSV缺少必要列: Description或Instruction")
-            logger.error(f"实际列名: {list(df.columns)}")
-            return all_data
+            for standard_name, possible_names in column_map.items():
+                possible_names_lower = [normalize_column_name(n) for n in possible_names]
+                for col in df.columns:
+                    if col in possible_names_lower:
+                        if standard_name == 'description':
+                            desc_col = col
+                        elif standard_name == 'instruction':
+                            inst_col = col
+                        break
 
-        # 提取数据
-        for _, row in df.iterrows():
-            try:
-                description = str(row[desc_col]).strip()
-                instruction = str(row[instruction_col]).strip()
+            # 验证必需列
+            if desc_col is None or inst_col is None:
+                logger.error(f"未找到必需的列。实际列名: {list(df.columns)}")
+                logger.error(f"需要包含: description 和 instruction 列")
+                return []
 
-                # 跳过空值或nan
-                if description and description != 'nan' and instruction and instruction != 'nan':
-                    all_data.append({
-                        'input': description,
-                        'output': instruction,
-                        'source': 'uml_dataset'
+            logger.info(f"使用列: description='{desc_col}', instruction='{inst_col}'")
+
+            # 处理数据
+            data_list = []
+            for idx, row in df.iterrows():
+                try:
+                    description = row[desc_col]
+                    instruction = row[inst_col]
+
+                    # 跳过空值
+                    if pd.isna(description) or pd.isna(instruction):
+                        continue
+
+                    # 如果description是JSON字符串，提取其中的description字段
+                    if isinstance(description, str) and description.strip().startswith('{'):
+                        try:
+                            desc_json = json.loads(description)
+                            if 'description' in desc_json:
+                                description = desc_json['description']
+                        except json.JSONDecodeError:
+                            pass  # 不是JSON就保持原样
+
+                    data_list.append({
+                        'input': str(description),
+                        'output': str(instruction),
+                        'source': f'uml_dataset_{self.dataset_version}'
                     })
 
-            except:
-                # 完全静默跳过问题行
-                continue
+                except Exception as e:
+                    logger.warning(f"处理第{idx}行时出错: {e}")
+                    continue
 
-        logger.info(f"UML数据集加载完成, 数据量: {len(all_data)}")
+            logger.info(f"成功加载UML数据 ({self.dataset_version}): {len(data_list)}条")
+            return data_list
 
-        return all_data
+        except Exception as e:
+            logger.error(f"加载UML数据失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return []
 
 
 def split_dataset(

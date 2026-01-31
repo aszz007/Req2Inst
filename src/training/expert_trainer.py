@@ -66,7 +66,9 @@ class ExpertTrainer:
                  expert_type: str,
                  base_model_path: Optional[str] = None,
                  output_dir: Optional[str] = None,
-                 use_4bit: bool = True):
+                 use_4bit: bool = True,
+                 dataset_version: Optional[str] = None,  # 新增参数
+                 use_rtx4090_optimization: bool = True):  # 新增参数
         """
         初始化训练器
 
@@ -75,6 +77,8 @@ class ExpertTrainer:
             base_model_path: 基础模型路径（None则从配置获取）
             output_dir: 输出目录（None则从配置获取）
             use_4bit: 是否使用4bit量化训练
+            dataset_version: 数据集版本（仅用于UML，如'qwen2.5', 'qwen3', 'qwen235B'）
+            use_rtx4090_optimization: 是否启用RTX 4090优化
         """
         # 验证专家类型
         valid_types = ['text', 'image', 'uml', 'general']
@@ -83,10 +87,17 @@ class ExpertTrainer:
 
         self.expert_type = expert_type
         self.use_4bit = use_4bit
+        self.dataset_version = dataset_version
+        self.use_rtx4090_optimization = use_rtx4090_optimization
+
+        # 如果是UML且未指定数据集版本，默认使用qwen2.5
+        if expert_type == 'uml' and dataset_version is None:
+            self.dataset_version = 'qwen2.5'
+            logger.warning("UML专家未指定数据集版本，默认使用: qwen2.5")
 
         # 获取配置
         self.path_cfg = get_path_config()
-        self.lora_cfg = get_lora_config('conservative')  # 使用保守配置
+        self.lora_cfg = get_lora_config('conservative')
         self.train_cfg = get_training_config()
         self.device_cfg = get_device_config()
 
@@ -101,14 +112,24 @@ class ExpertTrainer:
                 # 视觉专家使用当前配置的视觉模型版本
                 self.base_model_path = str(self.path_cfg.get_vision_model_path())
 
-        # 设置输出目录
+        # 设置输出目录（考虑数据集版本）
         if output_dir:
             self.output_dir = Path(output_dir)
         else:
-            self.output_dir = self.path_cfg.get_expert_weight_path(f"{expert_type}_expert")
+            if expert_type == 'uml' and dataset_version:
+                # UML专家根据模型版本和数据集版本生成输出路径
+                vision_version = self.path_cfg.vision_model_config.version
+                output_name = f"uml_expert_{vision_version}_dataset_{dataset_version}"
+                self.output_dir = self.path_cfg.LORA_WEIGHTS_DIR / 'experts' / output_name
+            else:
+                self.output_dir = self.path_cfg.get_expert_weight_path(f"{expert_type}_expert")
 
         # 设置检查点目录
-        self.checkpoint_dir = self.path_cfg.get_checkpoint_path(f"{expert_type}_expert")
+        checkpoint_name = f"{expert_type}_expert"
+        if expert_type == 'uml' and dataset_version:
+            vision_version = self.path_cfg.vision_model_config.version
+            checkpoint_name = f"{expert_type}_expert_{vision_version}_dataset_{dataset_version}"
+        self.checkpoint_dir = self.path_cfg.get_checkpoint_path(checkpoint_name)
 
         # 初始化模型和数据相关属性
         self.model = None
@@ -121,14 +142,12 @@ class ExpertTrainer:
         logger.info(f"基础模型: {self.base_model_path}")
         logger.info(f"输出目录: {self.output_dir}")
         logger.info(f"4bit量化: {use_4bit}")
+        if expert_type == 'uml':
+            logger.info(f"数据集版本: {self.dataset_version}")
+        logger.info(f"RTX 4090优化: {use_rtx4090_optimization}")
 
     def prepare_data(self) -> bool:
-        """
-        准备训练数据
-
-        Returns:
-            bool: 是否准备成功
-        """
+        """准备训练数据"""
         try:
             logger.info("准备训练数据...")
 
@@ -140,13 +159,13 @@ class ExpertTrainer:
                 loader = ImageDatasetLoader()
                 raw_data = loader.load_csv_file()
             elif self.expert_type == 'uml':
-                loader = UMLDatasetLoader()
+                # UML使用dataset_version参数
+                loader = UMLDatasetLoader(dataset_version=self.dataset_version)
                 raw_data = loader.load_csv_file()
             elif self.expert_type == 'general':
-                # 通用专家使用所有数据
                 text_loader = TextDatasetLoader()
                 image_loader = ImageDatasetLoader()
-                uml_loader = UMLDatasetLoader()
+                uml_loader = UMLDatasetLoader()  # 通用专家使用默认版本
                 raw_data = (
                         text_loader.load_csv_files() +
                         image_loader.load_csv_file() +
@@ -303,28 +322,68 @@ class ExpertTrainer:
             self.output_dir.mkdir(parents=True, exist_ok=True)
             self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
+            # ===== 4090优化：动态调整训练参数 =====
+            if self.use_rtx4090_optimization:
+                logger.info("启用RTX 4090优化配置")
+                batch_size = 8  # 提升到8
+                gradient_accumulation_steps = 2  # 降低到2
+                dataloader_num_workers = 8  # 提升到8
+                logging_steps = 5  # 更频繁的日志
+                optimizer_type = "adamw_torch_fused"  # 融合优化器
+            else:
+                batch_size = self.train_cfg.batch_size
+                gradient_accumulation_steps = self.train_cfg.gradient_accumulation_steps
+                dataloader_num_workers = 2
+                logging_steps = 10
+                optimizer_type = "adamw_torch"
+
+            logger.info(f"批量大小: {batch_size}")
+            logger.info(f"梯度累积: {gradient_accumulation_steps}")
+            logger.info(f"有效批量大小: {batch_size * gradient_accumulation_steps}")
+            logger.info(f"数据加载器工作进程: {dataloader_num_workers}")
+
             # 配置训练参数
             training_args = TrainingArguments(
                 output_dir=str(self.checkpoint_dir),
                 num_train_epochs=self.train_cfg.num_epochs,
-                per_device_train_batch_size=self.train_cfg.batch_size,
-                per_device_eval_batch_size=self.train_cfg.batch_size,
-                gradient_accumulation_steps=self.train_cfg.gradient_accumulation_steps,
+                per_device_train_batch_size=batch_size,
+                per_device_eval_batch_size=batch_size,
+                gradient_accumulation_steps=gradient_accumulation_steps,
                 learning_rate=self.train_cfg.learning_rate,
                 weight_decay=self.train_cfg.weight_decay,
                 warmup_ratio=self.train_cfg.warmup_ratio,
                 logging_dir=str(self.path_cfg.TRAINING_LOGS_DIR / f"{self.expert_type}_expert"),
-                logging_steps=10,
+                logging_steps=logging_steps,
                 save_strategy="epoch",
                 evaluation_strategy="epoch",
-                save_total_limit=3,
+                save_total_limit=2,  # 只保留2个检查点
                 load_best_model_at_end=True,
                 metric_for_best_model="eval_loss",
                 greater_is_better=False,
-                fp16=True if self.device_cfg.device == "cuda" else False,
-                report_to="none",  # 不使用wandb等
+
+                # ===== 4090优化选项 =====
+                bf16=True if self.use_rtx4090_optimization and self.device_cfg.device == "cuda" else False,
+                tf32=True if self.use_rtx4090_optimization else False,
+                optim=optimizer_type,
+                dataloader_num_workers=dataloader_num_workers,
+                dataloader_pin_memory=True,
+                dataloader_prefetch_factor=4 if self.use_rtx4090_optimization else 2,
+
+                fp16=False if self.use_rtx4090_optimization else (True if self.device_cfg.device == "cuda" else False),
+                report_to="none",
                 remove_unused_columns=False,
             )
+
+            # 如果启用4090优化，打印优化信息
+            if self.use_rtx4090_optimization:
+                logger.info("=" * 60)
+                logger.info("RTX 4090 优化已启用:")
+                logger.info("  ✓ BF16混合精度训练")
+                logger.info("  ✓ TF32加速")
+                logger.info("  ✓ Fused AdamW优化器")
+                logger.info("  ✓ 数据加载器优化 (8 workers)")
+                logger.info("  ✓ 预取因子: 4")
+                logger.info("=" * 60)
 
             # 数据收集器
             data_collator = DataCollatorForLanguageModeling(

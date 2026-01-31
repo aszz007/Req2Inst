@@ -107,7 +107,7 @@ class PathConfig:
 
         # 具体数据集文件
         self.IMAGE_DATASET_CSV = self.IMAGE_DATASET_DIR / "image_dataset.csv"
-        self.UML_DATASET_CSV = self.UML_DATASET_DIR / "uml_dataset.csv"
+        self.UML_DATASET_CSV = self.UML_DATASET_DIR / "uml_dataset_qwen235B_cloud.csv"
 
         # 文本数据集（多个文件）
         self.TEXT_DATASET_FILES = {
@@ -327,8 +327,8 @@ class TrainingConfig:
     """训练配置"""
 
     # ==================== 基础配置 ====================
-    batch_size: int = 4
-    gradient_accumulation_steps: int = 4  # 有效batch_size = 4 * 4 = 16
+    batch_size: int = 8
+    gradient_accumulation_steps: int = 2
     num_epochs: int = 3
     learning_rate: float = 2e-4
 
@@ -371,6 +371,44 @@ class TrainingConfig:
     uml_val_ratio: float = 0.10
     uml_test_ratio: float = 0.05
 
+@dataclass
+class TrainingConfig4090:
+    """针对RTX 4090优化的训练配置"""
+
+    # ===== 基础训练参数（4090优化）=====
+    batch_size = 8  # 从4提升到8（4090显存充足）
+    gradient_accumulation_steps = 2  # 从4降到2（保持有效batch=16）
+    num_epochs = 3
+    learning_rate = 2e-4
+    weight_decay = 0.01
+    warmup_ratio = 0.1
+    max_seq_length = 2048  # 保持不变
+
+    # ===== 4090专属优化 =====
+    use_flash_attention = True  # 启用Flash Attention 2（提速30%）
+    bf16 = True  # 使用BF16（4090支持，比FP16更稳定）
+    tf32 = True  # 启用TF32（4090特有，免费提速）
+
+    # ===== 数据加载优化 =====
+    dataloader_num_workers = 8  # 从2提升到8（充分利用CPU）
+    dataloader_pin_memory = True
+    dataloader_prefetch_factor = 4  # 预加载4个batch
+
+    # ===== 梯度优化 =====
+    gradient_checkpointing = False  # 4090显存足够，关闭以提速
+    max_grad_norm = 1.0
+
+    # ===== 保存策略 =====
+    save_strategy = "epoch"
+    save_total_limit = 2  # 只保留最好的2个检查点（节省空间）
+    evaluation_strategy = "epoch"
+    logging_steps = 5  # 从10降到5（更频繁的日志）
+
+    # ===== 优化器配置 =====
+    optimizer_type = "adamw_torch_fused"  # 融合优化器（4090提速15%）
+    adam_beta1 = 0.9
+    adam_beta2 = 0.999
+    adam_epsilon = 1e-8
 
 @dataclass
 class DeviceConfig:
