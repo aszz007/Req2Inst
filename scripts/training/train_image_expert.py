@@ -45,6 +45,16 @@ from src.utils.logger import get_logger
 
 logger = get_logger('training.train_image_expert')
 
+def detect_rtx4090() -> bool:
+    """检测是否为RTX 4090显卡"""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            return 'RTX 4090' in gpu_name or 'RTX 4090D' in gpu_name
+    except:
+        pass
+    return False
 
 def print_header(version: str):
     """打印训练开始的标题"""
@@ -178,12 +188,20 @@ def main():
     # 打印配置
     print_config(version)
 
+    # 检测是否为RTX 4090
+    is_rtx4090 = detect_rtx4090()
+    use_rtx4090_opt = is_rtx4090  # 自动启用优化
+
+    if is_rtx4090:
+        logger.info("检测到RTX 4090，启用优化配置")
+
     # 创建训练器
     logger.info(f"创建图像专家训练器（{version}）...")
     try:
         trainer = ExpertTrainer(
             expert_type='image',
-            use_4bit=args.use_4bit
+            use_4bit=args.use_4bit,
+            use_rtx4090_optimization=use_rtx4090_opt
         )
     except Exception as e:
         logger.error(f"创建训练器失败: {e}")
