@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Optional, List, Dict
 from transformers import (
     AutoModelForCausalLM,
+    AutoModelForVision2Seq,
+    AutoProcessor,
     AutoTokenizer,
     TrainingArguments,
     Trainer,
@@ -134,6 +136,7 @@ class ExpertTrainer:
         # 初始化模型和数据相关属性
         self.model = None
         self.tokenizer = None
+        self.processor = None  # 用于视觉模型
         self.train_dataset = None
         self.val_dataset = None
         self.test_dataset = None
@@ -191,13 +194,24 @@ class ExpertTrainer:
             logger.info(f"  验证集: {len(val_data)}条")
             logger.info(f"  测试集: {len(test_data)}条")
 
-            # 加载tokenizer（需要在创建Dataset之前）
-            logger.info("加载tokenizer...")
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.base_model_path,
-                trust_remote_code=True,
-                padding_side='left'
-            )
+            # 加载tokenizer/processor（需要在创建Dataset之前）
+            if self.expert_type in ['text', 'general']:
+                logger.info("加载tokenizer...")
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.base_model_path,
+                    trust_remote_code=True,
+                    padding_side='left'
+                )
+            else:  # image, uml - 视觉模型
+                logger.info("加载processor（视觉模型）...")
+                self.processor = AutoProcessor.from_pretrained(
+                    self.base_model_path,
+                    trust_remote_code=True
+                )
+                # 训练时只需要tokenizer部分
+                self.tokenizer = self.processor.tokenizer
+                self.tokenizer.padding_side = 'left'
+                logger.info("从processor提取tokenizer用于训练")
 
             # 设置特殊tokens
             if self.tokenizer.pad_token is None:
@@ -253,14 +267,30 @@ class ExpertTrainer:
 
             # 加载基础模型
             logger.info(f"加载基础模型: {self.base_model_path}")
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.base_model_path,
-                quantization_config=quantization_config,
-                device_map="auto",
-                trust_remote_code=True,
-                torch_dtype=torch.float16 if not self.use_4bit else None,
-                low_cpu_mem_usage=True
-            )
+
+            # 根据专家类型选择正确的模型类
+            if self.expert_type in ['text', 'general']:
+                # 文本模型：Qwen-7B-Chat
+                logger.info("使用AutoModelForCausalLM加载文本模型")
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.base_model_path,
+                    quantization_config=quantization_config,
+                    device_map="auto",
+                    trust_remote_code=True,
+                    torch_dtype=torch.float16 if not self.use_4bit else None,
+                    low_cpu_mem_usage=True
+                )
+            else:  # image, uml
+                # 视觉模型：Qwen2.5-VL-7B 或 Qwen3-VL-8B
+                logger.info("使用AutoModelForVision2Seq加载视觉模型")
+                self.model = AutoModelForVision2Seq.from_pretrained(
+                    self.base_model_path,
+                    quantization_config=quantization_config,
+                    device_map="auto",
+                    trust_remote_code=True,
+                    torch_dtype=torch.float16 if not self.use_4bit else None,
+                    low_cpu_mem_usage=True
+                )
 
             # 为4bit训练准备模型
             if self.use_4bit:
