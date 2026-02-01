@@ -53,6 +53,23 @@ from models.prompt_templates.uml_template import UMLInstructionTemplate
 logger = get_logger('training.expert_trainer')
 
 
+def _get_transformers_version():
+    """获取transformers版本号"""
+    import transformers
+    version_str = transformers.__version__
+    major, minor = version_str.split('.')[:2]
+    return int(major), int(minor)
+
+
+def _should_use_eval_strategy():
+    """检查是否应该使用eval_strategy参数（transformers >= 4.46.0）"""
+    try:
+        major, minor = _get_transformers_version()
+        return (major > 4) or (major == 4 and minor >= 46)
+    except:
+        return False
+
+
 class ExpertTrainer:
     """
     专家训练器 - 统一的LoRA微调接口
@@ -383,41 +400,51 @@ class ExpertTrainer:
             logger.info(f"有效批量大小: {batch_size * gradient_accumulation_steps}")
             logger.info(f"数据加载器工作进程: {dataloader_num_workers}")
 
-            # 配置训练参数
-            training_args = TrainingArguments(
-                output_dir=str(self.checkpoint_dir),
-                num_train_epochs=self.train_cfg.num_epochs,
-                per_device_train_batch_size=batch_size,
-                per_device_eval_batch_size=batch_size,
-                gradient_accumulation_steps=gradient_accumulation_steps,
-                learning_rate=self.train_cfg.learning_rate,
-                weight_decay=self.train_cfg.weight_decay,
-                warmup_ratio=self.train_cfg.warmup_ratio,
-                logging_dir=str(self.path_cfg.TRAINING_LOGS_DIR / f"{self.expert_type}_expert"),
-                logging_steps=logging_steps,
-                save_strategy="epoch",
-                evaluation_strategy="epoch",
-                save_total_limit=2,
-                load_best_model_at_end=True,
-                metric_for_best_model="eval_loss",
-                greater_is_better=False,
+            # 检测transformers版本以使用正确的参数名
+            use_eval_strategy = _should_use_eval_strategy()
 
-                # ===== 显存优化选项 =====
-                gradient_checkpointing=True if self.expert_type in ['image', 'uml'] else False,
-                gradient_checkpointing_kwargs={"use_reentrant": False} if self.expert_type in ['image', 'uml'] else None,
+            # 配置训练参数 - 兼容不同transformers版本
+            training_args_dict = {
+                "output_dir": str(self.checkpoint_dir),
+                "num_train_epochs": self.train_cfg.num_epochs,
+                "per_device_train_batch_size": batch_size,
+                "per_device_eval_batch_size": batch_size,
+                "gradient_accumulation_steps": gradient_accumulation_steps,
+                "learning_rate": self.train_cfg.learning_rate,
+                "weight_decay": self.train_cfg.weight_decay,
+                "warmup_ratio": self.train_cfg.warmup_ratio,
+                "logging_dir": str(self.path_cfg.TRAINING_LOGS_DIR / f"{self.expert_type}_expert"),
+                "logging_steps": logging_steps,
+                "save_strategy": "epoch",
+                "save_total_limit": 2,
+                "load_best_model_at_end": True,
+                "metric_for_best_model": "eval_loss",
+                "greater_is_better": False,
 
-                # ===== 4090优化选项 =====
-                bf16=True if self.use_rtx4090_optimization and self.device_cfg.device == "cuda" else False,
-                tf32=True if self.use_rtx4090_optimization else False,
-                optim=optimizer_type,
-                dataloader_num_workers=dataloader_num_workers,
-                dataloader_pin_memory=True,
-                dataloader_prefetch_factor=2 if self.expert_type in ['image', 'uml'] else (4 if self.use_rtx4090_optimization else 2),
+                # 显存优化选项
+                "gradient_checkpointing": True if self.expert_type in ['image', 'uml'] else False,
+                "gradient_checkpointing_kwargs": {"use_reentrant": False} if self.expert_type in ['image', 'uml'] else None,
 
-                fp16=False if self.use_rtx4090_optimization else (True if self.device_cfg.device == "cuda" else False),
-                report_to="none",
-                remove_unused_columns=False,
-            )
+                # 4090优化选项
+                "bf16": True if self.use_rtx4090_optimization and self.device_cfg.device == "cuda" else False,
+                "tf32": True if self.use_rtx4090_optimization else False,
+                "optim": optimizer_type,
+                "dataloader_num_workers": dataloader_num_workers,
+                "dataloader_pin_memory": True,
+                "dataloader_prefetch_factor": 2 if self.expert_type in ['image', 'uml'] else (4 if self.use_rtx4090_optimization else 2),
+
+                "fp16": False if self.use_rtx4090_optimization else (True if self.device_cfg.device == "cuda" else False),
+                "report_to": "none",
+                "remove_unused_columns": False,
+            }
+
+            # 根据transformers版本选择正确的参数名
+            if use_eval_strategy:
+                training_args_dict["eval_strategy"] = "epoch"
+            else:
+                training_args_dict["evaluation_strategy"] = "epoch"
+
+            training_args = TrainingArguments(**training_args_dict)
 
             # 如果启用4090优化，打印优化信息
             if self.use_rtx4090_optimization:
