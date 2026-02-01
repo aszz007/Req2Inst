@@ -353,7 +353,7 @@ class TrainingConfig:
     fp16: bool = True  # 混合精度训练
     max_grad_norm: float = 1.0
     seed: int = 42
-    max_seq_length: int = 2048  # 最大序列长度（适用于所有模型）
+    max_seq_length: int = 1536  # 最大序列长度（优化显存占用，足够覆盖长文本需求）
 
     # ==================== 数据集划分比例 ====================
     # 文本数据集（2400条）
@@ -382,7 +382,7 @@ class TrainingConfig4090:
     learning_rate = 2e-4
     weight_decay = 0.01
     warmup_ratio = 0.1
-    max_seq_length = 2048  # 保持不变
+    max_seq_length = 1536  # 优化显存占用（从2048降低），足够覆盖长文本需求
 
     # ===== 4090专属优化 =====
     use_flash_attention = True  # 启用Flash Attention 2（提速30%）

@@ -390,6 +390,10 @@ class ExpertTrainer:
         try:
             logger.info("开始训练...")
 
+            # 设置CUDA内存分配器配置，避免显存碎片
+            os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+            logger.info("已设置PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True（避免显存碎片）")
+
             # 创建输出目录
             self.output_dir.mkdir(parents=True, exist_ok=True)
             self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -408,10 +412,11 @@ class ExpertTrainer:
                 else:  # text, general
                     # 文本模型：根据是否使用4bit量化选择策略
                     if self.use_4bit:
-                        # 4bit量化：显存占用小，可以使用较大batch size
-                        batch_size = 8
-                        gradient_accumulation_steps = 2
-                        logger.info("文本模型 + 4bit量化，使用标准batch size")
+                        # 4bit量化：为避免OOM，使用保守的batch size策略
+                        # 虽然量化节省显存，但lm_head层在长序列下仍需大量显存
+                        batch_size = 2
+                        gradient_accumulation_steps = 8
+                        logger.info("文本模型 + 4bit量化，使用保守batch size策略（避免lm_head OOM）")
                     else:
                         # 无量化：显存占用大，降低batch size
                         batch_size = 4
@@ -454,9 +459,9 @@ class ExpertTrainer:
                 "metric_for_best_model": "eval_loss",
                 "greater_is_better": False,
 
-                # 显存优化选项
-                "gradient_checkpointing": True if self.expert_type in ['image', 'uml'] else False,
-                "gradient_checkpointing_kwargs": {"use_reentrant": False} if self.expert_type in ['image', 'uml'] else None,
+                # 显存优化选项 - 为所有专家启用gradient checkpointing以节省显存
+                "gradient_checkpointing": True,
+                "gradient_checkpointing_kwargs": {"use_reentrant": False},
 
                 # 4090优化选项
                 "bf16": True if self.use_rtx4090_optimization and self.device_cfg.device == "cuda" else False,
@@ -486,19 +491,20 @@ class ExpertTrainer:
                 logger.info("  ✓ BF16混合精度训练")
                 logger.info("  ✓ TF32加速")
                 logger.info("  ✓ Fused AdamW优化器")
+                logger.info("  ✓ Gradient checkpointing: True (所有模型，节省显存)")
 
                 if self.expert_type in ['image', 'uml']:
                     logger.info("  ✓ 视觉模型显存优化:")
                     logger.info("    - Batch size: 1 (降低显存)")
                     logger.info("    - Gradient accumulation: 16 (保持有效batch=16)")
-                    logger.info("    - Gradient checkpointing: True (节省显存)")
                     logger.info("    - 数据加载器工作进程: 4")
                     logger.info("    - 预取因子: 2")
                 else:
                     if self.use_4bit:
                         logger.info("  ✓ 文本模型 + 4bit量化优化:")
-                        logger.info("    - Batch size: 8 (量化后显存充足)")
-                        logger.info("    - Gradient accumulation: 2 (有效batch=16)")
+                        logger.info("    - Batch size: 2 (保守策略，避免lm_head OOM)")
+                        logger.info("    - Gradient accumulation: 8 (有效batch=16)")
+                        logger.info("    - Max seq length: 1536 (优化显存占用)")
                     else:
                         logger.info("  ✓ 文本模型无量化配置:")
                         logger.info("    - Batch size: 4 (避免OOM)")
