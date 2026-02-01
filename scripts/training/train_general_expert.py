@@ -50,7 +50,7 @@ def detect_rtx4090() -> bool:
         pass
     return False
 
-def print_config():
+def print_config(use_4bit: bool, use_rtx4090_opt: bool):
     """打印训练配置"""
     path_cfg = get_path_config()
     train_cfg = get_training_config()
@@ -70,13 +70,30 @@ def print_config():
     print(f"  - Dropout: {lora_cfg.dropout}")
     print(f"  - Target Modules: {lora_cfg.target_modules}")
     print()
-    print(f"训练参数:")
-    print(f"  - Batch Size: {train_cfg.batch_size}")
-    print(f"  - Gradient Accumulation: {train_cfg.gradient_accumulation_steps}")
-    print(f"  - 有效Batch Size: {train_cfg.batch_size * train_cfg.gradient_accumulation_steps}")
-    print(f"  - Epochs: {train_cfg.num_epochs}")
-    print(f"  - Learning Rate: {train_cfg.learning_rate}")
-    print(f"  - Max Seq Length: {train_cfg.max_seq_length}")
+
+    if use_rtx4090_opt:
+        print(f"训练参数 (RTX 4090优化):")
+        print(f"  - Batch Size: 8 (优化后)")
+        print(f"  - Gradient Accumulation: 2 (优化后)")
+        print(f"  - 有效Batch Size: 16")
+        print(f"  - Epochs: {train_cfg.num_epochs}")
+        print(f"  - Learning Rate: {train_cfg.learning_rate}")
+        print(f"  - Max Seq Length: {train_cfg.max_seq_length}")
+        print(f"  - 4bit量化: {use_4bit}")
+        print(f"  - BF16混合精度: True")
+        print(f"  - TF32加速: True")
+        print(f"  - Fused优化器: True")
+        print(f"  - 数据加载器工作进程: 8")
+    else:
+        print(f"训练参数:")
+        print(f"  - Batch Size: {train_cfg.batch_size}")
+        print(f"  - Gradient Accumulation: {train_cfg.gradient_accumulation_steps}")
+        print(f"  - 有效Batch Size: {train_cfg.batch_size * train_cfg.gradient_accumulation_steps}")
+        print(f"  - Epochs: {train_cfg.num_epochs}")
+        print(f"  - Learning Rate: {train_cfg.learning_rate}")
+        print(f"  - Max Seq Length: {train_cfg.max_seq_length}")
+        print(f"  - 4bit量化: {use_4bit}")
+
     print("-" * 80)
     print()
 
@@ -146,15 +163,15 @@ def main():
         logger.error("环境验证失败，请检查依赖库")
         return 1
 
-    # 打印配置
-    print_config()
-
     # 检测是否为RTX 4090
     is_rtx4090 = detect_rtx4090()
     use_rtx4090_opt = is_rtx4090  # 自动启用优化
 
     if is_rtx4090:
         logger.info("检测到RTX 4090，启用优化配置")
+
+    # 打印配置
+    print_config(args.use_4bit, use_rtx4090_opt)
 
     # 创建训练器
     logger.info("创建通用专家训练器...")

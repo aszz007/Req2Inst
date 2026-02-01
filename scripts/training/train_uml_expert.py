@@ -79,20 +79,20 @@ def print_config(version: str, dataset_version: str, use_4bit: bool, use_rtx4090
     print(f"  - Target Modules: {lora_cfg.target_modules}")
     print()
 
-    # 根据是否启用4090优化显示不同参数
     if use_rtx4090:
-        print(f"训练参数 (RTX 4090优化):")
-        print(f"  - Batch Size: 8 (优化后)")
-        print(f"  - Gradient Accumulation: 2 (优化后)")
+        print(f"训练参数 (RTX 4090显存优化):")
+        print(f"  - Batch Size: 1 (视觉模型优化)")
+        print(f"  - Gradient Accumulation: 16 (保持有效batch=16)")
         print(f"  - 有效Batch Size: 16")
         print(f"  - Epochs: {train_cfg.num_epochs}")
         print(f"  - Learning Rate: {train_cfg.learning_rate}")
         print(f"  - Max Seq Length: {train_cfg.max_seq_length}")
         print(f"  - 4bit量化: {use_4bit}")
+        print(f"  - Gradient Checkpointing: True (节省显存)")
         print(f"  - BF16混合精度: True")
         print(f"  - TF32加速: True")
         print(f"  - Fused优化器: True")
-        print(f"  - 数据加载器工作进程: 8")
+        print(f"  - 数据加载器工作进程: 4")
     else:
         print(f"训练参数:")
         print(f"  - Batch Size: {train_cfg.batch_size}")
