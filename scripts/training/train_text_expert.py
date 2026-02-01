@@ -77,7 +77,7 @@ def print_config(use_4bit: bool, use_rtx4090_opt: bool):
         print(f"  - Epochs: {train_cfg.num_epochs}")
         print(f"  - Learning Rate: {train_cfg.learning_rate}")
         print(f"  - Max Seq Length: {train_cfg.max_seq_length}")
-        print(f"  - 4bit量化: {use_4bit}")
+        print(f"  - 4bit量化: {'是' if use_4bit else '否'}")
         print(f"  - BF16混合精度: True")
         print(f"  - TF32加速: True")
         print(f"  - Fused优化器: True")
@@ -90,7 +90,7 @@ def print_config(use_4bit: bool, use_rtx4090_opt: bool):
         print(f"  - Epochs: {train_cfg.num_epochs}")
         print(f"  - Learning Rate: {train_cfg.learning_rate}")
         print(f"  - Max Seq Length: {train_cfg.max_seq_length}")
-        print(f"  - 4bit量化: {use_4bit}")
+        print(f"  - 4bit量化: {'是' if use_4bit else '否'}")
 
     print("-" * 80)
     print()
@@ -147,10 +147,16 @@ def main():
     """主训练流程"""
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='训练文本专家')
-    parser.add_argument('--use_4bit', action='store_true', default=True,
-                        help='使用4bit量化训练（默认：True）')
+    parser.add_argument('--use_4bit', action='store_true', default=False,
+                        help='使用4bit量化训练')
     parser.add_argument('--no_4bit', dest='use_4bit', action='store_false',
-                        help='不使用4bit量化')
+                        help='不使用4bit量化（默认）')
+    # 注意：默认不使用4bit，因为设置default=False
+    # 如果想默认启用4bit，需要改为default=True
+
+    # 实际解析时的默认行为
+    parser.set_defaults(use_4bit=True)  # 默认启用4bit量化（重要修改）
+
     args = parser.parse_args()
 
     # 打印标题
@@ -177,10 +183,12 @@ def main():
         trainer = ExpertTrainer(
             expert_type='text',
             use_4bit=args.use_4bit,
-            use_rtx4090_optimization = use_rtx4090_opt
+            use_rtx4090_optimization=use_rtx4090_opt
         )
     except Exception as e:
         logger.error(f"创建训练器失败: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return 1
 
     # 准备数据

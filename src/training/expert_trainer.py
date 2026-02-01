@@ -17,8 +17,6 @@ from pathlib import Path
 from typing import Optional, List, Dict
 from transformers import (
     AutoModelForCausalLM,
-    AutoModelForVision2Seq,
-    AutoProcessor,
     AutoTokenizer,
     TrainingArguments,
     Trainer,
@@ -31,6 +29,27 @@ from peft import (
     prepare_model_for_kbit_training,
     TaskType
 )
+
+# 条件导入视觉模型相关类（仅在需要时导入，避免环境兼容性问题）
+# 这些类在qwen_text环境（transformers 4.32.0）中可能不存在
+AutoModelForVision2Seq = None
+AutoProcessor = None
+
+def _import_vision_dependencies():
+    """延迟导入视觉模型依赖（仅在需要时调用）"""
+    global AutoModelForVision2Seq, AutoProcessor
+    try:
+        from transformers import AutoModelForVision2Seq as _AutoModelForVision2Seq
+        from transformers import AutoProcessor as _AutoProcessor
+        AutoModelForVision2Seq = _AutoModelForVision2Seq
+        AutoProcessor = _AutoProcessor
+    except ImportError as e:
+        raise ImportError(
+            f"无法导入视觉模型依赖: {e}\n"
+            "请确保在正确的环境中运行：\n"
+            "- Image/UML Expert需要qwen_vision25或qwen_vision3环境\n"
+            "- Text/General Expert需要qwen_text环境"
+        )
 
 from config.settings import (
     get_path_config,
@@ -220,6 +239,9 @@ class ExpertTrainer:
                     padding_side='left'
                 )
             else:  # image, uml - 视觉模型
+                # 导入视觉模型依赖
+                _import_vision_dependencies()
+
                 logger.info("加载processor（视觉模型）...")
                 self.processor = AutoProcessor.from_pretrained(
                     self.base_model_path,
@@ -298,6 +320,9 @@ class ExpertTrainer:
                     low_cpu_mem_usage=True
                 )
             else:  # image, uml
+                # 导入视觉模型依赖
+                _import_vision_dependencies()
+
                 # 视觉模型：Qwen2.5-VL-7B 或 Qwen3-VL-8B
                 logger.info("使用AutoModelForVision2Seq加载视觉模型")
                 self.model = AutoModelForVision2Seq.from_pretrained(
@@ -381,9 +406,17 @@ class ExpertTrainer:
                     dataloader_num_workers = 4  # 降低worker数量
                     logger.info("检测到视觉模型，使用显存优化策略")
                 else:  # text, general
-                    # 文本模型：显存消耗小，可以使用较大batch size
-                    batch_size = 8
-                    gradient_accumulation_steps = 2
+                    # 文本模型：根据是否使用4bit量化选择策略
+                    if self.use_4bit:
+                        # 4bit量化：显存占用小，可以使用较大batch size
+                        batch_size = 8
+                        gradient_accumulation_steps = 2
+                        logger.info("文本模型 + 4bit量化，使用标准batch size")
+                    else:
+                        # 无量化：显存占用大，降低batch size
+                        batch_size = 4
+                        gradient_accumulation_steps = 4
+                        logger.info("文本模型无量化，降低batch size以避免OOM")
                     dataloader_num_workers = 8
 
                 logging_steps = 5
@@ -462,6 +495,14 @@ class ExpertTrainer:
                     logger.info("    - 数据加载器工作进程: 4")
                     logger.info("    - 预取因子: 2")
                 else:
+                    if self.use_4bit:
+                        logger.info("  ✓ 文本模型 + 4bit量化优化:")
+                        logger.info("    - Batch size: 8 (量化后显存充足)")
+                        logger.info("    - Gradient accumulation: 2 (有效batch=16)")
+                    else:
+                        logger.info("  ✓ 文本模型无量化配置:")
+                        logger.info("    - Batch size: 4 (避免OOM)")
+                        logger.info("    - Gradient accumulation: 4 (有效batch=16)")
                     logger.info("  ✓ 数据加载器优化 (8 workers)")
                     logger.info("  ✓ 预取因子: 4")
 
