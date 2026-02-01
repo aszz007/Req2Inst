@@ -355,11 +355,22 @@ class ExpertTrainer:
             # ===== 4090优化：动态调整训练参数 =====
             if self.use_rtx4090_optimization:
                 logger.info("启用RTX 4090优化配置")
-                batch_size = 8  # 提升到8
-                gradient_accumulation_steps = 2  # 降低到2
-                dataloader_num_workers = 8  # 提升到8
-                logging_steps = 5  # 更频繁的日志
-                optimizer_type = "adamw_torch_fused"  # 融合优化器
+
+                # 针对视觉模型和文本模型使用不同的策略
+                if self.expert_type in ['image', 'uml']:
+                    # 视觉模型：显存消耗大，使用小batch size + 大gradient accumulation
+                    batch_size = 1  # 降低到1以避免OOM
+                    gradient_accumulation_steps = 16  # 增加到16保持有效batch size=16
+                    dataloader_num_workers = 4  # 降低worker数量
+                    logger.info("检测到视觉模型，使用显存优化策略")
+                else:  # text, general
+                    # 文本模型：显存消耗小，可以使用较大batch size
+                    batch_size = 8
+                    gradient_accumulation_steps = 2
+                    dataloader_num_workers = 8
+
+                logging_steps = 5
+                optimizer_type = "adamw_torch_fused"
             else:
                 batch_size = self.train_cfg.batch_size
                 gradient_accumulation_steps = self.train_cfg.gradient_accumulation_steps
@@ -386,10 +397,14 @@ class ExpertTrainer:
                 logging_steps=logging_steps,
                 save_strategy="epoch",
                 evaluation_strategy="epoch",
-                save_total_limit=2,  # 只保留2个检查点
+                save_total_limit=2,
                 load_best_model_at_end=True,
                 metric_for_best_model="eval_loss",
                 greater_is_better=False,
+
+                # ===== 显存优化选项 =====
+                gradient_checkpointing=True if self.expert_type in ['image', 'uml'] else False,
+                gradient_checkpointing_kwargs={"use_reentrant": False} if self.expert_type in ['image', 'uml'] else None,
 
                 # ===== 4090优化选项 =====
                 bf16=True if self.use_rtx4090_optimization and self.device_cfg.device == "cuda" else False,
@@ -397,7 +412,7 @@ class ExpertTrainer:
                 optim=optimizer_type,
                 dataloader_num_workers=dataloader_num_workers,
                 dataloader_pin_memory=True,
-                dataloader_prefetch_factor=4 if self.use_rtx4090_optimization else 2,
+                dataloader_prefetch_factor=2 if self.expert_type in ['image', 'uml'] else (4 if self.use_rtx4090_optimization else 2),
 
                 fp16=False if self.use_rtx4090_optimization else (True if self.device_cfg.device == "cuda" else False),
                 report_to="none",
@@ -411,8 +426,18 @@ class ExpertTrainer:
                 logger.info("  ✓ BF16混合精度训练")
                 logger.info("  ✓ TF32加速")
                 logger.info("  ✓ Fused AdamW优化器")
-                logger.info("  ✓ 数据加载器优化 (8 workers)")
-                logger.info("  ✓ 预取因子: 4")
+
+                if self.expert_type in ['image', 'uml']:
+                    logger.info("  ✓ 视觉模型显存优化:")
+                    logger.info("    - Batch size: 1 (降低显存)")
+                    logger.info("    - Gradient accumulation: 16 (保持有效batch=16)")
+                    logger.info("    - Gradient checkpointing: True (节省显存)")
+                    logger.info("    - 数据加载器工作进程: 4")
+                    logger.info("    - 预取因子: 2")
+                else:
+                    logger.info("  ✓ 数据加载器优化 (8 workers)")
+                    logger.info("  ✓ 预取因子: 4")
+
                 logger.info("=" * 60)
 
             # 数据收集器

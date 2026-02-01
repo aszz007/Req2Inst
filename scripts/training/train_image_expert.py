@@ -74,6 +74,9 @@ def print_config(version: str):
     base_model_path = path_cfg.get_vision_model_path(version)
     output_dir = path_cfg.get_expert_weight_path('image', vision_version=version)
 
+    # 检测RTX 4090
+    is_rtx4090 = detect_rtx4090()
+
     print("训练配置信息:")
     print("-" * 80)
     print(f"专家类型: Image Expert")
@@ -87,13 +90,28 @@ def print_config(version: str):
     print(f"  - Dropout: {lora_cfg.dropout}")
     print(f"  - Target Modules: {lora_cfg.target_modules}")
     print()
-    print(f"训练参数:")
-    print(f"  - Batch Size: {train_cfg.batch_size}")
-    print(f"  - Gradient Accumulation: {train_cfg.gradient_accumulation_steps}")
-    print(f"  - 有效Batch Size: {train_cfg.batch_size * train_cfg.gradient_accumulation_steps}")
-    print(f"  - Epochs: {train_cfg.num_epochs}")
-    print(f"  - Learning Rate: {train_cfg.learning_rate}")
-    print(f"  - Max Seq Length: {train_cfg.max_seq_length}")
+
+    # 根据是否4090显示不同的训练参数
+    if is_rtx4090:
+        print(f"训练参数 (RTX 4090显存优化):")
+        print(f"  - Batch Size: 1 (视觉模型优化)")
+        print(f"  - Gradient Accumulation: 16 (保持有效batch=16)")
+        print(f"  - 有效Batch Size: 16")
+        print(f"  - Epochs: {train_cfg.num_epochs}")
+        print(f"  - Learning Rate: {train_cfg.learning_rate}")
+        print(f"  - Max Seq Length: {train_cfg.max_seq_length}")
+        print(f"  - Gradient Checkpointing: True (节省显存)")
+        print(f"  - BF16混合精度: True")
+        print(f"  - TF32加速: True")
+    else:
+        print(f"训练参数:")
+        print(f"  - Batch Size: {train_cfg.batch_size}")
+        print(f"  - Gradient Accumulation: {train_cfg.gradient_accumulation_steps}")
+        print(f"  - 有效Batch Size: {train_cfg.batch_size * train_cfg.gradient_accumulation_steps}")
+        print(f"  - Epochs: {train_cfg.num_epochs}")
+        print(f"  - Learning Rate: {train_cfg.learning_rate}")
+        print(f"  - Max Seq Length: {train_cfg.max_seq_length}")
+
     print("-" * 80)
     print()
 
