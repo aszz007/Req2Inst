@@ -55,7 +55,8 @@ from config.settings import (
     get_path_config,
     get_lora_config,
     get_training_config,
-    get_device_config
+    get_device_config,
+    get_vision_model_config
 )
 from src.training.data_loader import (
     TextDatasetLoader,
@@ -156,7 +157,8 @@ class ExpertTrainer:
         else:
             if expert_type == 'uml' and dataset_version:
                 # UML专家根据模型版本和数据集版本生成输出路径
-                vision_version = self.path_cfg.vision_model_config.version
+                vision_cfg = get_vision_model_config()
+                vision_version = vision_cfg.version
                 output_name = f"uml_expert_{vision_version}_dataset_{dataset_version}"
                 self.output_dir = self.path_cfg.LORA_WEIGHTS_DIR / 'experts' / output_name
             else:
@@ -165,7 +167,8 @@ class ExpertTrainer:
         # 设置检查点目录
         checkpoint_name = f"{expert_type}_expert"
         if expert_type == 'uml' and dataset_version:
-            vision_version = self.path_cfg.vision_model_config.version
+            vision_cfg = get_vision_model_config()
+            vision_version = vision_cfg.version
             checkpoint_name = f"{expert_type}_expert_{vision_version}_dataset_{dataset_version}"
         self.checkpoint_dir = self.path_cfg.get_checkpoint_path(checkpoint_name)
 

@@ -91,7 +91,7 @@ class Experiment:
         self.model_version = model_version
         self.dataset_version = dataset_version
         self.description = description
-        self.env = f"uml_{model_version.replace('.', '')}"  # qwen2.5 -> uml_qwen25
+        self.env = f"uml_{model_version}"  # qwen2.5 -> uml_qwen2.5
 
     def __str__(self):
         return f"实验{self.exp_id}: {self.model_version} + {self.dataset_version}"
@@ -137,6 +137,7 @@ class TrainingExecutor:
             str(PROJECT_ROOT / 'scripts' / 'run_with_env.py'),
             '--env', exp.env,
             '--script', str(PROJECT_ROOT / 'scripts' / 'training' / 'train_uml_expert.py'),
+            '--',  # 分隔符：告诉run_with_env.py后续参数传给目标脚本
             '--dataset', exp.dataset_version
         ]
 
