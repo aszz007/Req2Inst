@@ -376,7 +376,7 @@ class UMLDatasetLoader:
 
         # 数据集文件映射
         self.dataset_files = {
-            'qwen2.5': 'uml_dataset_qwen2.5_local.csv',
+            'qwen2.5': 'uml_dataset_qwen25_local.csv',
             'qwen3': 'uml_dataset_qwen3_local.csv',
             'qwen235B': 'uml_dataset_qwen235B_cloud.csv'
         }
