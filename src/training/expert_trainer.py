@@ -129,10 +129,10 @@ class ExpertTrainer:
         self.dataset_version = dataset_version
         self.use_rtx4090_optimization = use_rtx4090_optimization
 
-        # 如果是UML且未指定数据集版本，默认使用qwen2.5
-        if expert_type == 'uml' and dataset_version is None:
+        # 如果是UML或General且未指定数据集版本，默认使用qwen2.5
+        if expert_type in ['uml', 'general'] and dataset_version is None:
             self.dataset_version = 'qwen2.5'
-            logger.warning("UML专家未指定数据集版本，默认使用: qwen2.5")
+            logger.warning(f"{expert_type}专家未指定数据集版本，默认使用: qwen2.5")
 
         # 获取配置
         self.path_cfg = get_path_config()
@@ -161,6 +161,10 @@ class ExpertTrainer:
                 vision_version = vision_cfg.version
                 output_name = f"uml_expert_{vision_version}_dataset_{dataset_version}"
                 self.output_dir = self.path_cfg.LORA_WEIGHTS_DIR / 'experts' / output_name
+            elif expert_type == 'general' and dataset_version:
+                # General专家根据数据集版本生成输出路径
+                output_name = f"general_expert_dataset_{dataset_version}"
+                self.output_dir = self.path_cfg.LORA_WEIGHTS_DIR / 'experts' / output_name
             else:
                 self.output_dir = self.path_cfg.get_expert_weight_path(f"{expert_type}_expert")
 
@@ -170,6 +174,8 @@ class ExpertTrainer:
             vision_cfg = get_vision_model_config()
             vision_version = vision_cfg.version
             checkpoint_name = f"{expert_type}_expert_{vision_version}_dataset_{dataset_version}"
+        elif expert_type == 'general' and dataset_version:
+            checkpoint_name = f"{expert_type}_expert_dataset_{dataset_version}"
         self.checkpoint_dir = self.path_cfg.get_checkpoint_path(checkpoint_name)
 
         # 初始化模型和数据相关属性
@@ -207,7 +213,8 @@ class ExpertTrainer:
             elif self.expert_type == 'general':
                 text_loader = TextDatasetLoader()
                 image_loader = ImageDatasetLoader()
-                uml_loader = UMLDatasetLoader()  # 通用专家使用默认版本
+                # General专家使用指定版本的UML数据集
+                uml_loader = UMLDatasetLoader(dataset_version=self.dataset_version)
                 raw_data = (
                         text_loader.load_csv_files() +
                         image_loader.load_csv_file() +

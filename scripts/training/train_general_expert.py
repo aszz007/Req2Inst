@@ -32,10 +32,10 @@ from src.utils.logger import get_logger
 logger = get_logger('training.train_general_expert')
 
 
-def print_header():
+def print_header(dataset_version: str):
     """打印训练开始的标题"""
     print("=" * 80)
-    print(" " * 18 + "通用专家训练 (General Expert Training)")
+    print(" " * 12 + f"通用专家训练 (General Expert Training - Dataset: {dataset_version.upper()})")
     print("=" * 80)
     print()
 
@@ -50,19 +50,23 @@ def detect_rtx4090() -> bool:
         pass
     return False
 
-def print_config(use_4bit: bool, use_rtx4090_opt: bool):
+def print_config(dataset_version: str, use_4bit: bool, use_rtx4090_opt: bool):
     """打印训练配置"""
     path_cfg = get_path_config()
     train_cfg = get_training_config()
     lora_cfg = get_lora_config('conservative')
 
+    # 根据数据集版本生成输出路径
+    output_dir = path_cfg.LORA_WEIGHTS_DIR / 'experts' / f'general_expert_dataset_{dataset_version}'
+
     print("训练配置信息:")
     print("-" * 80)
     print(f"专家类型: General Expert (兜底专家)")
+    print(f"数据集版本: {dataset_version}")
     print(f"基础模型: {path_cfg.QWEN_7B_CHAT_PATH}")
-    print(f"输出目录: {path_cfg.GENERAL_EXPERT_WEIGHTS}")
+    print(f"输出目录: {output_dir}")
     print()
-    print(f"数据来源: 文本 + 图像 + UML 混合数据")
+    print(f"数据来源: 文本(全部) + 图像(全部) + UML({dataset_version})")
     print()
     print(f"LoRA配置:")
     print(f"  - Rank: {lora_cfg.rank}")
@@ -148,15 +152,26 @@ def validate_environment():
 def main():
     """主训练流程"""
     # 解析命令行参数
-    parser = argparse.ArgumentParser(description='训练通用专家')
+    parser = argparse.ArgumentParser(description='训练通用专家（支持多数据集版本）')
+    parser.add_argument(
+        '--dataset',
+        type=str,
+        required=True,
+        choices=['qwen2.5', 'qwen3', 'qwen235B'],
+        help='数据集版本（必需）: qwen2.5/qwen3/qwen235B对应不同的UML数据集'
+    )
     parser.add_argument('--use_4bit', action='store_true', default=True,
                         help='使用4bit量化训练（默认：True）')
     parser.add_argument('--no_4bit', dest='use_4bit', action='store_false',
                         help='不使用4bit量化')
     args = parser.parse_args()
 
+    # 获取数据集版本
+    dataset_version = args.dataset
+    logger.info(f"使用数据集版本: {dataset_version}")
+
     # 打印标题
-    print_header()
+    print_header(dataset_version)
 
     # 验证环境
     if not validate_environment():
@@ -171,14 +186,15 @@ def main():
         logger.info("检测到RTX 4090，启用优化配置")
 
     # 打印配置
-    print_config(args.use_4bit, use_rtx4090_opt)
+    print_config(dataset_version, args.use_4bit, use_rtx4090_opt)
 
     # 创建训练器
-    logger.info("创建通用专家训练器...")
+    logger.info(f"创建通用专家训练器（数据集:{dataset_version}）...")
     try:
         trainer = ExpertTrainer(
             expert_type='general',
             use_4bit=args.use_4bit,
+            dataset_version=dataset_version,
             use_rtx4090_optimization=use_rtx4090_opt
         )
     except Exception as e:
@@ -196,8 +212,9 @@ def main():
     print(f"数据统计:")
     print(f"  - 训练样本: {status['train_samples']}")
     print(f"  - 验证样本: {status['val_samples']}")
+    print(f"  - 数据集版本: {dataset_version}")
     print()
-    print("注意：通用专家使用所有类型的数据（文本、图像、UML）")
+    print(f"注意：通用专家使用文本(全部) + 图像(全部) + UML({dataset_version})")
     print()
 
     # 设置模型
@@ -223,12 +240,13 @@ def main():
         print()
 
         path_cfg = get_path_config()
-        print(f"LoRA权重已保存至: {path_cfg.GENERAL_EXPERT_WEIGHTS}")
-        print(f"检查点目录: {path_cfg.get_checkpoint_path('general_expert')}")
+        output_path = path_cfg.LORA_WEIGHTS_DIR / 'experts' / f'general_expert_dataset_{dataset_version}'
+        print(f"LoRA权重已保存至: {output_path}")
+        print(f"检查点目录: {path_cfg.get_checkpoint_path(f'general_expert_dataset_{dataset_version}')}")
         print()
         print("下一步:")
         print("  1. 可以使用该权重进行推理测试")
-        print("  2. 所有专家训练已完成，可以进行MoE系统集成")
+        print(f"  2. 继续训练其他数据集版本的General Expert")
         print()
 
         return 0
