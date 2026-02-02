@@ -1,154 +1,257 @@
-#专家选择
 """
-专家路由模块
-功能：根据意图和内容特征选择合适的专家
+MoE Expert Router - Simple Rule-based Routing with Parameterized Expert Selection
+基于规则的简单路由 + 参数化专家选择
+
+路由策略:
+1. 根据输入类型(text/image/uml/general)进行简单规则路由
+2. 支持通过参数指定专家变体(用于对比实验)
+3. 使用最优默认变体(对比实验后确定)
+
+Author: Claude
+Date: 2026-02-03
 """
+
+import json
+from typing import Dict, List, Optional
+from pathlib import Path
+from dataclasses import dataclass
+from collections import defaultdict
+
+
+@dataclass
+class RoutingResult:
+    """路由结果"""
+    expert_name: str
+    expert_path: str
+    expert_type: str
+    reasoning: str
+
+
+@dataclass
+class ExpertConfig:
+    """专家配置"""
+    name: str
+    expert_type: str
+    model_version: str
+    dataset_variant: Optional[str]
+    path: str
+    is_default: bool
 
 
 class ExpertRouter:
-    """专家路由器"""
+    """
+    MoE专家路由器
 
-    def __init__(self):
-        # 定义可用的专家
-        self.experts = {
-            'Image_Annotation_Expert': {
-                'name': 'Image_Annotation_Expert',
-                'description': '图像标注任务专家',
-                'specialization': '处理图像中的目标标注、区域标注等任务'
+    简单的基于规则的路由:
+    - 根据输入类型路由到对应的专家类型
+    - 支持通过参数选择专家变体(对比实验用)
+    - 使用经过实验验证的最优默认变体
+    """
+
+    DEFAULT_EXPERTS = {
+        'text': 'text_expert',
+        'image': 'image_expert_qwen3',
+        'uml': 'uml_expert_qwen3_dataset_qwen235B',
+        'general': 'general_expert_dataset_qwen235B'
+    }
+
+    def __init__(self, lora_weights_dir: str = "lora_weights/experts"):
+        """
+        初始化路由器
+
+        Args:
+            lora_weights_dir: LoRA权重根目录
+        """
+        self.lora_weights_dir = Path(lora_weights_dir)
+        self.expert_registry = self._build_expert_registry()
+        self.routing_stats = defaultdict(int)
+
+    def _build_expert_registry(self) -> Dict[str, List[ExpertConfig]]:
+        """
+        构建专家注册表
+
+        包含12个专家变体:
+        - text_expert: 1个
+        - image_expert: 2个变体
+        - uml_expert: 6个变体(2个模型版本 × 3个数据集)
+        - general_expert: 3个变体(3个数据集)
+        """
+        registry = {
+            'text': [],
+            'image': [],
+            'uml': [],
+            'general': []
+        }
+
+        registry['text'].append(ExpertConfig(
+            name='text_expert',
+            expert_type='text',
+            model_version='qwen-7b',
+            dataset_variant=None,
+            path=str(self.lora_weights_dir / 'text_expert'),
+            is_default=True
+        ))
+
+        for version in ['qwen2.5', 'qwen3']:
+            registry['image'].append(ExpertConfig(
+                name=f'image_expert_{version}',
+                expert_type='image',
+                model_version=version,
+                dataset_variant=None,
+                path=str(self.lora_weights_dir / f'image_expert_{version}'),
+                is_default=(version == 'qwen3')
+            ))
+
+        for model_version in ['qwen2.5', 'qwen3']:
+            for dataset in ['qwen2.5', 'qwen3', 'qwen235B']:
+                expert_name = f'uml_expert_{model_version}_dataset_{dataset}'
+                is_default = (expert_name == self.DEFAULT_EXPERTS['uml'])
+                registry['uml'].append(ExpertConfig(
+                    name=expert_name,
+                    expert_type='uml',
+                    model_version=model_version,
+                    dataset_variant=dataset,
+                    path=str(self.lora_weights_dir / expert_name),
+                    is_default=is_default
+                ))
+
+        for dataset in ['qwen2.5', 'qwen3', 'qwen235B']:
+            expert_name = f'general_expert_dataset_{dataset}'
+            is_default = (expert_name == self.DEFAULT_EXPERTS['general'])
+            registry['general'].append(ExpertConfig(
+                name=expert_name,
+                expert_type='general',
+                model_version='qwen-7b',
+                dataset_variant=dataset,
+                path=str(self.lora_weights_dir / expert_name),
+                is_default=is_default
+            ))
+
+        return registry
+
+    def route(
+            self,
+            input_data: dict,
+            expert_variant: Optional[str] = None
+    ) -> RoutingResult:
+        """
+        主路由函数
+
+        Args:
+            input_data: 输入数据字典，包含:
+                - type: 'text', 'image', 'uml', 'general'
+                - content: 实际内容
+            expert_variant: 指定专家变体(对比实验用)，例如:
+                - 'image_expert_qwen2.5'
+                - 'uml_expert_qwen2.5_dataset_qwen3'
+                - None表示使用默认专家
+
+        Returns:
+            RoutingResult: 路由结果
+        """
+        input_type = input_data.get('type', '').lower()
+
+        if input_type not in ['text', 'image', 'uml', 'general']:
+            input_type = 'general'
+
+        if expert_variant:
+            expert = self._get_expert_by_name(expert_variant)
+            if expert:
+                self.routing_stats[expert.name] += 1
+                return RoutingResult(
+                    expert_name=expert.name,
+                    expert_path=expert.path,
+                    expert_type=expert.expert_type,
+                    reasoning=f"Explicitly specified expert variant: {expert_variant}"
+                )
+            else:
+                raise ValueError(f"Expert variant '{expert_variant}' not found in registry")
+
+        default_expert_name = self.DEFAULT_EXPERTS[input_type]
+        expert = self._get_expert_by_name(default_expert_name)
+
+        self.routing_stats[expert.name] += 1
+
+        return RoutingResult(
+            expert_name=expert.name,
+            expert_path=expert.path,
+            expert_type=expert.expert_type,
+            reasoning=f"Default expert for {input_type} input"
+        )
+
+    def _get_expert_by_name(self, expert_name: str) -> Optional[ExpertConfig]:
+        """根据名称获取专家配置"""
+        for expert_list in self.expert_registry.values():
+            for expert in expert_list:
+                if expert.name == expert_name:
+                    return expert
+        return None
+
+    def list_experts(
+            self,
+            expert_type: Optional[str] = None,
+            only_defaults: bool = False
+    ) -> List[ExpertConfig]:
+        """
+        列出专家
+
+        Args:
+            expert_type: 专家类型过滤('text'/'image'/'uml'/'general')
+            only_defaults: 只列出默认专家
+
+        Returns:
+            专家配置列表
+        """
+        if expert_type:
+            experts = self.expert_registry.get(expert_type, [])
+        else:
+            experts = []
+            for expert_list in self.expert_registry.values():
+                experts.extend(expert_list)
+
+        if only_defaults:
+            experts = [e for e in experts if e.is_default]
+
+        return experts
+
+    def get_available_variants(self, expert_type: str) -> List[str]:
+        """
+        获取指定类型的所有可用专家变体名称
+
+        Args:
+            expert_type: 'text', 'image', 'uml', 'general'
+
+        Returns:
+            专家变体名称列表
+        """
+        experts = self.expert_registry.get(expert_type, [])
+        return [e.name for e in experts]
+
+    def get_routing_statistics(self) -> Dict:
+        """
+        获取路由统计信息
+
+        Returns:
+            统计字典
+        """
+        total_routings = sum(self.routing_stats.values())
+
+        stats = {
+            'total_routings': total_routings,
+            'expert_usage_count': dict(self.routing_stats),
+            'expert_usage_percentage': {
+                expert: (count / total_routings * 100) if total_routings > 0 else 0
+                for expert, count in self.routing_stats.items()
             },
-            'Text_Extraction_Expert': {
-                'name': 'Text_Extraction_Expert',
-                'description': '文本提取任务专家',
-                'specialization': '处理文本中的实体提取、信息抽取等任务'
-            },
-            'Recognition_Expert': {
-                'name': 'Recognition_Expert',
-                'description': '识别任务专家',
-                'specialization': '处理图像或文本的分类、识别等任务'
-            },
-            'Generation_Expert': {
-                'name': 'Generation_Expert',
-                'description': '生成任务专家',
-                'specialization': '处理内容生成、创作等任务'
-            },
-            'Complex_Task_Expert': {
-                'name': 'Complex_Task_Expert',
-                'description': '复杂任务专家',
-                'specialization': '处理高复杂度、多步骤的综合任务'
-            },
-            'General_Expert': {
-                'name': 'General_Expert',
-                'description': '通用任务专家',
-                'specialization': '处理常规任务和未分类任务'
+            'total_experts': sum(len(experts) for experts in self.expert_registry.values()),
+            'experts_by_type': {
+                expert_type: len(expert_list)
+                for expert_type, expert_list in self.expert_registry.items()
             }
         }
 
-    def select_expert(self, intent, content_features):
-        """
-        选择合适的专家
+        return stats
 
-        Args:
-            intent: 意图类别
-            content_features: 内容特征字典
-
-        Returns:
-            dict: 选中的专家信息
-        """
-        modality = content_features.get('modality', 'none')
-        complexity = content_features.get('complexity', 'medium')
-
-        # 路由逻辑
-        expert_name = self._route_logic(intent, modality, complexity)
-        expert_info = self.experts[expert_name].copy()
-
-        # 添加选择原因
-        expert_info['reason'] = self._generate_reason(intent, modality, complexity)
-
-        return expert_info
-
-    def _route_logic(self, intent, modality, complexity):
-        """
-        核心路由逻辑
-
-        基于文档要求的路由规则
-        """
-        # 规则1：标注 + 图像 -> Image_Annotation_Expert
-        if intent == '标注' and modality == 'image':
-            return 'Image_Annotation_Expert'
-
-        # 规则2：提取 + 文本 -> Text_Extraction_Expert
-        elif intent == '提取' and modality == 'text':
-            return 'Text_Extraction_Expert'
-
-        # 规则3：识别任务 -> Recognition_Expert
-        elif intent == '识别':
-            return 'Recognition_Expert'
-
-        # 规则4：生成/创作 -> Generation_Expert
-        elif intent in ['生成', '创作']:
-            return 'Generation_Expert'
-
-        # 规则5：高复杂度 -> Complex_Task_Expert
-        elif complexity == 'high':
-            return 'Complex_Task_Expert'
-
-        # 规则6：其他情况 -> General_Expert
-        else:
-            return 'General_Expert'
-
-    def _generate_reason(self, intent, modality, complexity):
-        """生成选择原因说明"""
-        reasons = []
-
-        if intent != '通用':
-            reasons.append(f"意图为'{intent}'")
-
-        if modality != 'none':
-            reasons.append(f"内容类型为'{modality}'")
-
-        if complexity == 'high':
-            reasons.append(f"复杂度为'{complexity}'")
-
-        if not reasons:
-            return "默认选择"
-
-        return "，".join(reasons)
-
-    def get_all_experts(self):
-        """获取所有可用专家"""
-        return list(self.experts.keys())
-
-
-# 测试代码
-if __name__ == "__main__":
-    router = ExpertRouter()
-
-    test_cases = [
-        {
-            'intent': '标注',
-            'features': {'modality': 'image', 'complexity': 'medium'}
-        },
-        {
-            'intent': '提取',
-            'features': {'modality': 'text', 'complexity': 'low'}
-        },
-        {
-            'intent': '识别',
-            'features': {'modality': 'image', 'complexity': 'low'}
-        },
-        {
-            'intent': '生成',
-            'features': {'modality': 'none', 'complexity': 'medium'}
-        }
-    ]
-
-    print("专家选择测试:")
-    print("-" * 40)
-    for i, test in enumerate(test_cases, 1):
-        print(f"\n测试用例 {i}:")
-        print(f"  意图: {test['intent']}")
-        print(f"  特征: {test['features']}")
-
-        result = router.select_expert(test['intent'], test['features'])
-        print(f"  选择: {result['name']}")
-        print(f"  原因: {result['reason']}")
+    def reset_statistics(self):
+        """重置路由统计"""
+        self.routing_stats.clear()

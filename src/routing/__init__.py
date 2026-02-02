@@ -1,21 +1,16 @@
 """
-路由系统模块
-负责分析输入并选择合适的专家
+Routing Module - MoE Expert Router
+专家路由模块
+
+提供MoE系统的智能路由功能
 """
 
-# 待实现的路由模块导入（阶段4会用到）
-
-# from .simple_router import SimpleRouter
-# from .content_analyzer import ContentAnalyzer
-# from .expert_router import ExpertRouter
-# from .intent_classifier import IntentClassifier
+from .expert_router import ExpertRouter, RoutingResult, ExpertConfig
 
 __all__ = [
-    # 'SimpleRouter',
-    # 'ContentAnalyzer',
-    # 'ExpertRouter',
-    # 'IntentClassifier',
+    'ExpertRouter',
+    'RoutingResult',
+    'ExpertConfig',
 ]
 
-# 版本信息
-__version__ = '0.1.0'
+__version__ = '1.0.0'
