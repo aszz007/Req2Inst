@@ -303,32 +303,17 @@ class ExpertTrainer:
             # 加载基础模型
             logger.info(f"加载基础模型: {self.base_model_path}")
 
-            # 根据专家类型选择正确的模型类
-            if self.expert_type in ['text', 'general']:
-                # 文本模型：Qwen-7B-Chat
-                logger.info("使用AutoModelForCausalLM加载文本模型")
-                self.model = AutoModelForCausalLM.from_pretrained(
-                    self.base_model_path,
-                    quantization_config=quantization_config,
-                    device_map="auto",
-                    trust_remote_code=True,
-                    torch_dtype=torch.float16 if not self.use_4bit else None,
-                    low_cpu_mem_usage=True
-                )
-            else:  # image, uml
-                # 导入视觉模型依赖
-                _import_vision_dependencies()
-
-                # 视觉模型：Qwen2.5-VL-7B 或 Qwen3-VL-8B
-                logger.info("使用AutoModelForVision2Seq加载视觉模型")
-                self.model = AutoModelForVision2Seq.from_pretrained(
-                    self.base_model_path,
-                    quantization_config=quantization_config,
-                    device_map="auto",
-                    trust_remote_code=True,
-                    torch_dtype=torch.float16 if not self.use_4bit else None,
-                    low_cpu_mem_usage=True
-                )
+            # ⚠️ 重要：所有Expert都使用AutoModelForCausalLM（Qwen-7B-Chat）
+            # Image/UML Expert处理的是JSON文本，不是图像/UML图
+            logger.info("使用AutoModelForCausalLM加载文本模型")
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.base_model_path,
+                quantization_config=quantization_config,
+                device_map="auto",
+                trust_remote_code=True,
+                torch_dtype=torch.float16 if not self.use_4bit else None,
+                low_cpu_mem_usage=True
+            )
 
             # 为4bit训练准备模型
             if self.use_4bit:
@@ -337,16 +322,10 @@ class ExpertTrainer:
             # 配置LoRA
             logger.info("配置LoRA参数...")
 
-            # 根据模型类型动态选择target_modules
-            # Qwen-7B-Chat使用c_attn, Qwen2.5-VL/Qwen3-VL使用标准命名
-            if self.expert_type in ['text', 'general']:
-                # Qwen-7B-Chat: 使用concatenated attention
-                target_modules = ["c_attn"]
-                logger.info("检测到文本模型(Qwen-7B-Chat), 使用target_modules: ['c_attn']")
-            else:  # image, uml
-                # Qwen2.5-VL / Qwen3-VL: 使用标准Transformers命名
-                target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
-                logger.info("检测到视觉模型(Qwen2.5-VL/Qwen3-VL), 使用target_modules: ['q_proj', 'k_proj', 'v_proj', 'o_proj']")
+            # ⚠️ 重要：所有Expert都使用Qwen-7B-Chat的target_modules
+            # Qwen-7B-Chat使用concatenated attention: c_attn
+            target_modules = ["c_attn"]
+            logger.info("所有Expert使用Qwen-7B-Chat, target_modules: ['c_attn']")
 
             peft_config = LoraConfig(
                 task_type=TaskType.CAUSAL_LM,
