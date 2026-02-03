@@ -137,6 +137,7 @@ class LanguageModel:
                 'alora_invocation_tokens',
                 'alora_prefix',
                 'alora_suffix',
+                'arrow_config',
             ]
 
             # 检查是否需要清理
