@@ -110,8 +110,8 @@ class PathConfig:
 
         # UML数据集版本映射
         self.UML_DATASET_FILES = {
-            'qwen2.5': self.UML_DATASET_DIR / "uml_dataset_qwen2.5.csv",
-            'qwen3': self.UML_DATASET_DIR / "uml_dataset_qwen3.csv",
+            'qwen2.5': self.UML_DATASET_DIR / "uml_dataset_qwen25_local.csv",
+            'qwen3': self.UML_DATASET_DIR / "uml_dataset_qwen3_local.csv",
             'qwen235B': self.UML_DATASET_DIR / "uml_dataset_qwen235B_cloud.csv"
         }
         # 默认UML数据集（向后兼容）

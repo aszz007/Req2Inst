@@ -144,12 +144,10 @@ class ExpertTrainer:
         if base_model_path:
             self.base_model_path = base_model_path
         else:
-            # 根据专家类型选择模型
-            if expert_type in ['text', 'general']:
-                self.base_model_path = str(self.path_cfg.QWEN_7B_CHAT_PATH)
-            else:  # image, uml
-                # 视觉专家使用当前配置的视觉模型版本
-                self.base_model_path = str(self.path_cfg.get_vision_model_path())
+            # ⚠️ 重要：所有Expert都使用Qwen-7B-Chat（文本模型）
+            # Image/UML Expert的输入是JSON文本描述，不是图像/UML图
+            # 视觉模型仅用于数据准备阶段（raw → interim）
+            self.base_model_path = str(self.path_cfg.QWEN_7B_CHAT_PATH)
 
         # 设置输出目录（考虑数据集版本）
         if output_dir:
@@ -240,27 +238,15 @@ class ExpertTrainer:
             logger.info(f"  验证集: {len(val_data)}条")
             logger.info(f"  测试集: {len(test_data)}条")
 
-            # 加载tokenizer/processor（需要在创建Dataset之前）
-            if self.expert_type in ['text', 'general']:
-                logger.info("加载tokenizer...")
-                self.tokenizer = AutoTokenizer.from_pretrained(
-                    self.base_model_path,
-                    trust_remote_code=True,
-                    padding_side='left'
-                )
-            else:  # image, uml - 视觉模型
-                # 导入视觉模型依赖
-                _import_vision_dependencies()
-
-                logger.info("加载processor（视觉模型）...")
-                self.processor = AutoProcessor.from_pretrained(
-                    self.base_model_path,
-                    trust_remote_code=True
-                )
-                # 训练时只需要tokenizer部分
-                self.tokenizer = self.processor.tokenizer
-                self.tokenizer.padding_side = 'left'
-                logger.info("从processor提取tokenizer用于训练")
+            # 加载tokenizer
+            # ⚠️ 重要：所有Expert（包括Image/UML）都直接加载tokenizer
+            # 因为它们处理的都是文本输入（Image/UML Expert的输入是JSON文本描述）
+            logger.info("加载tokenizer...")
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.base_model_path,
+                trust_remote_code=True,
+                padding_side='left'
+            )
 
             # 设置特殊tokens
             if self.tokenizer.pad_token is None:
