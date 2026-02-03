@@ -24,6 +24,9 @@ from peft import PeftModel, PeftConfig
 from pathlib import Path
 from typing import Optional
 import warnings
+import json
+import tempfile
+import shutil
 warnings.filterwarnings('ignore')
 
 from config.settings import get_path_config, get_device_config
@@ -109,6 +112,67 @@ class LanguageModel:
             logger.error(f"模型加载失败: {e}")
             raise
 
+    def _clean_lora_config(self, lora_path: Path) -> Optional[Path]:
+        """
+        清理 LoRA 配置文件，移除不兼容的参数
+
+        Args:
+            lora_path: 原始 LoRA 路径
+
+        Returns:
+            Optional[Path]: 清理后的临时路径，如果失败返回 None
+        """
+        try:
+            config_file = lora_path / "adapter_config.json"
+            if not config_file.exists():
+                logger.warning(f"配置文件不存在: {config_file}")
+                return None
+
+            # 读取原始配置
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+
+            # 不兼容参数列表
+            incompatible_params = [
+                'alora_invocation_tokens',
+                'alora_prefix',
+                'alora_suffix',
+            ]
+
+            # 检查是否需要清理
+            needs_cleaning = any(param in config for param in incompatible_params)
+
+            if not needs_cleaning:
+                # 配置文件无需清理，直接返回原路径
+                return lora_path
+
+            # 创建临时目录
+            temp_dir = Path(tempfile.mkdtemp(prefix="lora_cleaned_"))
+            logger.info(f"创建临时目录: {temp_dir}")
+
+            # 复制所有文件到临时目录
+            for item in lora_path.iterdir():
+                if item.is_file():
+                    shutil.copy2(item, temp_dir / item.name)
+
+            # 清理配置
+            for param in incompatible_params:
+                if param in config:
+                    logger.info(f"移除不兼容参数: {param}")
+                    del config[param]
+
+            # 写入清理后的配置
+            cleaned_config_file = temp_dir / "adapter_config.json"
+            with open(cleaned_config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+
+            logger.info("LoRA 配置已清理")
+            return temp_dir
+
+        except Exception as e:
+            logger.error(f"清理 LoRA 配置失败: {e}")
+            return None
+
     def load_lora_from_path(self, lora_path: str) -> bool:
         """
         从路径动态加载LoRA权重
@@ -119,6 +183,7 @@ class LanguageModel:
         Returns:
             bool: 是否加载成功
         """
+        temp_dir = None
         try:
             lora_path = Path(lora_path)
 
@@ -139,10 +204,19 @@ class LanguageModel:
 
             logger.info(f"加载LoRA权重: {lora_path}")
 
+            # 清理配置文件（如果需要）
+            cleaned_path = self._clean_lora_config(lora_path)
+            if cleaned_path is None:
+                logger.warning("配置清理失败，尝试直接加载")
+                cleaned_path = lora_path
+            elif cleaned_path != lora_path:
+                temp_dir = cleaned_path
+                logger.info(f"使用清理后的配置: {cleaned_path}")
+
             # 使用PEFT加载LoRA
             self.model = PeftModel.from_pretrained(
                 self.model,
-                str(lora_path),
+                str(cleaned_path),
                 is_trainable=False
             )
 
@@ -155,6 +229,15 @@ class LanguageModel:
         except Exception as e:
             logger.error(f"LoRA加载失败: {e}")
             return False
+
+        finally:
+            # 清理临时目录
+            if temp_dir and temp_dir != lora_path:
+                try:
+                    shutil.rmtree(temp_dir)
+                    logger.debug(f"清理临时目录: {temp_dir}")
+                except Exception as e:
+                    logger.warning(f"清理临时目录失败: {e}")
 
     def unload_lora(self) -> bool:
         """
