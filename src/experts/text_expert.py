@@ -76,12 +76,13 @@ class TextExpert(BaseExpert):
             logger.debug(f"生成指令 - 输入需求: {input_data[:100]}...")
 
             # 调用模型生成
+            # 修复：降低temperature以获得更稳定的格式输出
             instruction = self._generate_with_model(
                 prompt=prompt,
                 max_new_tokens=2048,
-                temperature=0.7,
-                top_p=0.9,
-                top_k=50,
+                temperature=0.3,  # 降低温度以获得更稳定的格式化输出
+                top_p=0.85,       # 稍微降低top_p以减少随机性
+                top_k=40,         # 降低top_k以提高确定性
                 repetition_penalty=1.1
             )
 
@@ -132,9 +133,7 @@ class TextExpert(BaseExpert):
         logger.info("使用回退方案生成指令")
 
         fallback_instruction = f"""Definition: In this task, implement and test the following requirement: {input_data[:200]}
-
 Emphasis & Caution: Ensure thorough testing and validation of all functionality.
-
 Things to Avoid: Do not skip error handling or edge case testing."""
 
         return fallback_instruction

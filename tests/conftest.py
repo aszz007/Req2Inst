@@ -79,7 +79,7 @@ def mock_path_config(tmp_path):
     config.EXPERTS_DIR = config.LORA_WEIGHTS_DIR / "experts"
 
     config.TEXT_EXPERT_WEIGHTS = config.EXPERTS_DIR / "text_expert"
-    config.IMAGE_EXPERT_WEIGHTS = config.EXPERTS_DIR / "image_expert_qwen2.5"
+    config.IMAGE_EXPERT_WEIGHTS = config.EXPERTS_DIR / "image_expert_qwen25"
     config.UML_EXPERT_WEIGHTS = config.EXPERTS_DIR / "uml_expert_qwen2.5"
     config.GENERAL_EXPERT_WEIGHTS = config.EXPERTS_DIR / "general_expert"
 

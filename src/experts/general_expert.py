@@ -12,7 +12,7 @@
 专家变体(3个):
   - general_expert_dataset_qwen25: 使用Qwen2.5数据集混合训练
   - general_expert_dataset_qwen3: 使用Qwen3数据集混合训练
-  - general_expert_dataset_qwen235b: 使用Qwen2.35B数据集混合训练(默认)
+  - general_expert_dataset_qwen235B: 使用Qwen3-235B数据集混合训练(默认)
 
 作者: Expert System
 日期: 2025-02-03
@@ -36,18 +36,18 @@ class GeneralExpert(BaseExpert):
     """通用专家 - 混合多模态数据训练的兜底专家"""
 
     def __init__(self,
-                 dataset_version: str = 'qwen235b',
+                 dataset_version: str = 'qwen235B',
                  lora_path: Optional[str] = None,
                  use_4bit: bool = True):
         """
         初始化通用专家
 
         Args:
-            dataset_version: 数据集构建版本('qwen2.5', 'qwen3', 'qwen235b'),默认'qwen235b'
+            dataset_version: 数据集构建版本('qwen2.5', 'qwen3', 'qwen235B'),默认'qwen235B'
             lora_path: LoRA权重路径(None则使用默认配置)
             use_4bit: 是否使用4bit量化
         """
-        if dataset_version not in ['qwen2.5', 'qwen3', 'qwen235b']:
+        if dataset_version not in ['qwen2.5', 'qwen3', 'qwen235B']:
             raise ValueError(f"不支持的数据集版本: {dataset_version}")
 
         path_cfg = get_path_config()

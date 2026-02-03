@@ -142,7 +142,7 @@ class ExpertRouter:
                 - type: 'text', 'image', 'uml', 'general'
                 - content: 实际内容
             expert_variant: 指定专家变体(对比实验用)，例如:
-                - 'image_expert_qwen2.5'
+                - 'image_expert_qwen25'
                 - 'uml_expert_qwen2.5_dataset_qwen3'
                 - None表示使用默认专家
 

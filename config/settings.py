@@ -139,13 +139,13 @@ class PathConfig:
 
         # 各专家权重路径
         self.TEXT_EXPERT_WEIGHTS = self.EXPERTS_DIR / "text_expert"
-        self.IMAGE_EXPERT_WEIGHTS_QWEN2_5 = self.EXPERTS_DIR / "image_expert_qwen2.5"
+        self.IMAGE_EXPERT_WEIGHTS_QWEN2_5 = self.EXPERTS_DIR / "image_expert_qwen25"
         self.IMAGE_EXPERT_WEIGHTS_QWEN3 = self.EXPERTS_DIR / "image_expert_qwen3"
         self.UML_EXPERT_WEIGHTS_QWEN2_5 = self.EXPERTS_DIR / "uml_expert_qwen2.5"
         self.UML_EXPERT_WEIGHTS_QWEN3 = self.EXPERTS_DIR / "uml_expert_qwen3"
 
         # General Expert多版本权重路径（使用不同UML数据集训练）
-        self.GENERAL_EXPERT_WEIGHTS_QWEN2_5 = self.EXPERTS_DIR / "general_expert_dataset_qwen2.5"
+        self.GENERAL_EXPERT_WEIGHTS_QWEN2_5 = self.EXPERTS_DIR / "general_expert_dataset_qwen25"
         self.GENERAL_EXPERT_WEIGHTS_QWEN3 = self.EXPERTS_DIR / "general_expert_dataset_qwen3"
         self.GENERAL_EXPERT_WEIGHTS_QWEN235B = self.EXPERTS_DIR / "general_expert_dataset_qwen235B"
         # 默认General Expert路径（向后兼容）
@@ -165,12 +165,12 @@ class PathConfig:
             'general': self.GENERAL_EXPERT_WEIGHTS,  # 默认版本
             # 支持带_expert后缀的名称
             'text_expert': self.TEXT_EXPERT_WEIGHTS,
-            'image_expert_qwen2.5': self.IMAGE_EXPERT_WEIGHTS_QWEN2_5,
+            'image_expert_qwen25': self.IMAGE_EXPERT_WEIGHTS_QWEN2_5,
             'image_expert_qwen3': self.IMAGE_EXPERT_WEIGHTS_QWEN3,
             'uml_expert_qwen2.5': self.UML_EXPERT_WEIGHTS_QWEN2_5,
             'uml_expert_qwen3': self.UML_EXPERT_WEIGHTS_QWEN3,
             'general_expert': self.GENERAL_EXPERT_WEIGHTS,
-            'general_expert_dataset_qwen2.5': self.GENERAL_EXPERT_WEIGHTS_QWEN2_5,
+            'general_expert_dataset_qwen25': self.GENERAL_EXPERT_WEIGHTS_QWEN2_5,
             'general_expert_dataset_qwen3': self.GENERAL_EXPERT_WEIGHTS_QWEN3,
             'general_expert_dataset_qwen235B': self.GENERAL_EXPERT_WEIGHTS_QWEN235B,
             # 兼容旧版命名（默认指向qwen2.5，保持向后兼容）

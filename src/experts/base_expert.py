@@ -39,7 +39,7 @@ class BaseExpert(ABC):
         初始化专家
 
         Args:
-            expert_name: 专家名称(如'text_expert', 'image_expert_qwen2.5')
+            expert_name: 专家名称(如'text_expert', 'image_expert_qwen25')
             base_model_path: 基础模型路径
             lora_path: LoRA权重路径(None则不加载)
             use_4bit: 是否使用4bit量化

@@ -17,11 +17,23 @@ class TextInstructionTemplate:
 2. 结构规范：严格按照下方定义的格式输出。
 3. 英语输出：无论输入是何种语言，输出必须是英文。"""
 
-    # 格式要求说明
-    FORMAT_INSTRUCTIONS = """格式要求：
-- Definition：使用简明扼要的祈使句描述主要目标。必须以 "In this task," 开头。
-- Emphasis & Caution：仅指出极易出错或必须满足的特定条件。如无特别强调，填入 "-"。
-- Things to Avoid：仅列出禁止的操作。如无特别避免事项，填入 "-"。"""
+    # 格式要求说明 - 修复：添加明确的输出格式示例
+    FORMAT_INSTRUCTIONS = """输出格式要求（严格按照此格式）：
+
+Definition: In this task, [主要任务目标的祈使句描述]
+Emphasis & Caution: [关键注意事项或必须满足的条件，无则填"-"]
+Things to Avoid: [明确禁止的操作，无则填"-"]
+
+格式规范：
+1. 每个部分必须独立成行
+2. 每行必须以对应标签开头（"Definition:", "Emphasis & Caution:", "Things to Avoid:"）
+3. Definition部分的内容必须以"In this task,"开头
+4. 各部分之间不需要空行
+
+示例输出：
+Definition: In this task, verify the user login functionality with valid credentials.
+Emphasis & Caution: Ensure both username and password validation are tested.
+Things to Avoid: Do not skip error message verification."""
 
     @staticmethod
     def build_prompt(low_requirement: str) -> str:
@@ -78,6 +90,8 @@ class TextInstructionTemplate:
         """
         验证生成的指令是否符合三段式格式
 
+        修复：检查结构而非仅关键词存在性
+
         Args:
             instruction: 生成的指令文本
 
@@ -99,32 +113,43 @@ class TextInstructionTemplate:
             'errors': []
         }
 
-        # 转小写方便检测
-        instruction_lower = instruction.lower()
+        # 按行分割
+        lines = [line.strip() for line in instruction.strip().split('\n') if line.strip()]
 
-        # 检查Definition（必须以"In this task"开头）
-        if 'in this task' in instruction_lower:
-            result['has_definition'] = True
-        else:
-            result['errors'].append('缺少Definition部分或未以"In this task"开头')
+        # 至少要有3行
+        if len(lines) < 3:
+            result['errors'].append(f'指令行数不足，期望至少3行，实际{len(lines)}行')
+            result['is_valid'] = False
+            return result
 
-        # 检查Emphasis & Caution
-        if 'emphasis' in instruction_lower or 'caution' in instruction_lower:
-            result['has_emphasis'] = True
-        elif '-' in instruction and 'emphasis' not in instruction_lower:
-            # 可能用"-"表示无强调
-            result['has_emphasis'] = True
-        else:
-            result['errors'].append('缺少Emphasis & Caution部分')
+        # 检查每一行的格式
+        for i, line in enumerate(lines):
+            line_lower = line.lower()
 
-        # 检查Things to Avoid
-        if 'avoid' in instruction_lower or 'things to avoid' in instruction_lower:
-            result['has_avoid'] = True
-        elif '-' in instruction and 'avoid' not in instruction_lower:
-            # 可能用"-"表示无避免事项
-            result['has_avoid'] = True
-        else:
-            result['errors'].append('缺少Things to Avoid部分')
+            # 检查Definition行
+            if line.startswith('Definition:'):
+                if 'in this task' in line_lower:
+                    result['has_definition'] = True
+                else:
+                    result['errors'].append('Definition部分未以"In this task"开头')
+
+            # 检查Emphasis & Caution行
+            elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
+                result['has_emphasis'] = True
+
+            # 检查Things to Avoid行
+            elif line.startswith('Things to Avoid:'):
+                result['has_avoid'] = True
+
+        # 检查是否所有部分都存在
+        if not result['has_definition']:
+            result['errors'].append('缺少"Definition:"部分或格式错误')
+
+        if not result['has_emphasis']:
+            result['errors'].append('缺少"Emphasis & Caution:"部分或格式错误')
+
+        if not result['has_avoid']:
+            result['errors'].append('缺少"Things to Avoid:"部分或格式错误')
 
         # 综合判断
         result['is_valid'] = all([
@@ -171,23 +196,38 @@ if __name__ == "__main__":
     prompts = TextInstructionTemplate.build_batch_prompt(requirements)
     print(f"成功生成 {len(prompts)} 个prompts")
 
-    # 测试4: 指令验证
-    print("\n【测试4】指令格式验证")
+    # 测试4: 指令验证 - 正确格式
+    print("\n【测试4】指令格式验证 - 正确格式")
     print("-" * 60)
 
-    # 正确的指令
     valid_instruction = """Definition: In this task, test the login functionality.
 Emphasis & Caution: Ensure correct username and password validation.
 Things to Avoid: Do not skip error handling tests."""
 
     result = TextInstructionTemplate.validate_instruction(valid_instruction)
     print(f"正确指令验证: {result['is_valid']}")
+    if not result['is_valid']:
+        print(f"错误信息: {result['errors']}")
 
-    # 错误的指令
-    invalid_instruction = """Test the login functionality.
-Make sure it works properly."""
+    # 测试5: 指令验证 - 错误格式（单行）
+    print("\n【测试5】指令格式验证 - 错误格式（单行）")
+    print("-" * 60)
+
+    invalid_instruction = """In this task, verify the login function using correct username and password. (Definition) - (Emphasis & Caution) - (Things to Avoid)"""
 
     result = TextInstructionTemplate.validate_instruction(invalid_instruction)
+    print(f"错误指令验证: {result['is_valid']}")
+    print(f"错误信息: {result['errors']}")
+
+    # 测试6: 指令验证 - 错误格式（缺少标签）
+    print("\n【测试6】指令格式验证 - 错误格式（缺少标签）")
+    print("-" * 60)
+
+    invalid_instruction2 = """Test the login functionality.
+Make sure it works properly.
+Avoid skipping tests."""
+
+    result = TextInstructionTemplate.validate_instruction(invalid_instruction2)
     print(f"错误指令验证: {result['is_valid']}")
     print(f"错误信息: {result['errors']}")
 

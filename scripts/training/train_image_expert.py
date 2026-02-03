@@ -3,7 +3,7 @@
 功能：训练Image Expert，将图像描述转换为标注指令
 环境：qwen_vision25（transformers==4.37.0）或 qwen_vision3（transformers==4.45.0）
 基础模型：Qwen2.5-VL-7B 或 Qwen3-VL-8B
-输出：lora_weights/experts/image_expert_qwen2.5/ 或 image_expert_qwen3/
+输出：lora_weights/experts/image_expert_qwen25/ 或 image_expert_qwen3/
 
 使用方法：
   # 方法1: 通过环境管理脚本运行（推荐）
@@ -307,6 +307,6 @@ if __name__ == "__main__":
 # 注意事项：
 # 1. 不同版本的训练需要在不同的Conda环境中进行
 # 2. 权重会自动保存到对应版本的目录：
-#    - Qwen2.5: lora_weights/experts/image_expert_qwen2.5/
+#    - Qwen2.5: lora_weights/experts/image_expert_qwen25/
 #    - Qwen3: lora_weights/experts/image_expert_qwen3/
 # 3. run_with_env.py会自动设置QWEN_VISION_VERSION环境变量

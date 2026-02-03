@@ -5,7 +5,7 @@ UML逻辑指令专家
 
 from typing import Dict, Any, List
 import json
-from .base_expert import BaseExpert
+from src.experts.base_expert import BaseExpert
 
 
 class UMLExpert(BaseExpert):

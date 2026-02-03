@@ -75,7 +75,7 @@ __author__ = 'Crowdsourcing Instruction Generator Team'
     model = VisionModel()
     
     # 加载LoRA
-    model.load_lora_from_path('lora_weights/experts/image_expert_qwen2.5')
+    model.load_lora_from_path('lora_weights/experts/image_expert_qwen25')
     
     # 通用生成
     instruction = model.generate(

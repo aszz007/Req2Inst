@@ -51,7 +51,7 @@ __author__ = 'Crowdsourcing Instruction Generator Team'
     prompt = ImageInstructionTemplate.build_prompt(description)
     
     # 传递给语言模型
-    generator.load_expert('image_expert_qwen2.5')
+    generator.load_expert('image_expert_qwen25')
     instruction = generator.generate(prompt)
 
 3. UML JSON生成业务逻辑指令：
@@ -86,7 +86,7 @@ __author__ = 'Crowdsourcing Instruction Generator Team'
         generator.load_expert('text_expert')
         prompt = TextInstructionTemplate.build_prompt(input_data)
     elif input_type == 'image':
-        generator.load_expert('image_expert_qwen2.5')
+        generator.load_expert('image_expert_qwen25')
         prompt = ImageInstructionTemplate.build_prompt(input_data)
     elif input_type == 'uml':
         generator.load_expert('uml_expert_qwen2.5')

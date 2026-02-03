@@ -10,7 +10,7 @@
 训练数据: dataset/image/
 
 专家变体:
-  - image_expert_qwen2.5: 使用Qwen2.5-VL数据集训练的LoRA
+  - image_expert_qwen25: 使用Qwen2.5-VL数据集训练的LoRA
   - image_expert_qwen3: 使用Qwen3-VL数据集训练的LoRA(默认)
 
 作者: Expert System
