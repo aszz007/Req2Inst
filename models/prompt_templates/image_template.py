@@ -42,11 +42,24 @@ Please output strictly in JSON format with no other content. Use ONLY English in
 3. 直接引用：直接使用 JSON 中的英文术语，不要进行同义词替换。
 4. 极致精简：Emphasis 和 Avoid 部分必须言简意赅。如果 JSON 中缺乏显著的视觉特征或干扰项，直接填 "-"。"""
 
-    # 格式要求说明
-    FORMAT_INSTRUCTIONS = """格式要求：
-· Definition：使用简明扼要的祈使句描述标注目标。必须以 "In this task," 开头。
-· Emphasis & Caution：仅列出极具识别性的视觉特征（如特定颜色、位置）。如无特别强调，填 "-"。
-· Things to Avoid：仅列出容易混淆的背景干扰项。如无特别避免事项，填 "-"。"""
+    # 格式要求说明 - 修复：添加明确的输出格式示例
+    FORMAT_INSTRUCTIONS = """输出格式要求（严格按照此格式）：
+
+Definition: In this task, draw bounding boxes around [主要标注对象]
+Emphasis & Caution: [关键视觉特征或标注重点，无则填"-"]
+Things to Avoid: [易混淆的背景元素，无则填"-"]
+
+格式规范：
+1. 每个部分必须独立成行
+2. 每行必须以对应标签开头（"Definition:", "Emphasis & Caution:", "Things to Avoid:"）
+3. Definition部分必须以"In this task, draw bounding boxes"开头
+4. Definition部分必须明确列出要标注的对象
+5. 各部分之间不需要空行
+
+示例输出：
+Definition: In this task, draw bounding boxes around all cars and traffic signs in the street scene.
+Emphasis & Caution: Focus on red traffic signs and vehicles in the foreground.
+Things to Avoid: Do not annotate buildings or background pedestrians."""
 
     @staticmethod
     def build_prompt(image_description: Union[str, dict]) -> str:
@@ -161,6 +174,8 @@ Please output strictly in JSON format with no other content. Use ONLY English in
         """
         验证生成的指令是否符合图像标注三段式格式
 
+        修复：检查结构而非仅关键词存在性
+
         Args:
             instruction: 生成的指令文本
 
@@ -176,31 +191,49 @@ Please output strictly in JSON format with no other content. Use ONLY English in
             'errors': []
         }
 
-        instruction_lower = instruction.lower()
+        # 按行分割
+        lines = [line.strip() for line in instruction.strip().split('\n') if line.strip()]
 
-        # 检查Definition（必须以"In this task"开头）
-        if 'in this task' in instruction_lower:
-            result['has_definition'] = True
-        else:
-            result['errors'].append('缺少Definition部分或未以"In this task"开头')
+        # 至少要有3行
+        if len(lines) < 3:
+            result['errors'].append(f'指令行数不足，期望至少3行，实际{len(lines)}行')
+            result['is_valid'] = False
+            return result
 
-        # 检查是否包含"bounding box"相关内容
-        if 'bounding box' in instruction_lower or 'draw box' in instruction_lower:
-            result['has_bounding_boxes'] = True
-        else:
-            result['errors'].append('未明确要求画边框（draw bounding boxes）')
+        # 检查每一行的格式
+        for line in lines:
+            line_lower = line.lower()
 
-        # 检查Emphasis & Caution
-        if 'emphasis' in instruction_lower or 'caution' in instruction_lower or '-' in instruction:
-            result['has_emphasis'] = True
-        else:
-            result['errors'].append('缺少Emphasis & Caution部分')
+            # 检查Definition行（必须有标签前缀和"In this task"以及"bounding box"）
+            if line.startswith('Definition:'):
+                if 'in this task' in line_lower:
+                    result['has_definition'] = True
+                    # 检查是否包含bounding box要求
+                    if 'bounding box' in line_lower or 'draw box' in line_lower:
+                        result['has_bounding_boxes'] = True
+                else:
+                    result['errors'].append('Definition部分未以"In this task"开头')
 
-        # 检查Things to Avoid
-        if 'avoid' in instruction_lower or '-' in instruction:
-            result['has_avoid'] = True
-        else:
-            result['errors'].append('缺少Things to Avoid部分')
+            # 检查Emphasis & Caution行（必须有标签前缀）
+            elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
+                result['has_emphasis'] = True
+
+            # 检查Things to Avoid行（必须有标签前缀）
+            elif line.startswith('Things to Avoid:'):
+                result['has_avoid'] = True
+
+        # 检查缺失的部分
+        if not result['has_definition']:
+            result['errors'].append('缺少"Definition:"部分或格式错误')
+
+        if not result['has_bounding_boxes']:
+            result['errors'].append('Definition未明确要求画边框（draw bounding boxes）')
+
+        if not result['has_emphasis']:
+            result['errors'].append('缺少"Emphasis & Caution:"部分或格式错误')
+
+        if not result['has_avoid']:
+            result['errors'].append('缺少"Things to Avoid:"部分或格式错误')
 
         # 综合判断
         result['is_valid'] = all([
@@ -271,11 +304,10 @@ if __name__ == "__main__":
     prompts = ImageInstructionTemplate.build_batch_prompt(descriptions)
     print(f"成功生成 {len(prompts)} 个prompts")
 
-    # 测试6: 指令验证
-    print("\n【测试6】指令格式验证")
+    # 测试6: 指令验证 - 正确格式
+    print("\n【测试6】指令格式验证 - 正确格式")
     print("-" * 60)
 
-    # 正确的指令
     valid_instruction = """Definition: In this task, draw bounding boxes around all cars and traffic signs.
 Emphasis & Caution: Focus on red traffic signs in the foreground.
 Things to Avoid: Do not annotate buildings or background objects."""
@@ -283,14 +315,29 @@ Things to Avoid: Do not annotate buildings or background objects."""
     result = ImageInstructionTemplate.validate_instruction(valid_instruction)
     print(f"正确指令验证: {result['is_valid']}")
     print(f"包含bounding boxes: {result['has_bounding_boxes']}")
+    if not result['is_valid']:
+        print(f"错误信息: {result['errors']}")
 
-    # 错误的指令（缺少bounding boxes）
-    invalid_instruction = """Definition: In this task, identify all objects in the image.
-Emphasis & Caution: -
-Things to Avoid: -"""
+    # 测试7: 指令验证 - 错误格式（单行）
+    print("\n【测试7】指令格式验证 - 错误格式（单行）")
+    print("-" * 60)
 
-    result = ImageInstructionTemplate.validate_instruction(invalid_instruction)
-    print(f"\n错误指令验证: {result['is_valid']}")
+    invalid_instruction1 = """In this task, draw bounding boxes around cars (Definition) - (Emphasis & Caution) - (Things to Avoid)"""
+
+    result = ImageInstructionTemplate.validate_instruction(invalid_instruction1)
+    print(f"错误指令验证: {result['is_valid']}")
+    print(f"错误信息: {result['errors']}")
+
+    # 测试8: 指令验证 - 错误格式（缺少bounding boxes）
+    print("\n【测试8】指令格式验证 - 错误格式（缺少bounding boxes）")
+    print("-" * 60)
+
+    invalid_instruction2 = """Definition: In this task, identify all objects in the image.
+Emphasis & Caution: Focus on accuracy.
+Things to Avoid: Do not skip any objects."""
+
+    result = ImageInstructionTemplate.validate_instruction(invalid_instruction2)
+    print(f"错误指令验证: {result['is_valid']}")
     print(f"错误信息: {result['errors']}")
 
     print("\n测试完成！")

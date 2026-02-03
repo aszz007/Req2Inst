@@ -109,12 +109,13 @@ class GeneralExpert(BaseExpert):
                 prompt = TextInstructionTemplate.build_prompt(str(input_data))
 
             # 调用模型生成
+            # 修复：降低temperature以获得更稳定的格式输出
             instruction = self._generate_with_model(
                 prompt=prompt,
                 max_new_tokens=2048,
-                temperature=0.7,
-                top_p=0.9,
-                top_k=50,
+                temperature=0.3,  # 降低温度以获得更稳定的格式化输出
+                top_p=0.85,       # 稍微降低top_p以减少随机性
+                top_k=40,         # 降低top_k以提高确定性
                 repetition_penalty=1.1
             )
 
@@ -214,14 +215,12 @@ class GeneralExpert(BaseExpert):
 
         # 提取简短描述
         if isinstance(input_data, dict):
-            description = str(input_data).get('description', str(input_data))[:200]
+            description = input_data.get('description', str(input_data))[:200]
         else:
             description = str(input_data)[:200]
 
         fallback_instruction = f"""Definition: In this task, implement or test the following requirement: {description}
-
 Emphasis & Caution: Ensure comprehensive testing and validation of all functionality.
-
 Things to Avoid: Do not skip error handling or edge case validation."""
 
         return fallback_instruction

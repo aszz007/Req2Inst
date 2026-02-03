@@ -1,173 +1,253 @@
 """
-UML逻辑指令专家
-处理：UML用例图JSON -> 逻辑实现指令
+UML专家 - 将UML用例图JSON转换为业务逻辑实现指令
+功能:
+  - 处理UML用例图JSON数据
+  - 生成三段式业务逻辑实现众包指令
+  - 支持Qwen2.5和Qwen3两个版本
+
+环境要求: qwen_text (与Text专家共用环境)
+模型: Qwen-7B-Chat
+训练数据: dataset/uml/
+
+专家变体:
+  - uml_expert_qwen25: 使用Qwen2.5数据集训练的LoRA
+  - uml_expert_qwen3: 使用Qwen3数据集训练的LoRA(默认)
+
+作者: Expert System
+日期: 2025-02-03
 """
 
-from typing import Dict, Any, List
 import json
+from pathlib import Path
+from typing import Optional, Union
+
 from src.experts.base_expert import BaseExpert
+from models.prompt_templates.uml_template import UMLInstructionTemplate
+from config.settings import get_path_config
+from src.utils.logger import get_logger
+
+logger = get_logger('experts.uml')
 
 
 class UMLExpert(BaseExpert):
-    """UML用例图JSON -> 逻辑指令的专家"""
+    """UML专家 - UML用例图JSON转业务逻辑实现指令"""
 
-    def __init__(self, lora_path: str = None, config: Dict = None):
-        super().__init__(
-            expert_name="uml_expert_qwen2.5",
-            lora_path=lora_path,
-            config=config
-        )
-
-    def get_prompt_template(self) -> str:
+    def __init__(self,
+                 version: str = 'qwen3',
+                 lora_path: Optional[str] = None,
+                 use_4bit: bool = True):
         """
-        获取UML逻辑prompt模板
-        对应你的数据集文档中的"uml序列图-指令"模板
-        """
-        template = """你是一个软件架构与众包任务设计专家。请根据以下输入的UML用例图结构化数据(JSON格式),编写一个适合众包工人使用的英文任务指令。
-
-核心原则：
-1. 数据驱动：指令中的角色名 (Actors) 和用例名 (Use Cases) 必须严格引用 JSON 源数据，不得遗漏或随意缩写。
-2. 逻辑优先，视觉为辅：输入数据中包含 position (如 top_left) 和 image_path 等视觉信息，请在生成逻辑指令时**忽略**它们。重点解析 relationships 中的业务逻辑。
-3. 关系语义转译：
-   - include -> 必须转化为 "Mandatory step" (必须步骤) 或 "Pre-requisite"。
-   - extend -> 必须转化为 "Conditional flow" (条件流程) 或 "Optional"。
-   - association -> 必须转化为 "Interaction" (交互) 或 "Access"。
-4. 结构规范：严格按照下方定义的格式输出。
-
-格式要求：
-- Definition: 使用简明扼要的祈使句描述核心系统目标。必须以 "In this task," 开头。
-- Emphasis & Caution: 重点指出必须包含的流程 (include) 和条件扩展流程 (extend)。如无，填 "-"。
-- Things to Avoid: 列出禁止的操作（如关注节点位置、实现UI样式）。如无特殊，填 "-"。
-
-Input JSON: {input_json}
-
-Output:"""
-
-        return template
-
-    def preprocess_input(self, input_data: Any) -> Dict:
-        """
-        预处理UML JSON输入
+        初始化UML专家
 
         Args:
-            input_data: UML用例图JSON
+            version: 模型版本('qwen2.5' 或 'qwen3'),默认'qwen3'
+            lora_path: LoRA权重路径(None则使用默认配置)
+            use_4bit: 是否使用4bit量化
+        """
+        if version not in ['qwen2.5', 'qwen3']:
+            raise ValueError(f"不支持的版本: {version},请使用'qwen2.5'或'qwen3'")
+
+        path_cfg = get_path_config()
+
+        # 构建专家名称
+        expert_name = f'uml_expert_{version.replace(".", "")}'
+
+        # 如果没有提供lora_path,使用配置中的路径
+        if lora_path is None:
+            lora_path = str(path_cfg.EXPERT_LORA_PATHS.get(expert_name, ''))
+            if not lora_path or not Path(lora_path).exists():
+                logger.warning(f"未找到{expert_name}的LoRA权重,将使用基础模型")
+                lora_path = None
+
+        super().__init__(
+            expert_name=expert_name,
+            base_model_path=str(path_cfg.QWEN_7B_CHAT_PATH),
+            lora_path=lora_path,
+            use_4bit=use_4bit,
+            version=version
+        )
+
+        logger.info(f"UML专家初始化完成 - 版本: {version}")
+
+    def generate_instruction(self, input_data: Union[str, dict]) -> str:
+        """
+        生成UML业务逻辑实现指令
+
+        Args:
+            input_data: UML用例图数据,支持:
+                - dict: 包含actors, use_cases, relationships字段的字典
+                - str: JSON字符串
 
         Returns:
-            dict: 预处理后的数据
+            str: 生成的三段式业务逻辑实现指令
         """
-        # TODO: 实现预处理
-        # 1. 解析JSON
-        # 2. 提取actors, use_cases, relationships
-        # 3. 分析关系类型（include/extend/association）
-        # 4. 忽略position等视觉信息
-        # 5. 构建逻辑依赖图（可选）
+        if not self.is_model_loaded:
+            logger.warning("模型未加载,尝试加载模型...")
+            if not self.load_model():
+                logger.error("模型加载失败")
+                return ""
 
-        if isinstance(input_data, str):
-            parsed_json = json.loads(input_data)
-        elif isinstance(input_data, dict):
-            parsed_json = input_data
-        else:
-            raise ValueError(f"Unsupported input type: {type(input_data)}")
+        try:
+            # 解析输入数据
+            if isinstance(input_data, str):
+                try:
+                    uml_data = json.loads(input_data)
+                except json.JSONDecodeError:
+                    logger.error("输入不是有效的JSON格式")
+                    return ""
+            elif isinstance(input_data, dict):
+                uml_data = input_data
+            else:
+                logger.error(f"不支持的输入类型: {type(input_data)}")
+                return ""
 
-        actors = parsed_json.get('actors', [])
-        use_cases = parsed_json.get('use_cases', [])
-        relationships = parsed_json.get('relationships', [])
+            # 提取关键元素（用于日志）
+            elements = UMLInstructionTemplate.extract_key_elements(uml_data)
+            logger.debug(f"生成指令 - Actors: {elements['actors']}, Use Cases: {len(elements['use_cases'])}个")
 
-        # 分类关系
-        includes = [r for r in relationships if r.get('type') == 'include']
-        extends = [r for r in relationships if r.get('type') == 'extend']
-        associations = [r for r in relationships if r.get('type') == 'association']
+            # 使用UMLInstructionTemplate构建prompt
+            prompt = UMLInstructionTemplate.build_prompt(uml_data)
 
-        return {
-            'diagram_id': parsed_json.get('id', 'unknown'),
-            'parsed_json': parsed_json,
-            'actors': actors,
-            'use_cases': use_cases,
-            'relationships': {
-                'all': relationships,
-                'includes': includes,
-                'extends': extends,
-                'associations': associations
-            },
-            'metadata': {}
-        }
+            # 调用模型生成
+            # 修复：降低temperature以获得更稳定的格式输出
+            instruction = self._generate_with_model(
+                prompt=prompt,
+                max_new_tokens=2048,
+                temperature=0.3,  # 降低温度以获得更稳定的格式化输出
+                top_p=0.85,       # 稍微降低top_p以减少随机性
+                top_k=40,         # 降低top_k以提高确定性
+                repetition_penalty=1.1
+            )
 
-    def build_prompt(self, preprocessed_data: Dict) -> str:
+            # 验证输出格式
+            if self.validate_output(instruction):
+                logger.info("指令生成成功,格式验证通过")
+                return instruction
+            else:
+                logger.warning("指令格式验证失败,尝试回退方案")
+                return self._fallback_generation(uml_data)
+
+        except Exception as e:
+            logger.error(f"指令生成失败: {e}")
+            return ""
+
+    def validate_output(self, instruction: str) -> bool:
         """
-        构建UML逻辑prompt
+        验证输出格式是否符合UML业务逻辑三段式要求
+
+        Args:
+            instruction: 生成的指令
+
+        Returns:
+            bool: 是否符合格式
         """
-        # TODO: 实现prompt构建
-        # 1. 过滤掉position等视觉字段
-        # 2. 只保留actors, use_cases, relationships
-        # 3. 填充模板
+        if not instruction or len(instruction.strip()) < 50:
+            logger.debug("指令内容过短")
+            return False
 
-        template = self.get_prompt_template()
+        result = UMLInstructionTemplate.validate_instruction(instruction)
 
-        # 构建干净的JSON（去除视觉信息）
-        clean_json = {
-            'actors': [{'name': a.get('name', a)} for a in preprocessed_data['actors']],
-            'use_cases': [{'name': uc.get('name', uc)} for uc in preprocessed_data['use_cases']],
-            'relationships': preprocessed_data['relationships']['all']
-        }
+        if not result['is_valid']:
+            logger.debug(f"格式验证失败: {result['errors']}")
+            return False
 
-        json_str = json.dumps(clean_json, ensure_ascii=False, indent=2)
-        user_content = template.format(input_json=json_str)
-
-        system_prompt = "你是一个软件架构与众包任务设计专家。"
-
-        prompt = f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
-        prompt += f"<|im_start|>user\n{user_content}<|im_end|>\n"
-        prompt += "<|im_start|>assistant\n"
-
-        return prompt
-
-    def postprocess_output(self, raw_output: str) -> Dict:
-        """
-        后处理UML逻辑指令输出
-        """
-        # TODO: 实现后处理
-        # 1. 提取三个字段
-        # 2. 验证关系语义转译是否正确
-        # 3. 检查是否包含所有actors和use_cases
-
-        result = {
-            'definition': '',
-            'emphasis_caution': '',
-            'things_to_avoid': '',
-            'included_flows': [],  # include关系
-            'extended_flows': [],  # extend关系
-            'raw_output': raw_output
-        }
-
-        return result
-
-    def validate_output(self, output: Dict) -> bool:
-        """
-        验证UML逻辑指令
-
-        检查：
-        - Definition描述了核心用例
-        - Emphasis提到了include关系（如果有）
-        - Avoid提到了不关注position
-        """
-        # TODO: 实现验证
+        # 额外检查是否包含业务逻辑要求
+        if not result['has_business_logic']:
+            logger.debug("缺少业务逻辑实现要求")
+            return False
 
         return True
 
-    def _translate_relationship(self, rel_type: str) -> str:
+    def _fallback_generation(self, uml_data: dict) -> str:
         """
-        关系类型语义转译
+        回退方案: 生成基础格式的UML业务逻辑指令
 
         Args:
-            rel_type: include/extend/association
+            uml_data: UML用例图数据
 
         Returns:
-            str: 转译后的描述
+            str: 基础格式的指令
         """
-        translations = {
-            'include': 'Mandatory step',
-            'extend': 'Conditional flow',
-            'association': 'Interaction'
-        }
-        return translations.get(rel_type, rel_type)
+        logger.info("使用回退方案生成指令")
 
+        # 提取关键元素
+        elements = UMLInstructionTemplate.extract_key_elements(uml_data)
+
+        actors = ", ".join(elements['actors'][:3]) if elements['actors'] else "system actors"
+        use_cases = ", ".join([uc['name'] for uc in elements['use_cases'][:3]]) if elements['use_cases'] else "core functionalities"
+
+        fallback_instruction = f"""Definition: In this task, implement the system workflow with {actors} interacting with {use_cases}.
+Emphasis & Caution: Ensure all mandatory steps and conditional extensions are properly implemented.
+Things to Avoid: Do not focus on UI positioning or visual layout. Avoid implementing frontend styling."""
+
+        return fallback_instruction
+
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("UML专家测试")
+    print("=" * 60)
+
+    print("\n测试1: 使用Qwen3版本")
+    print("-" * 60)
+    expert_qwen3 = UMLExpert(version='qwen3')
+    info = expert_qwen3.get_expert_info()
+    print(f"专家名称: {info['expert_name']}")
+    print(f"版本: {info['version']}")
+
+    print("\n测试2: 使用Qwen2.5版本")
+    print("-" * 60)
+    expert_qwen25 = UMLExpert(version='qwen2.5')
+    info = expert_qwen25.get_expert_info()
+    print(f"专家名称: {info['expert_name']}")
+    print(f"版本: {info['version']}")
+
+    print("\n测试3: 生成指令")
+    print("-" * 60)
+    if expert_qwen3.load_model():
+        test_data = {
+            "actors": [
+                {"name": "User", "position": "left"},
+                {"name": "Admin", "position": "right"}
+            ],
+            "use_cases": [
+                {"name": "Login System", "description": "User authentication"},
+                {"name": "Validate Credentials", "description": "Check credentials"},
+                {"name": "Send Email", "description": "Email notification"}
+            ],
+            "relationships": [
+                {
+                    "type": "association",
+                    "from": "User",
+                    "to": "Login System",
+                    "description": "User initiates login"
+                },
+                {
+                    "type": "include",
+                    "from": "Login System",
+                    "to": "Validate Credentials",
+                    "description": "Must validate before login"
+                },
+                {
+                    "type": "extend",
+                    "from": "Send Email",
+                    "to": "Login System",
+                    "description": "Optional email on success"
+                }
+            ]
+        }
+
+        instruction = expert_qwen3.generate_instruction(test_data)
+        print("\n生成的指令:")
+        print("-" * 60)
+        print(instruction)
+        print("-" * 60)
+
+        is_valid = expert_qwen3.validate_output(instruction)
+        print(f"\n格式验证: {'通过' if is_valid else '失败'}")
+
+        expert_qwen3.unload_model()
+    else:
+        print("模型加载失败")
+
+    print("\n测试完成!")

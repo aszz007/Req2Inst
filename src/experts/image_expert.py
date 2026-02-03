@@ -107,12 +107,13 @@ class ImageExpert(BaseExpert):
             logger.debug(f"生成指令 - 图像描述: {description[:100]}...")
 
             # 调用模型生成
+            # 修复：降低temperature以获得更稳定的格式输出
             instruction = self._generate_with_model(
                 prompt=prompt,
                 max_new_tokens=2048,
-                temperature=0.7,
-                top_p=0.9,
-                top_k=50,
+                temperature=0.3,  # 降低温度以获得更稳定的格式化输出
+                top_p=0.85,       # 稍微降低top_p以减少随机性
+                top_k=40,         # 降低top_k以提高确定性
                 repetition_penalty=1.1
             )
 
@@ -168,9 +169,7 @@ class ImageExpert(BaseExpert):
         logger.info("使用回退方案生成指令")
 
         fallback_instruction = f"""Definition: In this task, draw bounding boxes around all objects described in the image: {description[:150]}
-
 Emphasis & Caution: Focus on accurately identifying and labeling all visible objects.
-
 Things to Avoid: Do not annotate background elements or partial objects."""
 
         return fallback_instruction

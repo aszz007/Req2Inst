@@ -71,11 +71,26 @@ Important: Ensure complete JSON output with all brackets properly closed. Use En
 4. 众包任务导向：明确这是给开发人员的实现指令，重点说明要实现什么功能、如何处理不同的业务流程分支。
 5. 结构规范：严格按照下方定义的格式输出。"""
 
-    # 格式要求说明
-    FORMAT_INSTRUCTIONS = """格式要求：
-- Definition：使用简明扼要的祈使句描述核心系统目标和主要参与角色。必须以"In this task,"开头。
-- Emphasis & Caution：重点指出必须包含的流程（include关系）和条件扩展流程（extend关系），说明触发条件。如无特别强调，填"-"。
-- Things to Avoid：列出禁止的操作（如关注position、实现UI样式等）。如无特殊禁止事项，填"-"。"""
+    # 格式要求说明 - 修复：添加明确的输出格式示例
+    FORMAT_INSTRUCTIONS = """输出格式要求（严格按照此格式）：
+
+Definition: In this task, implement [系统核心功能] with [主要角色] interacting with [关键用例]
+Emphasis & Caution: [必须流程和条件扩展的说明，无则填"-"]
+Things to Avoid: [禁止事项，如不关注UI布局等，无则填"-"]
+
+格式规范：
+1. 每个部分必须独立成行
+2. 每行必须以对应标签开头（"Definition:", "Emphasis & Caution:", "Things to Avoid:"）
+3. Definition部分必须以"In this task, implement"开头
+4. Definition部分必须明确提到actors和use_cases
+5. Emphasis部分应该体现include/extend关系的语义转译
+6. Avoid部分应该提到忽略position等视觉信息
+7. 各部分之间不需要空行
+
+示例输出：
+Definition: In this task, implement the authentication workflow with User and Admin actors interacting with Login System and Validate Credentials use cases.
+Emphasis & Caution: Ensure Validate Credentials is a mandatory prerequisite (include) before completing login. Send Email is a conditional extension triggered on success.
+Things to Avoid: Do not focus on UI positioning or visual layout. Avoid implementing frontend styling."""
 
     @staticmethod
     def build_prompt(uml_json: Union[str, dict]) -> str:
@@ -239,6 +254,8 @@ Important: Ensure complete JSON output with all brackets properly closed. Use En
         """
         验证生成的指令是否符合UML业务逻辑三段式格式
 
+        修复：检查结构而非仅关键词存在性
+
         Args:
             instruction: 生成的指令文本
 
@@ -254,36 +271,53 @@ Important: Ensure complete JSON output with all brackets properly closed. Use En
             'errors': []
         }
 
-        instruction_lower = instruction.lower()
+        # 按行分割
+        lines = [line.strip() for line in instruction.strip().split('\n') if line.strip()]
 
-        # 检查Definition（必须以"In this task"开头）
-        if 'in this task' in instruction_lower:
-            result['has_definition'] = True
-        else:
-            result['errors'].append('缺少Definition部分或未以"In this task"开头')
+        # 至少要有3行
+        if len(lines) < 3:
+            result['errors'].append(f'指令行数不足，期望至少3行，实际{len(lines)}行')
+            result['is_valid'] = False
+            return result
 
-        # 检查是否包含业务逻辑关键词
-        business_keywords = [
-            'implement', 'functionality', 'workflow', 'process',
-            'mandatory', 'required', 'conditional', 'optional',
-            'interaction', 'trigger'
-        ]
-        if any(keyword in instruction_lower for keyword in business_keywords):
-            result['has_business_logic'] = True
-        else:
-            result['errors'].append('未体现业务逻辑实现要求')
+        # 检查每一行的格式
+        for line in lines:
+            line_lower = line.lower()
 
-        # 检查Emphasis & Caution
-        if 'emphasis' in instruction_lower or 'caution' in instruction_lower or '-' in instruction:
-            result['has_emphasis'] = True
-        else:
-            result['errors'].append('缺少Emphasis & Caution部分')
+            # 检查Definition行（必须有标签前缀和"In this task, implement"）
+            if line.startswith('Definition:'):
+                if 'in this task' in line_lower:
+                    result['has_definition'] = True
+                    # 检查是否包含业务逻辑关键词
+                    business_keywords = [
+                        'implement', 'functionality', 'workflow', 'process',
+                        'interaction', 'trigger', 'system'
+                    ]
+                    if any(keyword in line_lower for keyword in business_keywords):
+                        result['has_business_logic'] = True
+                else:
+                    result['errors'].append('Definition部分未以"In this task"开头')
 
-        # 检查Things to Avoid（应该提到不关注UI/position）
-        if 'avoid' in instruction_lower or '-' in instruction:
-            result['has_avoid'] = True
-        else:
-            result['errors'].append('缺少Things to Avoid部分')
+            # 检查Emphasis & Caution行（必须有标签前缀）
+            elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
+                result['has_emphasis'] = True
+
+            # 检查Things to Avoid行（必须有标签前缀）
+            elif line.startswith('Things to Avoid:'):
+                result['has_avoid'] = True
+
+        # 检查缺失的部分
+        if not result['has_definition']:
+            result['errors'].append('缺少"Definition:"部分或格式错误')
+
+        if not result['has_business_logic']:
+            result['errors'].append('Definition未体现业务逻辑实现要求')
+
+        if not result['has_emphasis']:
+            result['errors'].append('缺少"Emphasis & Caution:"部分或格式错误')
+
+        if not result['has_avoid']:
+            result['errors'].append('缺少"Things to Avoid:"部分或格式错误')
 
         # 综合判断
         result['is_valid'] = all([
@@ -383,11 +417,10 @@ if __name__ == "__main__":
     prompts = UMLInstructionTemplate.build_batch_prompt(uml_list)
     print(f"成功生成 {len(prompts)} 个prompts")
 
-    # 测试5: 指令验证
-    print("\n【测试5】指令格式验证")
+    # 测试5: 指令验证 - 正确格式
+    print("\n【测试5】指令格式验证 - 正确格式")
     print("-" * 60)
 
-    # 正确的指令
     valid_instruction = """Definition: In this task, implement the authentication system workflow with User and Admin actors interacting with Login System and Validate Credentials use cases.
 Emphasis & Caution: Ensure Validate Credentials is a mandatory prerequisite (include relation) before completing login. Send Email is a conditional extension triggered on successful login.
 Things to Avoid: Do not focus on UI positioning or visual layout. Avoid implementing frontend elements."""
@@ -395,14 +428,29 @@ Things to Avoid: Do not focus on UI positioning or visual layout. Avoid implemen
     result = UMLInstructionTemplate.validate_instruction(valid_instruction)
     print(f"正确指令验证: {result['is_valid']}")
     print(f"包含业务逻辑: {result['has_business_logic']}")
+    if not result['is_valid']:
+        print(f"错误信息: {result['errors']}")
 
-    # 错误的指令（缺少业务逻辑）
-    invalid_instruction = """Definition: In this task, draw the UML diagram.
+    # 测试6: 指令验证 - 错误格式（单行）
+    print("\n【测试6】指令格式验证 - 错误格式（单行）")
+    print("-" * 60)
+
+    invalid_instruction1 = """In this task, implement login (Definition) - (Emphasis & Caution) - (Things to Avoid)"""
+
+    result = UMLInstructionTemplate.validate_instruction(invalid_instruction1)
+    print(f"错误指令验证: {result['is_valid']}")
+    print(f"错误信息: {result['errors']}")
+
+    # 测试7: 指令验证 - 错误格式（缺少业务逻辑）
+    print("\n【测试7】指令格式验证 - 错误格式（缺少业务逻辑）")
+    print("-" * 60)
+
+    invalid_instruction2 = """Definition: In this task, draw the UML diagram with actors and use cases.
 Emphasis & Caution: Make it look nice.
-Things to Avoid: -"""
+Things to Avoid: Do not use wrong colors."""
 
-    result = UMLInstructionTemplate.validate_instruction(invalid_instruction)
-    print(f"\n错误指令验证: {result['is_valid']}")
+    result = UMLInstructionTemplate.validate_instruction(invalid_instruction2)
+    print(f"错误指令验证: {result['is_valid']}")
     print(f"错误信息: {result['errors']}")
 
     print("\n测试完成！")
