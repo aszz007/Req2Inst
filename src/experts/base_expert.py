@@ -189,11 +189,98 @@ class BaseExpert(ABC):
                 repetition_penalty=repetition_penalty
             )
 
+            # 提取三段式指令（移除多余内容）
+            generated_text = self._extract_three_part_instruction(generated_text)
+
             return generated_text
 
         except Exception as e:
             logger.error(f"生成失败: {e}")
             return ""
+
+    def _extract_three_part_instruction(self, text: str) -> str:
+        """
+        提取三段式指令，移除多余内容
+
+        Args:
+            text: 原始生成文本
+
+        Returns:
+            str: 提取的三段式指令
+        """
+        if not text:
+            return ""
+
+        # 按行分割
+        lines = text.split('\n')
+
+        # 查找三段式指令的三个部分
+        definition_line = None
+        emphasis_line = None
+        avoid_line = None
+
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
+
+            # 检查每一行是否是三段式的开头
+            if line_stripped.startswith('Definition:'):
+                definition_line = i
+            elif line_stripped.startswith('Emphasis & Caution:') or line_stripped.startswith('Emphasis and Caution:'):
+                emphasis_line = i
+            elif line_stripped.startswith('Things to Avoid:'):
+                avoid_line = i
+
+        # 如果找到完整的三段式，只保留这三行
+        if definition_line is not None and emphasis_line is not None and avoid_line is not None:
+            # 确保行号顺序正确
+            if definition_line < emphasis_line < avoid_line:
+                # 提取三行，并清理每行的尾部多余内容
+                extracted_lines = []
+                for line_idx in [definition_line, emphasis_line, avoid_line]:
+                    line = lines[line_idx].strip()
+                    # 如果行中包含中文或其他垃圾内容，截断
+                    cleaned_line = self._clean_instruction_line(line)
+                    extracted_lines.append(cleaned_line)
+                return '\n'.join(extracted_lines)
+
+        # 如果没有找到完整的三段式，返回原文（让后续validate_output捕获）
+        return text
+
+    def _clean_instruction_line(self, line: str) -> str:
+        """
+        清理单行指令，移除尾部的多余内容
+
+        Args:
+            line: 单行指令
+
+        Returns:
+            str: 清理后的行
+        """
+        # 常见的垃圾模式（中文、问题等）
+        unwanted_patterns = [
+            '在不失准确性',
+            '请对以下',
+            '这句话的',
+            '摘要',
+            '反义词',
+            '总结',
+            '翻译',
+            '目的 观察',
+            '方法 ',
+            '结果 ',
+            '结论 ',
+        ]
+
+        for pattern in unwanted_patterns:
+            if pattern in line:
+                idx = line.find(pattern)
+                if idx > 0:
+                    line = line[:idx].strip()
+                    break
+
+        return line
 
     def get_expert_info(self) -> Dict[str, Any]:
         """

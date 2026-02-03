@@ -217,7 +217,7 @@ class LanguageModel:
 
             stop_tokens = list(set(stop_tokens))
 
-            # 生成配置
+            # 生成配置 - 修复：正确应用所有停止标记
             generation_config = {
                 "max_new_tokens": max_new_tokens,
                 "temperature": temperature,
@@ -226,7 +226,7 @@ class LanguageModel:
                 "repetition_penalty": repetition_penalty,
                 "do_sample": True if temperature > 0 else False,
                 "pad_token_id": self.tokenizer.pad_token_id,
-                "eos_token_id": self.tokenizer.eos_token_id
+                "eos_token_id": stop_tokens
             }
 
             # 生成文本
@@ -237,14 +237,50 @@ class LanguageModel:
             generated_ids = outputs[0][input_length:]
             generated_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
 
-            # 清理特殊标记
-            generated_text = generated_text.replace('<|im_end|>', '').replace('<|im_start|>', '').strip()
+            # 清理特殊标记和多余内容
+            generated_text = self._clean_generated_text(generated_text)
 
             return generated_text
 
         except Exception as e:
             logger.error(f"生成失败: {e}")
             return ""
+
+    def _clean_generated_text(self, text: str) -> str:
+        """
+        清理生成的文本，移除特殊标记和多余内容
+
+        Args:
+            text: 原始生成文本
+
+        Returns:
+            str: 清理后的文本
+        """
+        # 移除特殊标记
+        text = text.replace('<|im_end|>', '').replace('<|im_start|>', '').strip()
+
+        # 如果文本中包含多个训练样本（通常以中文或问题开头），只保留第一个完整指令
+        # 检测常见的训练数据模式
+        unwanted_patterns = [
+            '在不失准确性',
+            '请对以下',
+            '这句话的',
+            '摘要',
+            '反义词',
+            '总结',
+            '翻译',
+            '目的 观察',
+        ]
+
+        for pattern in unwanted_patterns:
+            if pattern in text:
+                # 找到模式出现的位置，截断到该位置之前
+                idx = text.find(pattern)
+                if idx > 0:
+                    text = text[:idx].strip()
+                    break
+
+        return text
 
     def get_lora_status(self) -> dict:
         """
