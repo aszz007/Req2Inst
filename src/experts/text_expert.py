@@ -1,139 +1,177 @@
 """
-文本指令生成专家
-处理：文本需求 -> 测试用例指令
+文本专家 - 将文本需求转换为众包指令
+功能:
+  - 处理Low_Requirements文本需求
+  - 生成三段式众包指令
+  - 使用Qwen-7B-Chat + LoRA微调权重
+
+环境要求: qwen_text
+模型: Qwen-7B-Chat
+训练数据: dataset/text/
+
+作者: Expert System
+日期: 2025-02-03
 """
 
-from typing import Dict, Any
-from .base_expert import BaseExpert
+from pathlib import Path
+from typing import Optional
+
+from src.experts.base_expert import BaseExpert
+from models.prompt_templates.text_template import TextInstructionTemplate
+from config.settings import get_path_config
+from src.utils.logger import get_logger
+
+logger = get_logger('experts.text')
 
 
 class TextExpert(BaseExpert):
-    """文本需求 -> 测试用例指令的专家"""
+    """文本专家 - 文本需求转众包指令"""
 
-    def __init__(self, lora_path: str = None, config: Dict = None):
+    def __init__(self, lora_path: Optional[str] = None, use_4bit: bool = True):
+        """
+        初始化文本专家
+
+        Args:
+            lora_path: LoRA权重路径(None则使用默认配置)
+            use_4bit: 是否使用4bit量化
+        """
+        path_cfg = get_path_config()
+
+        # 如果没有提供lora_path,使用配置中的路径
+        if lora_path is None:
+            lora_path = str(path_cfg.EXPERT_LORA_PATHS.get('text_expert', ''))
+            if not lora_path or not Path(lora_path).exists():
+                logger.warning("未找到Text Expert的LoRA权重,将使用基础模型")
+                lora_path = None
+
         super().__init__(
-            expert_name="text_expert",
+            expert_name='text_expert',
+            base_model_path=str(path_cfg.QWEN_7B_CHAT_PATH),
             lora_path=lora_path,
-            config=config
+            use_4bit=use_4bit
         )
 
-    def get_prompt_template(self) -> str:
+        logger.info("文本专家初始化完成")
+
+    def generate_instruction(self, input_data: str) -> str:
         """
-        获取文本指令prompt模板
-        对应你的数据集文档中的"文本-指令"模板
-        """
-        template = """你是一个众包任务设计专家。请根据以下输入的需求文本，编写一个适合众包工人使用的英文任务指令。
-
-核心原则：
-1. 极致精简：众包工人时间宝贵，请使用最简练的语言。
-2. 结构规范：严格按照下方定义的格式输出。
-3. 英语输出：无论输入是何种语言，输出必须是英文。
-
-格式要求：
-- Definition: 使用简明扼要的祈使句描述主要目标。必须以 "In this task," 开头。
-- Emphasis & Caution: 仅指出极易出错或必须满足的特定条件。如无特别强调，填入 "-"。
-- Things to Avoid: 仅列出禁止的操作。如无特别避免事项，填入 "-"。
-
-Input Requirement: {input_text}
-
-Output:"""
-
-        return template
-
-    def preprocess_input(self, input_data: Any) -> Dict:
-        """
-        预处理文本输入
+        生成文本众包指令
 
         Args:
-            input_data: 原始文本或字典
+            input_data: Low_Requirements文本需求
 
         Returns:
-            dict: {'input_text': str, 'metadata': dict}
+            str: 生成的三段式指令
         """
-        # TODO: 实现预处理逻辑
-        # - 如果是字符串，直接使用
-        # - 如果是字典，提取text字段
-        # - 清理文本（去除多余空格、换行等）
-        # - 提取关键词（可选）
+        if not self.is_model_loaded:
+            logger.warning("模型未加载,尝试加载模型...")
+            if not self.load_model():
+                logger.error("模型加载失败")
+                return ""
 
-        if isinstance(input_data, str):
-            input_text = input_data
-            metadata = {}
-        elif isinstance(input_data, dict):
-            input_text = input_data.get('text', '')
-            metadata = {k: v for k, v in input_data.items() if k != 'text'}
-        else:
-            raise ValueError(f"Unsupported input type: {type(input_data)}")
+        try:
+            # 使用TextInstructionTemplate构建prompt
+            prompt = TextInstructionTemplate.build_prompt(input_data)
 
-        return {
-            'input_text': input_text.strip(),
-            'metadata': metadata
-        }
+            logger.debug(f"生成指令 - 输入需求: {input_data[:100]}...")
 
-    def build_prompt(self, preprocessed_data: Dict) -> str:
+            # 调用模型生成
+            instruction = self._generate_with_model(
+                prompt=prompt,
+                max_new_tokens=2048,
+                temperature=0.7,
+                top_p=0.9,
+                top_k=50,
+                repetition_penalty=1.1
+            )
+
+            # 验证输出格式
+            if self.validate_output(instruction):
+                logger.info("指令生成成功,格式验证通过")
+                return instruction
+            else:
+                logger.warning("指令格式验证失败,尝试回退方案")
+                return self._fallback_generation(input_data)
+
+        except Exception as e:
+            logger.error(f"指令生成失败: {e}")
+            return self._fallback_generation(input_data)
+
+    def validate_output(self, instruction: str) -> bool:
         """
-        构建完整prompt
+        验证输出格式是否符合三段式要求
 
         Args:
-            preprocessed_data: 预处理后的数据
+            instruction: 生成的指令
 
         Returns:
-            str: 完整的Qwen格式prompt
+            bool: 是否符合格式
         """
-        # TODO: 实现prompt构建
-        # 1. 获取模板
-        # 2. 填充输入文本
-        # 3. 添加Qwen对话格式包装
+        if not instruction or len(instruction.strip()) < 50:
+            logger.debug("指令内容过短")
+            return False
 
-        template = self.get_prompt_template()
-        input_text = preprocessed_data['input_text']
+        result = TextInstructionTemplate.validate_instruction(instruction)
 
-        # 填充模板
-        user_content = template.format(input_text=input_text)
-
-        # Qwen对话格式
-        system_prompt = "你是一个专业的众包任务指令生成专家。"
-
-        prompt = f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
-        prompt += f"<|im_start|>user\n{user_content}<|im_end|>\n"
-        prompt += "<|im_start|>assistant\n"
-
-        return prompt
-
-    def postprocess_output(self, raw_output: str) -> Dict:
-        """
-        后处理输出
-
-        Args:
-            raw_output: 模型原始输出
-
-        Returns:
-            dict: 结构化输出
-        """
-        # TODO: 实现后处理逻辑
-        # 1. 清理输出（去除特殊标记）
-        # 2. 提取三个字段：Definition, Emphasis, Avoid
-        # 3. 验证格式
-        # 4. 返回结构化结果
-
-        result = {
-            'definition': '',
-            'emphasis_caution': '',
-            'things_to_avoid': '',
-            'raw_output': raw_output
-        }
-
-        return result
-
-    def validate_output(self, output: Dict) -> bool:
-        """
-        验证文本指令输出
-
-        检查：
-        - Definition必须以"In this task,"开头
-        - 三个字段都不能为空
-        - 格式符合要求
-        """
-        # TODO: 实现验证逻辑
+        if not result['is_valid']:
+            logger.debug(f"格式验证失败: {result['errors']}")
+            return False
 
         return True
+
+    def _fallback_generation(self, input_data: str) -> str:
+        """
+        回退方案: 生成基础格式的指令
+
+        Args:
+            input_data: 输入需求
+
+        Returns:
+            str: 基础格式的指令
+        """
+        logger.info("使用回退方案生成指令")
+
+        fallback_instruction = f"""Definition: In this task, implement and test the following requirement: {input_data[:200]}
+
+Emphasis & Caution: Ensure thorough testing and validation of all functionality.
+
+Things to Avoid: Do not skip error handling or edge case testing."""
+
+        return fallback_instruction
+
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("文本专家测试")
+    print("=" * 60)
+
+    print("\n初始化文本专家...")
+    expert = TextExpert()
+
+    print("\n查看专家信息:")
+    info = expert.get_expert_info()
+    for key, value in info.items():
+        print(f"  {key}: {value}")
+
+    print("\n加载模型...")
+    if expert.load_model():
+        print("模型加载成功")
+
+        print("\n测试生成指令:")
+        test_requirement = "测试系统的登录功能,确保用户名和密码验证正确"
+        instruction = expert.generate_instruction(test_requirement)
+
+        print("\n生成的指令:")
+        print("-" * 60)
+        print(instruction)
+        print("-" * 60)
+
+        print("\n验证指令格式:")
+        is_valid = expert.validate_output(instruction)
+        print(f"格式验证: {'通过' if is_valid else '失败'}")
+
+        expert.unload_model()
+    else:
+        print("模型加载失败")
+
+    print("\n测试完成!")

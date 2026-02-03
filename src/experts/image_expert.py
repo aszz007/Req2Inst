@@ -1,133 +1,223 @@
 """
-图像标注指令专家
-处理：图像JSON -> 边框标注指令
+图像专家 - 将图像描述JSON转换为图像标注指令
+功能:
+  - 处理图像描述JSON
+  - 生成三段式图像标注众包指令
+  - 支持Qwen2.5-VL和Qwen3-VL两个版本
+
+环境要求: qwen_vision25 或 qwen_vision3
+模型: Qwen-7B-Chat(用于指令生成)
+训练数据: dataset/image/
+
+专家变体:
+  - image_expert_qwen2.5: 使用Qwen2.5-VL数据集训练的LoRA
+  - image_expert_qwen3: 使用Qwen3-VL数据集训练的LoRA(默认)
+
+作者: Expert System
+日期: 2025-02-03
 """
 
-from typing import Dict, Any
 import json
-from .base_expert import BaseExpert
+from pathlib import Path
+from typing import Optional, Union
+
+from src.experts.base_expert import BaseExpert
+from models.prompt_templates.image_template import ImageInstructionTemplate
+from config.settings import get_path_config
+from src.utils.logger import get_logger
+
+logger = get_logger('experts.image')
 
 
 class ImageExpert(BaseExpert):
-    """图像JSON -> 标注指令的专家"""
+    """图像专家 - 图像描述转图像标注指令"""
 
-    def __init__(self, lora_path: str = None, config: Dict = None):
-        super().__init__(
-            expert_name="image_expert_qwen2.5",
-            lora_path=lora_path,
-            config=config
-        )
-
-    def get_prompt_template(self) -> str:
+    def __init__(self,
+                 version: str = 'qwen3',
+                 lora_path: Optional[str] = None,
+                 use_4bit: bool = True):
         """
-        获取图像标注prompt模板
-        对应你的数据集文档中的"图像-指令"模板
-        """
-        template = """你是一个计算机视觉数据专家与众包任务设计者。请根据以下输入的图像分析结构化数据，编写一个适合众包工人使用的英文图像标注任务指令。
-
-核心原则：
-1. 标注导向：指令必须明确要求工人进行 "Draw bounding boxes" (画边框)。
-2. 前景提取：从 objects 中提取主要的前景实体（如人、车）作为目标，忽略背景元素。
-3. 直接引用：直接使用 JSON 中的英文术语，不要进行同义词替换。
-4. 极致精简：Emphasis 和 Avoid 部分必须言简意赅。如果 JSON 中缺乏显著的视觉特征或干扰项，直接填 "-"。
-
-格式要求：
-- Definition: 使用简明扼要的祈使句描述标注目标。必须以 "In this task," 开头。
-- Emphasis & Caution: 仅列出极具识别性的视觉特征（如特定颜色、位置）。如无特别强调，填 "-"。
-- Things to Avoid: 仅列出容易混淆的背景干扰项。如无特别避免事项，填 "-"。
-
-Input JSON: {input_json}
-
-Output:"""
-
-        return template
-
-    def preprocess_input(self, input_data: Any) -> Dict:
-        """
-        预处理图像JSON输入
+        初始化图像专家
 
         Args:
-            input_data: JSON字符串或字典
+            version: 模型版本('qwen2.5' 或 'qwen3'),默认'qwen3'
+            lora_path: LoRA权重路径(None则使用默认配置)
+            use_4bit: 是否使用4bit量化
+        """
+        if version not in ['qwen2.5', 'qwen3']:
+            raise ValueError(f"不支持的版本: {version},请使用'qwen2.5'或'qwen3'")
+
+        path_cfg = get_path_config()
+
+        # 构建专家名称
+        expert_name = f'image_expert_{version.replace(".", "")}'
+
+        # 如果没有提供lora_path,使用配置中的路径
+        if lora_path is None:
+            lora_path = str(path_cfg.EXPERT_LORA_PATHS.get(expert_name, ''))
+            if not lora_path or not Path(lora_path).exists():
+                logger.warning(f"未找到{expert_name}的LoRA权重,将使用基础模型")
+                lora_path = None
+
+        super().__init__(
+            expert_name=expert_name,
+            base_model_path=str(path_cfg.QWEN_7B_CHAT_PATH),
+            lora_path=lora_path,
+            use_4bit=use_4bit,
+            version=version
+        )
+
+        logger.info(f"图像专家初始化完成 - 版本: {version}")
+
+    def generate_instruction(self, input_data: Union[str, dict]) -> str:
+        """
+        生成图像标注指令
+
+        Args:
+            input_data: 图像描述数据,支持:
+                - dict: 包含description字段的字典
+                - str: JSON字符串或纯文本description
 
         Returns:
-            dict: {'image_id': str, 'parsed_json': dict, 'metadata': dict}
+            str: 生成的三段式图像标注指令
         """
-        # TODO: 实现预处理逻辑
-        # 1. 解析JSON
-        # 2. 验证必需字段（file, result, objects等）
-        # 3. 提取前景对象（过滤背景）
-        # 4. 提取视觉特征（颜色、位置等）
+        if not self.is_model_loaded:
+            logger.warning("模型未加载,尝试加载模型...")
+            if not self.load_model():
+                logger.error("模型加载失败")
+                return ""
 
-        if isinstance(input_data, str):
-            parsed_json = json.loads(input_data)
-        elif isinstance(input_data, dict):
-            parsed_json = input_data
-        else:
-            raise ValueError(f"Unsupported input type: {type(input_data)}")
+        try:
+            # 提取description字段(如果是完整JSON)
+            if isinstance(input_data, dict):
+                description = ImageInstructionTemplate.extract_description_from_json(input_data)
+            elif isinstance(input_data, str):
+                try:
+                    parsed = json.loads(input_data)
+                    description = ImageInstructionTemplate.extract_description_from_json(parsed)
+                except json.JSONDecodeError:
+                    description = input_data
+            else:
+                logger.error(f"不支持的输入类型: {type(input_data)}")
+                return ""
 
-        # 提取关键信息
-        image_id = parsed_json.get('file', 'unknown')
-        result = parsed_json.get('result', {})
-        objects = result.get('details', {}).get('objects', [])
+            # 使用ImageInstructionTemplate构建prompt
+            prompt = ImageInstructionTemplate.build_prompt(description)
 
-        return {
-            'image_id': image_id,
-            'parsed_json': parsed_json,
-            'objects': objects,
-            'metadata': {}
-        }
+            logger.debug(f"生成指令 - 图像描述: {description[:100]}...")
 
-    def build_prompt(self, preprocessed_data: Dict) -> str:
+            # 调用模型生成
+            instruction = self._generate_with_model(
+                prompt=prompt,
+                max_new_tokens=2048,
+                temperature=0.7,
+                top_p=0.9,
+                top_k=50,
+                repetition_penalty=1.1
+            )
+
+            # 验证输出格式
+            if self.validate_output(instruction):
+                logger.info("指令生成成功,格式验证通过")
+                return instruction
+            else:
+                logger.warning("指令格式验证失败,尝试回退方案")
+                return self._fallback_generation(description)
+
+        except Exception as e:
+            logger.error(f"指令生成失败: {e}")
+            return ""
+
+    def validate_output(self, instruction: str) -> bool:
         """
-        构建图像标注prompt
+        验证输出格式是否符合图像标注三段式要求
+
+        Args:
+            instruction: 生成的指令
+
+        Returns:
+            bool: 是否符合格式
         """
-        # TODO: 实现prompt构建
-        # 1. 获取模板
-        # 2. 将JSON转为字符串
-        # 3. 填充模板
-        # 4. 添加Qwen格式
+        if not instruction or len(instruction.strip()) < 50:
+            logger.debug("指令内容过短")
+            return False
 
-        template = self.get_prompt_template()
-        json_str = json.dumps(preprocessed_data['parsed_json'], ensure_ascii=False)
+        result = ImageInstructionTemplate.validate_instruction(instruction)
 
-        user_content = template.format(input_json=json_str)
+        if not result['is_valid']:
+            logger.debug(f"格式验证失败: {result['errors']}")
+            return False
 
-        system_prompt = "你是一个计算机视觉数据专家与众包任务设计者。"
-
-        prompt = f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
-        prompt += f"<|im_start|>user\n{user_content}<|im_end|>\n"
-        prompt += "<|im_start|>assistant\n"
-
-        return prompt
-
-    def postprocess_output(self, raw_output: str) -> Dict:
-        """
-        后处理图像标注指令输出
-        """
-        # TODO: 实现后处理
-        # 1. 提取三个字段
-        # 2. 验证"Draw bounding boxes"关键词
-        # 3. 提取标注对象列表
-
-        result = {
-            'definition': '',
-            'emphasis_caution': '',
-            'things_to_avoid': '',
-            'annotation_targets': [],  # 提取的标注目标
-            'raw_output': raw_output
-        }
-
-        return result
-
-    def validate_output(self, output: Dict) -> bool:
-        """
-        验证图像标注指令
-
-        检查：
-        - Definition包含"draw bounding boxes"
-        - 明确指定了标注目标
-        """
-        # TODO: 实现验证
+        # 额外检查是否包含bounding boxes要求
+        if not result['has_bounding_boxes']:
+            logger.debug("缺少bounding boxes要求")
+            return False
 
         return True
 
+    def _fallback_generation(self, description: str) -> str:
+        """
+        回退方案: 生成基础格式的图像标注指令
+
+        Args:
+            description: 图像描述
+
+        Returns:
+            str: 基础格式的指令
+        """
+        logger.info("使用回退方案生成指令")
+
+        fallback_instruction = f"""Definition: In this task, draw bounding boxes around all objects described in the image: {description[:150]}
+
+Emphasis & Caution: Focus on accurately identifying and labeling all visible objects.
+
+Things to Avoid: Do not annotate background elements or partial objects."""
+
+        return fallback_instruction
+
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("图像专家测试")
+    print("=" * 60)
+
+    print("\n测试1: 使用Qwen3版本")
+    print("-" * 60)
+    expert_qwen3 = ImageExpert(version='qwen3')
+    info = expert_qwen3.get_expert_info()
+    print(f"专家名称: {info['expert_name']}")
+    print(f"版本: {info['version']}")
+
+    print("\n测试2: 使用Qwen2.5版本")
+    print("-" * 60)
+    expert_qwen25 = ImageExpert(version='qwen2.5')
+    info = expert_qwen25.get_expert_info()
+    print(f"专家名称: {info['expert_name']}")
+    print(f"版本: {info['version']}")
+
+    print("\n测试3: 生成指令")
+    print("-" * 60)
+    if expert_qwen3.load_model():
+        test_data = {
+            "description": "A busy urban street with cars and traffic signs",
+            "details": {
+                "objects": ["car", "traffic sign"],
+                "scene": "urban street"
+            },
+            "confidence": 0.95
+        }
+
+        instruction = expert_qwen3.generate_instruction(test_data)
+        print("\n生成的指令:")
+        print("-" * 60)
+        print(instruction)
+        print("-" * 60)
+
+        is_valid = expert_qwen3.validate_output(instruction)
+        print(f"\n格式验证: {'通过' if is_valid else '失败'}")
+
+        expert_qwen3.unload_model()
+    else:
+        print("模型加载失败")
+
+    print("\n测试完成!")
