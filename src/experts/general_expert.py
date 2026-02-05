@@ -231,13 +231,8 @@ class GeneralExpert(BaseExpert):
         """
         logger.info("使用回退方案生成指令")
 
-        # 提取简短描述
-        if isinstance(input_data, dict):
-            description = input_data.get('description', str(input_data))[:200]
-        else:
-            description = str(input_data)[:200]
-
-        fallback_instruction = f"""Definition: In this task, implement or test the following requirement: {description}
+        # 使用通用描述，不包含原始输入内容
+        fallback_instruction = """Definition: In this task, implement or test the specified requirement.
 Emphasis & Caution: Ensure comprehensive testing and validation of all functionality.
 Things to Avoid: Do not skip error handling or edge case validation."""
 

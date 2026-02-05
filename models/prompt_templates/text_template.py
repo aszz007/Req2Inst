@@ -17,23 +17,30 @@ class TextInstructionTemplate:
 2. 结构规范：严格按照下方定义的格式输出。
 3. 英语输出：无论输入是何种语言，输出必须是英文。"""
 
-    # 格式要求说明 - 修复：添加明确的输出格式示例
-    FORMAT_INSTRUCTIONS = """输出格式要求（严格按照此格式）：
+    # 格式要求说明
+    FORMAT_INSTRUCTIONS = """OUTPUT FORMAT REQUIREMENTS (STRICTLY FOLLOW):
 
-Definition: In this task, [主要任务目标的祈使句描述]
-Emphasis & Caution: [关键注意事项或必须满足的条件，无则填"-"]
-Things to Avoid: [明确禁止的操作，无则填"-"]
+Definition: In this task, [main task objective in imperative sentence]
+Emphasis & Caution: [key precautions or mandatory conditions, use "-" if none]
+Things to Avoid: [explicitly prohibited operations, use "-" if none]
 
-格式规范：
-1. 每个部分必须独立成行
-2. 每行必须以对应标签开头（"Definition:", "Emphasis & Caution:", "Things to Avoid:"）
-3. Definition部分的内容必须以"In this task,"开头
-4. 各部分之间不需要空行
+FORMAT RULES:
+1. Each section MUST be on a separate line
+2. Each line MUST start with the corresponding label ("Definition:", "Emphasis & Caution:", "Things to Avoid:")
+3. Definition content MUST start with "In this task,"
+4. NO blank lines between sections
+5. DO NOT repeat labels (e.g., "Emphasis & Caution: Emphasis & Caution:" is WRONG)
 
-示例输出：
+CORRECT EXAMPLE:
 Definition: In this task, verify the user login functionality with valid credentials.
 Emphasis & Caution: Ensure both username and password validation are tested.
-Things to Avoid: Do not skip error message verification."""
+Things to Avoid: Do not skip error message verification.
+
+WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
+- Missing labels: "Test the login function. Check credentials. Avoid errors."
+- Single line: "Definition: ... (Emphasis) ... (Avoid) ..."
+- Repeated labels: "Emphasis & Caution: Emphasis & Caution: Ensure..."
+"""
 
     @staticmethod
     def build_prompt(low_requirement: str) -> str:

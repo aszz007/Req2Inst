@@ -144,7 +144,7 @@ class TextExpert(BaseExpert):
         """
         logger.info("使用回退方案生成指令")
 
-        fallback_instruction = f"""Definition: In this task, implement and test the following requirement: {input_data[:200]}
+        fallback_instruction = """Definition: In this task, implement and test the specified requirement.
 Emphasis & Caution: Ensure thorough testing and validation of all functionality.
 Things to Avoid: Do not skip error handling or edge case testing."""
 

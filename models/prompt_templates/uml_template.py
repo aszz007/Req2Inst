@@ -71,26 +71,34 @@ Important: Ensure complete JSON output with all brackets properly closed. Use En
 4. 众包任务导向：明确这是给开发人员的实现指令，重点说明要实现什么功能、如何处理不同的业务流程分支。
 5. 结构规范：严格按照下方定义的格式输出。"""
 
-    # 格式要求说明 - 修复：添加明确的输出格式示例
-    FORMAT_INSTRUCTIONS = """输出格式要求（严格按照此格式）：
+    # 格式要求说明
+    FORMAT_INSTRUCTIONS = """OUTPUT FORMAT REQUIREMENTS (STRICTLY FOLLOW):
 
-Definition: In this task, implement [系统核心功能] with [主要角色] interacting with [关键用例]
-Emphasis & Caution: [必须流程和条件扩展的说明，无则填"-"]
-Things to Avoid: [禁止事项，如不关注UI布局等，无则填"-"]
+Definition: In this task, implement [core system functionality] with [main actors] interacting with [key use cases]
+Emphasis & Caution: [mandatory flows and conditional extensions explanation, use "-" if none]
+Things to Avoid: [prohibited items such as not focusing on UI layout, use "-" if none]
 
-格式规范：
-1. 每个部分必须独立成行
-2. 每行必须以对应标签开头（"Definition:", "Emphasis & Caution:", "Things to Avoid:"）
-3. Definition部分必须以"In this task, implement"开头
-4. Definition部分必须明确提到actors和use_cases
-5. Emphasis部分应该体现include/extend关系的语义转译
-6. Avoid部分应该提到忽略position等视觉信息
-7. 各部分之间不需要空行
+FORMAT RULES:
+1. Each section MUST be on a separate line
+2. Each line MUST start with the corresponding label ("Definition:", "Emphasis & Caution:", "Things to Avoid:")
+3. Definition MUST start with "In this task, implement"
+4. Definition MUST explicitly mention actors and use_cases
+5. Emphasis should reflect semantic translation of include/extend relationships
+6. Avoid section should mention ignoring visual information like position
+7. NO blank lines between sections
+8. DO NOT repeat labels (e.g., "Emphasis & Caution: Emphasis & Caution:" is WRONG)
 
-示例输出：
+CORRECT EXAMPLE:
 Definition: In this task, implement the authentication workflow with User and Admin actors interacting with Login System and Validate Credentials use cases.
 Emphasis & Caution: Ensure Validate Credentials is a mandatory prerequisite (include) before completing login. Send Email is a conditional extension triggered on success.
-Things to Avoid: Do not focus on UI positioning or visual layout. Avoid implementing frontend styling."""
+Things to Avoid: Do not focus on UI positioning or visual layout. Avoid implementing frontend styling.
+
+WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
+- Missing labels: "Implement login with User. Validate credentials first. Avoid UI."
+- Single line: "Definition: ... (Emphasis) ... (Avoid) ..."
+- Repeated labels: "Emphasis & Caution: Emphasis & Caution: Ensure..."
+- Missing "implement": "Definition: In this task, the system should have login."
+"""
 
     @staticmethod
     def build_prompt(uml_json: Union[str, dict]) -> str:

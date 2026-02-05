@@ -174,8 +174,8 @@ class ImageExpert(BaseExpert):
         """
         logger.info("使用回退方案生成指令")
 
-        fallback_instruction = f"""Definition: In this task, draw bounding boxes around all objects described in the image: {description[:150]}
-Emphasis & Caution: Focus on accurately identifying and labeling all visible objects.
+        fallback_instruction = """Definition: In this task, draw bounding boxes around all visible objects in the image.
+Emphasis & Caution: Focus on accurately identifying and labeling all foreground objects.
 Things to Avoid: Do not annotate background elements or partial objects."""
 
         return fallback_instruction

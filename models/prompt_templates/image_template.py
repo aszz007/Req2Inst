@@ -42,24 +42,32 @@ Please output strictly in JSON format with no other content. Use ONLY English in
 3. 直接引用：直接使用 JSON 中的英文术语，不要进行同义词替换。
 4. 极致精简：Emphasis 和 Avoid 部分必须言简意赅。如果 JSON 中缺乏显著的视觉特征或干扰项，直接填 "-"。"""
 
-    # 格式要求说明 - 修复：添加明确的输出格式示例
-    FORMAT_INSTRUCTIONS = """输出格式要求（严格按照此格式）：
+    # 格式要求说明
+    FORMAT_INSTRUCTIONS = """OUTPUT FORMAT REQUIREMENTS (STRICTLY FOLLOW):
 
-Definition: In this task, draw bounding boxes around [主要标注对象]
-Emphasis & Caution: [关键视觉特征或标注重点，无则填"-"]
-Things to Avoid: [易混淆的背景元素，无则填"-"]
+Definition: In this task, draw bounding boxes around [main annotation objects]
+Emphasis & Caution: [key visual features or annotation focus, use "-" if none]
+Things to Avoid: [confusing background elements, use "-" if none]
 
-格式规范：
-1. 每个部分必须独立成行
-2. 每行必须以对应标签开头（"Definition:", "Emphasis & Caution:", "Things to Avoid:"）
-3. Definition部分必须以"In this task, draw bounding boxes"开头
-4. Definition部分必须明确列出要标注的对象
-5. 各部分之间不需要空行
+FORMAT RULES:
+1. Each section MUST be on a separate line
+2. Each line MUST start with the corresponding label ("Definition:", "Emphasis & Caution:", "Things to Avoid:")
+3. Definition MUST start with "In this task, draw bounding boxes"
+4. Definition MUST explicitly list the objects to annotate
+5. NO blank lines between sections
+6. DO NOT repeat labels (e.g., "Emphasis & Caution: Emphasis & Caution:" is WRONG)
 
-示例输出：
+CORRECT EXAMPLE:
 Definition: In this task, draw bounding boxes around all cars and traffic signs in the street scene.
 Emphasis & Caution: Focus on red traffic signs and vehicles in the foreground.
-Things to Avoid: Do not annotate buildings or background pedestrians."""
+Things to Avoid: Do not annotate buildings or background pedestrians.
+
+WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
+- Missing labels: "Draw boxes around cars. Focus on red signs. Avoid buildings."
+- Single line: "Definition: ... (Emphasis) ... (Avoid) ..."
+- Missing "draw bounding boxes": "Definition: In this task, identify all objects."
+- Repeated labels: "Things to Avoid: Things to Avoid: Do not..."
+"""
 
     @staticmethod
     def build_prompt(image_description: Union[str, dict]) -> str:

@@ -191,13 +191,7 @@ class UMLExpert(BaseExpert):
         """
         logger.info("使用回退方案生成指令")
 
-        # 提取关键元素
-        elements = UMLInstructionTemplate.extract_key_elements(uml_data)
-
-        actors = ", ".join(elements['actors'][:3]) if elements['actors'] else "system actors"
-        use_cases = ", ".join([uc['name'] for uc in elements['use_cases'][:3]]) if elements['use_cases'] else "core functionalities"
-
-        fallback_instruction = f"""Definition: In this task, implement the system workflow with {actors} interacting with {use_cases}.
+        fallback_instruction = """Definition: In this task, implement the system workflow with specified actors interacting with defined use cases.
 Emphasis & Caution: Ensure all mandatory steps and conditional extensions are properly implemented.
 Things to Avoid: Do not focus on UI positioning or visual layout. Avoid implementing frontend styling."""
 

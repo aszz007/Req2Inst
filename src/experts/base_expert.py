@@ -352,7 +352,7 @@ Things to Avoid: {avoid}"""
 
     def _clean_instruction_line(self, line: str) -> str:
         """
-        清理单行指令，移除尾部的多余内容
+        清理单行指令，移除尾部的多余内容和重复标签
 
         Args:
             line: 单行指令
@@ -360,6 +360,23 @@ Things to Avoid: {avoid}"""
         Returns:
             str: 清理后的行
         """
+        # 首先移除重复的标签前缀
+        prefixes = [
+            'Definition:',
+            'Emphasis & Caution:',
+            'Emphasis and Caution:',
+            'Things to Avoid:'
+        ]
+
+        for prefix in prefixes:
+            if line.startswith(prefix):
+                content = line[len(prefix):].strip()
+                # 检查内容是否又以同样的前缀开头（重复标签）
+                if content.startswith(prefix):
+                    content = content[len(prefix):].strip()
+                line = f"{prefix} {content}"
+                break
+
         # 常见的垃圾模式（中文、问题等）
         unwanted_patterns = [
             '在不失准确性',
