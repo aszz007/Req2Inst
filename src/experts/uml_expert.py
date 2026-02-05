@@ -145,6 +145,7 @@ class UMLExpert(BaseExpert):
                 return instruction
             else:
                 logger.warning("指令格式验证失败,尝试回退方案")
+                logger.warning(f"失败的指令内容：\n{instruction}")
                 return self._fallback_generation(uml_data)
 
         except Exception as e:

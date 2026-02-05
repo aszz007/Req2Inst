@@ -189,10 +189,19 @@ class BaseExpert(ABC):
                 repetition_penalty=repetition_penalty
             )
 
-            # 提取三段式指令（移除多余内容）
-            generated_text = self._extract_three_part_instruction(generated_text)
+            # 调试日志：显示原始生成内容
+            logger.debug(f"原始生成内容（前500字符）：\n{generated_text[:500]}")
 
-            return generated_text
+            # 提取三段式指令（移除多余内容）
+            extracted_text = self._extract_three_part_instruction(generated_text)
+
+            # 调试日志：显示提取后内容
+            if extracted_text != generated_text:
+                logger.debug(f"提取后内容：\n{extracted_text}")
+            else:
+                logger.debug("未找到标准三段式格式，返回原始内容")
+
+            return extracted_text
 
         except Exception as e:
             logger.error(f"生成失败: {e}")
