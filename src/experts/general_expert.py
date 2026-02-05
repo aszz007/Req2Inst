@@ -63,10 +63,21 @@ class GeneralExpert(BaseExpert):
 
         # 如果没有提供lora_path,使用配置中的路径
         if lora_path is None:
-            lora_path = str(path_cfg.EXPERT_LORA_PATHS.get(expert_name, ''))
-            if not lora_path or not Path(lora_path).exists():
-                logger.warning(f"未找到{expert_name}的LoRA权重,将使用基础模型")
+            lora_weight_path = path_cfg.EXPERT_LORA_PATHS.get(expert_name)
+            if lora_weight_path is None:
+                logger.warning(f"配置中未找到{expert_name}的LoRA权重路径,将使用基础模型")
                 lora_path = None
+            else:
+                lora_path_obj = Path(lora_weight_path)
+                if not lora_path_obj.exists():
+                    logger.warning(f"LoRA权重路径不存在: {lora_path_obj},将使用基础模型")
+                    lora_path = None
+                elif not lora_path_obj.is_dir():
+                    logger.warning(f"LoRA权重路径不是目录: {lora_path_obj},将使用基础模型")
+                    lora_path = None
+                else:
+                    lora_path = str(lora_path_obj)
+                    logger.info(f"找到LoRA权重路径: {lora_path}")
 
         super().__init__(
             expert_name=expert_name,

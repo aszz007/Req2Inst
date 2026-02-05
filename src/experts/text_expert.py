@@ -39,10 +39,21 @@ class TextExpert(BaseExpert):
 
         # 如果没有提供lora_path,使用配置中的路径
         if lora_path is None:
-            lora_path = str(path_cfg.EXPERT_LORA_PATHS.get('text_expert', ''))
-            if not lora_path or not Path(lora_path).exists():
-                logger.warning("未找到Text Expert的LoRA权重,将使用基础模型")
+            lora_weight_path = path_cfg.EXPERT_LORA_PATHS.get('text_expert')
+            if lora_weight_path is None:
+                logger.warning("配置中未找到text_expert的LoRA权重路径,将使用基础模型")
                 lora_path = None
+            else:
+                lora_path_obj = Path(lora_weight_path)
+                if not lora_path_obj.exists():
+                    logger.warning(f"LoRA权重路径不存在: {lora_path_obj},将使用基础模型")
+                    lora_path = None
+                elif not lora_path_obj.is_dir():
+                    logger.warning(f"LoRA权重路径不是目录: {lora_path_obj},将使用基础模型")
+                    lora_path = None
+                else:
+                    lora_path = str(lora_path_obj)
+                    logger.info(f"找到LoRA权重路径: {lora_path}")
 
         super().__init__(
             expert_name='text_expert',
