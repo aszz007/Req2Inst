@@ -301,7 +301,7 @@ class LanguageModel:
 
             stop_tokens = list(set(stop_tokens))
 
-            # 生成配置 - 修复：正确应用所有停止标记
+            # 生成配置
             generation_config = {
                 "max_new_tokens": max_new_tokens,
                 "temperature": temperature,
@@ -323,6 +323,9 @@ class LanguageModel:
 
             # 清理特殊标记和多余内容
             generated_text = self._clean_generated_text(generated_text)
+
+            # 检测并截断三段式指令后的多余内容
+            generated_text = self._truncate_after_three_parts(generated_text)
 
             return generated_text
 
@@ -382,6 +385,51 @@ class LanguageModel:
                     text = text[:idx].strip()
                     break
 
+        return text
+
+    def _truncate_after_three_parts(self, text: str) -> str:
+        """
+        检测三段式格式并截断后续多余内容
+
+        策略：
+        1. 找到Definition、Emphasis & Caution、Things to Avoid三个标签
+        2. 在Things to Avoid行结束后截断所有内容
+        3. 特别处理换行符和空行
+
+        Args:
+            text: 原始生成文本
+
+        Returns:
+            str: 截断后的文本
+        """
+        import re
+
+        lines = text.split('\n')
+
+        # 查找三段式的位置
+        definition_idx = None
+        emphasis_idx = None
+        avoid_idx = None
+
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+            if line_stripped.startswith('Definition:'):
+                definition_idx = i
+            elif line_stripped.startswith('Emphasis & Caution:') or line_stripped.startswith('Emphasis and Caution:'):
+                emphasis_idx = i
+            elif line_stripped.startswith('Things to Avoid:'):
+                avoid_idx = i
+
+        # 如果找到完整的三段式，截断到Things to Avoid行结束
+        if definition_idx is not None and emphasis_idx is not None and avoid_idx is not None:
+            # 只保留到Things to Avoid行
+            truncated_lines = lines[:avoid_idx + 1]
+
+            # 检查是否还有空行紧跟着，如果有也保留一个
+            # 但不保留后续的任何内容
+            return '\n'.join(truncated_lines)
+
+        # 如果没有找到完整的三段式，返回原文本
         return text
 
     def get_lora_status(self) -> dict:

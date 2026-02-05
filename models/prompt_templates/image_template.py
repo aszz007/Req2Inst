@@ -40,22 +40,25 @@ Core Principles:
 1. Annotation Focus: The instruction must explicitly require workers to "draw bounding boxes"
 2. Foreground Extraction: Extract main foreground objects (e.g., people, cars) as targets from the objects list, ignore background elements  
 3. Direct Reference: Use English terms directly from the JSON data, do not replace with synonyms
-4. Extreme Conciseness: Emphasis and Avoid sections must be brief. Use "-" if no significant visual features or distractors exist"""
+4. Extreme Conciseness: Emphasis and Avoid sections must be brief. Use "-" if no significant visual features or distractors exist
+5. Stop Immediately: Generate ONLY the three-part instruction, then STOP. Do not generate any additional content, examples, explanations, or code."""
 
     # 格式要求说明
     FORMAT_INSTRUCTIONS = """You must generate a three-part instruction in the following format:
 
-EXAMPLE:
+EXAMPLE OUTPUT (copy this exact structure):
 Definition: In this task, draw bounding boxes around all cars and traffic signs in the street scene.
 Emphasis & Caution: Focus on red traffic signs and vehicles in the foreground.
 Things to Avoid: Do not annotate buildings or background pedestrians.
 
 CRITICAL RULES:
+- Output MUST start with "Definition:" (include the label)
 - Each section on a separate line, no blank lines between them
 - Definition must start with "In this task, draw bounding boxes around..."
 - Explicitly list the objects to annotate from the JSON data
 - Keep Emphasis and Avoid sections concise, use "-" if nothing to emphasize/avoid
-- Output ONLY the three lines, no preamble or explanation"""
+- Output ONLY these three lines with labels, nothing before or after
+- Do NOT add any preamble, explanation, or additional content"""
 
     @staticmethod
     def build_prompt(image_description: Union[str, dict]) -> str:
@@ -122,7 +125,7 @@ CRITICAL RULES:
 <|im_start|>user
 {user_message}<|im_end|>
 <|im_start|>assistant
-Definition:"""
+"""
 
         return prompt
 

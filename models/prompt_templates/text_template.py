@@ -15,22 +15,25 @@ class TextInstructionTemplate:
 Core Principles:
 1. Extreme Conciseness: Crowdsourcing workers value time. Use the most concise language.
 2. Structured Format: Strictly follow the format defined below.
-3. English Output: Output must be in English regardless of input language."""
+3. English Output: Output must be in English regardless of input language.
+4. Stop Immediately: Generate ONLY the three-part instruction, then STOP. Do not generate any additional content, examples, explanations, or code."""
 
     # 格式要求说明
     FORMAT_INSTRUCTIONS = """You must generate a three-part instruction in the following format:
 
-EXAMPLE:
+EXAMPLE OUTPUT (copy this exact structure):
 Definition: In this task, verify the user login functionality with valid credentials.
 Emphasis & Caution: Ensure both username and password validation are tested.
 Things to Avoid: Do not skip error message verification.
 
 CRITICAL RULES:
+- Output MUST start with "Definition:" (include the label)
 - Each section on a separate line, no blank lines between them
-- Definition must start with "In this task,"
+- Definition must include "In this task," after the label
 - Keep all sections concise
 - Use "-" if nothing specific to emphasize or avoid
-- Output ONLY the three lines, no preamble or explanation"""
+- Output ONLY these three lines with labels, nothing before or after
+- Do NOT add any preamble, explanation, or additional content"""
 
     @staticmethod
     def build_prompt(low_requirement: str) -> str:
@@ -60,7 +63,7 @@ CRITICAL RULES:
 <|im_start|>user
 {user_message}<|im_end|>
 <|im_start|>assistant
-Definition:"""
+"""
 
         return prompt
 

@@ -69,23 +69,26 @@ Core Principles:
    - extend → Must translate to "Conditional extension" or "Optional flow"
    - association → Must translate to "Actor interaction" or "Triggers"
 4. Crowdsourcing Task Oriented: Clearly indicate this is implementation instruction for developers, focusing on what functionality to implement and how to handle different business process branches.
-5. Structured Format: Strictly follow the format defined below."""
+5. Structured Format: Strictly follow the format defined below.
+6. Stop Immediately: Generate ONLY the three-part instruction, then STOP. Do not generate any additional content, examples, explanations, or code."""
 
     # 格式要求说明
     FORMAT_INSTRUCTIONS = """You must generate a three-part instruction in the following format:
 
-EXAMPLE:
+EXAMPLE OUTPUT (copy this exact structure):
 Definition: In this task, implement the authentication workflow with User and Admin actors interacting with Login System and Validate Credentials use cases.
 Emphasis & Caution: Ensure Validate Credentials is a mandatory prerequisite (include) before completing login. Send Email is a conditional extension triggered on success.
 Things to Avoid: Do not focus on UI positioning or visual layout. Avoid implementing frontend styling.
 
 CRITICAL RULES:
+- Output MUST start with "Definition:" (include the label)
 - Each section on a separate line, no blank lines between them
 - Definition must start with "In this task, implement..."
 - Explicitly list actors and use cases from JSON data
 - Translate relationship types (include/extend/association) to business logic terms
 - Keep sections concise, use "-" if nothing specific
-- Output ONLY the three lines, no preamble or explanation"""
+- Output ONLY these three lines with labels, nothing before or after
+- Do NOT add any preamble, explanation, or additional content"""
 
     @staticmethod
     def build_prompt(uml_json: Union[str, dict]) -> str:
@@ -143,7 +146,7 @@ CRITICAL RULES:
 <|im_start|>user
 {user_message}<|im_end|>
 <|im_start|>assistant
-Definition:"""
+"""
 
         return prompt
 

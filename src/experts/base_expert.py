@@ -232,11 +232,23 @@ class BaseExpert(ABC):
         Returns:
             str: 提取的三段式指令
         """
+        logger.info("=" * 80)
+        logger.info("[提取开始] 原始生成文本:")
+        logger.info("-" * 80)
+        logger.info(text)
+        logger.info("=" * 80)
+
         if not text:
+            logger.warning("[提取结束] 输入文本为空")
             return ""
 
         # 按行分割
         lines = text.split('\n')
+        logger.info(f"[提取] 分割为 {len(lines)} 行")
+
+        # 显示所有行（用于调试）
+        for i, line in enumerate(lines):
+            logger.info(f"[提取] 行{i}: {line[:100]}")
 
         # 查找三段式指令的三个部分
         definition_line = None
@@ -251,21 +263,30 @@ class BaseExpert(ABC):
             # 检查每一行是否是三段式的开头
             if line_stripped.startswith('Definition:'):
                 definition_line = i
+                logger.info(f"[提取] 找到Definition在行{i}")
             elif line_stripped.startswith('Emphasis & Caution:') or line_stripped.startswith('Emphasis and Caution:'):
                 emphasis_line = i
+                logger.info(f"[提取] 找到Emphasis在行{i}")
             elif line_stripped.startswith('Things to Avoid:'):
                 avoid_line = i
+                logger.info(f"[提取] 找到Things to Avoid在行{i}")
+
+        logger.info(f"[提取] 找到的行号 - Definition: {definition_line}, Emphasis: {emphasis_line}, Avoid: {avoid_line}")
 
         # 如果找到完整的三段式，只保留这三行
         if definition_line is not None and emphasis_line is not None and avoid_line is not None:
+            logger.info("[提取] 找到完整的三段式标签")
             # 确保行号顺序正确
             if definition_line < emphasis_line < avoid_line:
+                logger.info("[提取] 行号顺序正确，开始清理每一行")
                 # 提取三行，并清理每行的尾部多余内容
                 extracted_lines = []
-                for line_idx in [definition_line, emphasis_line, avoid_line]:
+                for idx, line_idx in enumerate([definition_line, emphasis_line, avoid_line]):
                     line = lines[line_idx].strip()
+                    logger.info(f"[提取] 清理第{idx+1}行: {line}")
                     # 如果行中包含中文或其他垃圾内容，截断
                     cleaned_line = self._clean_instruction_line(line)
+                    logger.info(f"[提取] 清理后第{idx+1}行: {cleaned_line}")
                     extracted_lines.append(cleaned_line)
 
                 # 检查提取的内容是否有效（不全是"-"）
@@ -278,16 +299,30 @@ class BaseExpert(ABC):
                 has_invalid_keyword = any(keyword in def_content for keyword in invalid_keywords)
 
                 if def_content and def_content != '-' and not has_invalid_keyword:
+                    # 强制确保Definition以"In this task,"开头
+                    extracted_lines = self._ensure_definition_format(extracted_lines)
+                    extracted_text = '\n'.join(extracted_lines)
+
+                    logger.info("[提取结束] 成功提取三段式指令")
+                    logger.info("=" * 80)
+                    logger.info("[提取结果]")
+                    logger.info("-" * 80)
+                    logger.info(extracted_text)
+                    logger.info("=" * 80)
                     return extracted_text
                 else:
                     if has_invalid_keyword:
-                        logger.debug(f"检测到重复标签，Definition内容无效: {def_content}")
+                        logger.warning(f"[提取] 检测到重复标签，Definition内容无效: {def_content}")
                     else:
-                        logger.debug("提取的Definition内容为空，尝试智能分割")
+                        logger.warning("[提取] 提取的Definition内容为空，尝试智能分割")
                     # 继续执行智能分割逻辑
+            else:
+                logger.warning(f"[提取] 行号顺序不正确: {definition_line}, {emphasis_line}, {avoid_line}")
+        else:
+            logger.warning("[提取] 未找到完整的三段式标签")
 
         # 如果没有找到标准标签，尝试智能分割
-        logger.debug("未找到标准三段式标签，尝试智能分割")
+        logger.info("[提取] 尝试智能分割")
         return self._smart_split_to_three_parts(text)
 
     def _smart_split_to_three_parts(self, text: str) -> str:
@@ -379,7 +414,9 @@ Things to Avoid: {avoid}"""
 
     def _clean_instruction_line(self, line: str) -> str:
         """
-        清理单行指令，移除尾部的多余内容和重复标签
+        清理单行指令,移除尾部的多余内容和重复标签
+
+        增强版本: 更强力地检测和清理各类问题
 
         Args:
             line: 单行指令
@@ -389,6 +426,8 @@ Things to Avoid: {avoid}"""
         """
         import re
 
+        logger.info(f"[清理前] {line}")
+
         # 定义所有可能的标签前缀
         prefixes = [
             'Definition:',
@@ -397,113 +436,167 @@ Things to Avoid: {avoid}"""
             'Things to Avoid:'
         ]
 
+        # 查找行的标签
         current_prefix = None
         for prefix in prefixes:
             if line.startswith(prefix):
                 current_prefix = prefix
-                content = line[len(prefix):].strip()
-
-                # 强力递归移除所有重复的标签前缀（包括变体）
-                max_iterations = 10
-                iteration = 0
-                while iteration < max_iterations:
-                    iteration += 1
-                    cleaned = False
-
-                    # 检查所有可能的前缀变体
-                    for check_prefix in prefixes:
-                        if content.startswith(check_prefix):
-                            content = content[len(check_prefix):].strip()
-                            cleaned = True
-                            break
-
-                    # 如果没有找到更多重复，退出
-                    if not cleaned:
-                        break
-
-                # 清理完重复标签后，继续清理内容部分
-                if content and content != '-':
-                    # 1. 优先检测并截断垃圾文本模式（在检测中文前）
-                    # 扩展的垃圾模式列表，特别针对训练数据泄露
-                    unwanted_patterns = [
-                        # 句号后的垃圾模式（最常见）
-                        r'\.is a (list|type|kind|form|way|computer program|software|document)',
-                        r'\.is (often used|used|a type|the|an)',
-                        r'\.(it|this|that|these|those) (is|are|was|were|can|could|will|would)',
-                        r'\.the (purpose|goal|aim|objective|main|primary|key)',
-                        r'\.(document|software|system|program|application|tool|platform) (management|is|are|can|allows)',
-                        r'\.(in order|to ensure|for|with|by|through)',
-                        # 中文模式
-                        '在不失准确性',
-                        '请对以下',
-                        '这句话的',
-                        '摘要',
-                        '反义词',
-                        '总结',
-                        '翻译',
-                        '目的 观察',
-                        '方法 ',
-                        '结果 ',
-                        '结论 ',
-                    ]
-
-                    # 先检查句号后的垃圾模式
-                    for pattern in unwanted_patterns:
-                        if isinstance(pattern, str) and not pattern.startswith(r'\.'):
-                            # 普通字符串匹配（中文）
-                            if pattern in content:
-                                idx = content.find(pattern)
-                                if idx > 0:
-                                    content = content[:idx].strip()
-                                    break
-                        else:
-                            # 正则表达式匹配（英文垃圾模式）
-                            match = re.search(pattern, content)
-                            if match:
-                                idx = match.start()
-                                if idx > 0:
-                                    # 截断到句号位置（包含句号）
-                                    content = content[:idx + 1].strip()
-                                    break
-
-                    # 2. 检测中文字符并截断
-                    chinese_match = re.search(r'[\u4e00-\u9fff]', content)
-                    if chinese_match:
-                        idx = chinese_match.start()
-                        # 回溯到最近的句点，确保不破坏完整句子
-                        truncate_pos = idx
-                        for i in range(idx - 1, max(0, idx - 50), -1):
-                            if content[i] in '.!?':
-                                truncate_pos = i + 1
-                                break
-                        content = content[:truncate_pos].strip()
-
-                    # 3. 检查是否存在句子片段（以小写字母开头的句子片段）
-                    # 通常是训练数据泄露的标志
-                    sentences = re.split(r'(?<=[.!?])\s+', content)
-                    if len(sentences) > 1:
-                        # 检查最后一个句子是否是垃圾
-                        last_sentence = sentences[-1].strip()
-                        # 如果最后一个句子以小写开头或包含特定模式，移除它
-                        if last_sentence and (
-                            last_sentence[0].islower() or
-                            re.match(r'^(is|are|was|were|the|a|an|of|for|to|in)', last_sentence, re.IGNORECASE)
-                        ):
-                            content = ' '.join(sentences[:-1]).strip()
-
-                    # 4. 确保内容以句号结尾
-                    if content and not content.endswith(('.', '!', '?')):
-                        content += '.'
-
-                    line = f"{current_prefix} {content}"
-                elif not content:
-                    # 内容为空，保持标签但添加"-"
-                    line = f"{current_prefix} -"
-                else:
-                    line = f"{current_prefix} {content}"
                 break
 
-        return line
+        if current_prefix is None:
+            # 没有找到标签,返回原始行
+            logger.info("[清理] 未找到标签前缀,返回原始行")
+            return line
+
+        # 提取内容部分
+        content = line[len(current_prefix):].strip()
+        logger.info(f"[步骤0] 提取内容: {content[:min(100, len(content))]}...")
+
+        # === 步骤1: 强力移除所有重复标签 ===
+        # 递归移除直到没有任何标签前缀
+        original_content = content
+        max_iterations = 10
+        for iteration in range(max_iterations):
+            found_duplicate = False
+            for check_prefix in prefixes:
+                if content.startswith(check_prefix):
+                    content = content[len(check_prefix):].strip()
+                    found_duplicate = True
+                    logger.info(f"[步骤1.{iteration}] 移除重复标签: {check_prefix}")
+                    break
+            if not found_duplicate:
+                break
+
+        if content != original_content:
+            logger.info(f"[步骤1完成] 移除重复标签后: {content[:min(100, len(content))]}...")
+
+        # 如果内容为空或只是占位符,直接返回
+        if not content or content == '-':
+            logger.info("[步骤1] 内容为空,返回占位符")
+            return f"{current_prefix} -"
+
+        # === 步骤2: 首先找到第一个完整的句子（以句号结尾） ===
+        # 对于Things to Avoid行，只保留第一个完整句子
+        if current_prefix == 'Things to Avoid:':
+            # 找到第一个句号的位置
+            first_period = content.find('.')
+            if first_period != -1:
+                # 只保留到第一个句号
+                content = content[:first_period + 1].strip()
+                logger.info(f"[步骤2-特殊] Things to Avoid行截断到第一个句号: {content}")
+
+        # === 步骤3: 检测并截断句号后的垃圾模式 ===
+        # 这些模式通常表示训练数据泄露
+        garbage_patterns = [
+            # 最常见的垃圾模式 - 扩展版本
+            r'\.is a (list|type|kind|form|way|computer program|software|document|method|system|tool)',
+            r'\.is (often used|used|typically|commonly|generally|usually|one of|the)',
+            r'\.is (a type|an|the|one of|part of)',
+            # 文档管理相关的泄露模式
+            r'\.(document|software|system|program|application|tool|platform|service)',
+            # 其他垃圾模式
+            r'\.(it|this|that|these|those) (is|are|was|were|can|could|will|would|may|might)',
+            r'\.the (purpose|goal|aim|objective|main|primary|key|first)',
+            r'\.(in order|to ensure|for|with|by|through|via)',
+            # 新增: 捕获 ".xxxx" 模式 (句号后跟小写单词)
+            r'\.[a-z]{2,}',
+        ]
+
+        original_content = content
+        for pattern in garbage_patterns:
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                # 找到垃圾模式,截断到句号位置(保留句号)
+                idx = match.start()
+                content = content[:idx + 1].strip()
+                logger.info(f"[步骤3] 检测到垃圾模式: {pattern}, 截断到位置{idx}")
+                break
+
+        if content != original_content:
+            logger.info(f"[步骤3完成] 截断垃圾内容后: {content}")
+
+        # === 步骤4: 检测中文字符并截断 ===
+        chinese_match = re.search(r'[\u4e00-\u9fff]', content)
+        if chinese_match:
+            idx = chinese_match.start()
+            # 回溯到最近的句点
+            truncate_pos = idx
+            for i in range(idx - 1, max(0, idx - 50), -1):
+                if content[i] in '.!?':
+                    truncate_pos = i + 1
+                    break
+            content = content[:truncate_pos].strip()
+            logger.info(f"[步骤4] 检测到中文字符,截断到位置{truncate_pos}")
+
+        # === 步骤5: 移除以小写字母开头的句子片段 ===
+        # 通常这些是训练数据泄露
+        sentences = re.split(r'(?<=[.!?])\s+', content)
+        if len(sentences) > 1:
+            # 检查最后一个句子
+            last_sentence = sentences[-1].strip()
+            if last_sentence and len(last_sentence) > 0 and last_sentence[0].islower():
+                # 最后一个句子以小写开头,很可能是垃圾,移除它
+                content = ' '.join(sentences[:-1]).strip()
+                logger.info(f"[步骤5] 移除小写开头的尾部句子: {last_sentence[:min(50, len(last_sentence))]}")
+
+        # === 步骤6: 确保以句号结尾 ===
+        if content and not content.endswith(('.', '!', '?', '-')):
+            content += '.'
+            logger.info("[步骤6] 添加结尾句号")
+
+        # 重新组装清理后的行
+        cleaned_line = f"{current_prefix} {content}"
+        logger.info(f"[清理后] {cleaned_line}")
+
+        return cleaned_line
+
+    def _ensure_definition_format(self, lines: list) -> list:
+        """
+        确保Definition行以"In this task,"开头
+
+        规则：
+        - 如果Definition行已经以"In this task,"开头，保持不变
+        - 如果Definition行是其他格式（如"Draw bounding boxes..."），自动添加"In this task,"前缀
+
+        Args:
+            lines: 三行指令列表
+
+        Returns:
+            list: 修正后的三行指令列表
+        """
+        if not lines or len(lines) < 1:
+            return lines
+
+        # 提取Definition行
+        definition_line = lines[0]
+
+        if not definition_line.startswith('Definition:'):
+            return lines
+
+        # 提取内容部分
+        content = definition_line[len('Definition:'):].strip()
+
+        # 检查是否已经以"In this task,"开头
+        if content.lower().startswith('in this task,'):
+            logger.info("[格式检查] Definition已包含'In this task,'前缀")
+            return lines
+
+        # 如果不是，添加前缀
+        # 将首字母小写（因为会跟在"In this task,"后面）
+        if content:
+            content = content[0].lower() + content[1:] if len(content) > 1 else content.lower()
+
+        # 重新组装
+        new_definition = f"Definition: In this task, {content}"
+        logger.info(f"[格式修正] Definition添加'In this task,'前缀")
+        logger.info(f"[格式修正] 修正前: {definition_line}")
+        logger.info(f"[格式修正] 修正后: {new_definition}")
+
+        # 替换第一行
+        lines[0] = new_definition
+
+        return lines
+
 
     def get_expert_info(self) -> Dict[str, Any]:
         """
