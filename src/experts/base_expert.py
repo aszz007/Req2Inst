@@ -190,7 +190,10 @@ class BaseExpert(ABC):
             )
 
             # 调试日志：显示原始生成内容
+            logger.debug(f"原始生成内容长度: {len(generated_text)} 字符")
             logger.debug(f"原始生成内容（前500字符）：\n{generated_text[:500]}")
+            if len(generated_text) > 500:
+                logger.debug(f"原始生成内容（后200字符）：\n{generated_text[-200:]}")
 
             # 提取三段式指令（移除多余内容）
             extracted_text = self._extract_three_part_instruction(generated_text)
@@ -257,7 +260,16 @@ class BaseExpert(ABC):
                     # 如果行中包含中文或其他垃圾内容，截断
                     cleaned_line = self._clean_instruction_line(line)
                     extracted_lines.append(cleaned_line)
-                return '\n'.join(extracted_lines)
+
+                # 检查提取的内容是否有效（不全是"-"）
+                extracted_text = '\n'.join(extracted_lines)
+                # 检查Definition行是否有实际内容
+                def_content = extracted_lines[0].split(':', 1)[1].strip() if ':' in extracted_lines[0] else ''
+                if def_content and def_content != '-':
+                    return extracted_text
+                else:
+                    logger.debug("提取的Definition内容为空，尝试智能分割")
+                    # 继续执行智能分割逻辑
 
         # 如果没有找到标准标签，尝试智能分割
         logger.debug("未找到标准三段式标签，尝试智能分割")
@@ -371,10 +383,17 @@ Things to Avoid: {avoid}"""
         for prefix in prefixes:
             if line.startswith(prefix):
                 content = line[len(prefix):].strip()
-                # 检查内容是否又以同样的前缀开头（重复标签）
-                if content.startswith(prefix):
+                # 递归移除所有重复的标签前缀
+                while content.startswith(prefix):
                     content = content[len(prefix):].strip()
-                line = f"{prefix} {content}"
+                # 如果清理后内容为空或只有"-"，保持不变
+                if content and content != '-':
+                    line = f"{prefix} {content}"
+                elif not content:
+                    # 内容为空，保持标签但添加"-"
+                    line = f"{prefix} -"
+                else:
+                    line = f"{prefix} {content}"
                 break
 
         # 检测中文字符并截断
