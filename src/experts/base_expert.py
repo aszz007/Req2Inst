@@ -164,8 +164,7 @@ class BaseExpert(ABC):
                             temperature: float = 0.7,
                             top_p: float = 0.9,
                             top_k: int = 50,
-                            repetition_penalty: float = 1.1,
-                            stop_tokens: Optional[list] = None) -> str:
+                            repetition_penalty: float = 1.1) -> str:
         """
         使用模型生成文本(通用方法)
 
@@ -176,18 +175,16 @@ class BaseExpert(ABC):
             top_p: nucleus sampling
             top_k: top-k sampling
             repetition_penalty: 重复惩罚
-            stop_tokens: 停止词列表
 
         Returns:
             str: 生成的文本
+
+        Note:
+            停止token由LanguageModel内部处理(eos_token_id, <|im_end|>等)
         """
         if not self.is_model_loaded:
             logger.error("模型未加载,无法生成")
             return ""
-
-        # 默认停止词
-        if stop_tokens is None:
-            stop_tokens = ["\n\n\n", "<|im_end|>", "<|endoftext|>"]
 
         try:
             generated_text = self.model.generate(
@@ -196,8 +193,7 @@ class BaseExpert(ABC):
                 temperature=temperature,
                 top_p=top_p,
                 top_k=top_k,
-                repetition_penalty=repetition_penalty,
-                stop_tokens=stop_tokens
+                repetition_penalty=repetition_penalty
             )
 
             # 调试日志：显示原始生成内容

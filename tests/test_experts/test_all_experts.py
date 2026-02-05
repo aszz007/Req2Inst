@@ -596,4 +596,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# python scripts/run_with_env.py --env text --script tests/test_experts/test_all_experts.py
+# python scripts/run_with_env.py --env text --script tests/test_experts/test_all_experts.py -- --mode shared
