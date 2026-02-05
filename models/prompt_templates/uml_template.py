@@ -292,11 +292,12 @@ WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
         for line in lines:
             line_lower = line.lower()
 
-            # 检查Definition行（必须有标签前缀和"In this task, implement"）
+            # 检查Definition行
             if line.startswith('Definition:'):
-                if 'in this task' in line_lower:
+                content = line[len('Definition:'):].strip()
+                if content:
                     result['has_definition'] = True
-                    # 检查是否包含业务逻辑关键词
+                    # 检查是否包含业务逻辑关键词（UML任务的核心）
                     business_keywords = [
                         'implement', 'functionality', 'workflow', 'process',
                         'interaction', 'trigger', 'system'
@@ -304,13 +305,13 @@ WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
                     if any(keyword in line_lower for keyword in business_keywords):
                         result['has_business_logic'] = True
                 else:
-                    result['errors'].append('Definition部分未以"In this task"开头')
+                    result['errors'].append('Definition部分内容为空')
 
-            # 检查Emphasis & Caution行（必须有标签前缀）
+            # 检查Emphasis & Caution行
             elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
                 result['has_emphasis'] = True
 
-            # 检查Things to Avoid行（必须有标签前缀）
+            # 检查Things to Avoid行
             elif line.startswith('Things to Avoid:'):
                 result['has_avoid'] = True
 

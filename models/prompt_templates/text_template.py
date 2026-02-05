@@ -131,14 +131,13 @@ WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
 
         # 检查每一行的格式
         for i, line in enumerate(lines):
-            line_lower = line.lower()
-
             # 检查Definition行
             if line.startswith('Definition:'):
-                if 'in this task' in line_lower:
+                content = line[len('Definition:'):].strip()
+                if content:
                     result['has_definition'] = True
                 else:
-                    result['errors'].append('Definition部分未以"In this task"开头')
+                    result['errors'].append('Definition部分内容为空')
 
             # 检查Emphasis & Caution行
             elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
