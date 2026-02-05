@@ -122,6 +122,13 @@ class ImageExpert(BaseExpert):
                 repetition_penalty=1.1
             )
 
+            # 输出模型原始输出用于调试
+            logger.info("=" * 80)
+            logger.info("模型原始输出:")
+            logger.info("-" * 80)
+            logger.info(instruction)
+            logger.info("=" * 80)
+
             # 验证输出格式
             if self.validate_output(instruction):
                 logger.info("指令生成成功,格式验证通过")
