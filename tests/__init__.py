@@ -61,7 +61,7 @@ tests/
 │   ├── test_image_to_json.py           # 图像转JSON测试（9个用例）
 │   └── test_uml_to_json.py             # UML转JSON测试（9个用例）
 │
-├── test_models/                         # 模型测试
+├──test_models/                         # 模型测试
 │   ├── __init__.py
 │   ├── test_language_model.py          # 语言模型测试（15个用例）
 │   └── test_vision_model.py            # 视觉模型测试（14个用例）

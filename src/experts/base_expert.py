@@ -29,6 +29,10 @@ class BaseExpert(ABC):
     所有专家(Text, Image, UML, General)都应继承此类
     """
 
+    # 类变量：共享的基础模型
+    _shared_base_model = None
+    _shared_base_model_path = None
+
     def __init__(self,
                  expert_name: str,
                  base_model_path: str,
@@ -160,7 +164,8 @@ class BaseExpert(ABC):
                             temperature: float = 0.7,
                             top_p: float = 0.9,
                             top_k: int = 50,
-                            repetition_penalty: float = 1.1) -> str:
+                            repetition_penalty: float = 1.1,
+                            stop_tokens: Optional[list] = None) -> str:
         """
         使用模型生成文本(通用方法)
 
@@ -171,6 +176,7 @@ class BaseExpert(ABC):
             top_p: nucleus sampling
             top_k: top-k sampling
             repetition_penalty: 重复惩罚
+            stop_tokens: 停止词列表
 
         Returns:
             str: 生成的文本
@@ -179,6 +185,10 @@ class BaseExpert(ABC):
             logger.error("模型未加载,无法生成")
             return ""
 
+        # 默认停止词
+        if stop_tokens is None:
+            stop_tokens = ["\n\n\n", "<|im_end|>", "<|endoftext|>"]
+
         try:
             generated_text = self.model.generate(
                 prompt=prompt,
@@ -186,7 +196,8 @@ class BaseExpert(ABC):
                 temperature=temperature,
                 top_p=top_p,
                 top_k=top_k,
-                repetition_penalty=repetition_penalty
+                repetition_penalty=repetition_penalty,
+                stop_tokens=stop_tokens
             )
 
             # 调试日志：显示原始生成内容
@@ -380,6 +391,8 @@ Things to Avoid: {avoid}"""
         Returns:
             str: 清理后的行
         """
+        import re
+
         # 首先移除重复的标签前缀
         prefixes = [
             'Definition:',
@@ -388,12 +401,14 @@ Things to Avoid: {avoid}"""
             'Things to Avoid:'
         ]
 
+        current_prefix = None
         for prefix in prefixes:
             if line.startswith(prefix):
+                current_prefix = prefix
                 content = line[len(prefix):].strip()
 
                 # 强力递归移除所有重复的标签前缀（包括变体）
-                max_iterations = 5  # 防止无限循环
+                max_iterations = 10
                 iteration = 0
                 while iteration < max_iterations:
                     iteration += 1
@@ -410,50 +425,81 @@ Things to Avoid: {avoid}"""
                     if not cleaned:
                         break
 
-                # 如果清理后内容为空或只有"-"，保持不变
+                # 清理完重复标签后，继续清理内容部分
                 if content and content != '-':
-                    line = f"{prefix} {content}"
+                    # 1. 检测中文字符并截断
+                    chinese_match = re.search(r'[\u4e00-\u9fff]', content)
+                    if chinese_match:
+                        idx = chinese_match.start()
+                        # 回溯到最近的句点，确保不破坏完整句子
+                        truncate_pos = idx
+                        for i in range(idx - 1, max(0, idx - 50), -1):
+                            if content[i] in '.!?':
+                                truncate_pos = i + 1
+                                break
+                        content = content[:truncate_pos].strip()
+
+                    # 2. 检测垃圾文本模式并截断
+                    unwanted_patterns = [
+                        r'\.is a (list|type|kind|form|way)',
+                        r'\.(it|this|that|these|those) (is|are|was|were)',
+                        r'\.the (purpose|goal|aim|objective)',
+                        r'\.(document|software|system|program|application) (management|is|are)',
+                        r'\.(in order|to ensure|for|with)',
+                        '在不失准确性',
+                        '请对以下',
+                        '这句话的',
+                        '摘要',
+                        '反义词',
+                        '总结',
+                        '翻译',
+                        '目的 观察',
+                        '方法 ',
+                        '结果 ',
+                        '结论 ',
+                    ]
+
+                    for pattern in unwanted_patterns:
+                        if isinstance(pattern, str) and not pattern.startswith(r'\.'):
+                            # 普通字符串匹配
+                            if pattern in content:
+                                idx = content.find(pattern)
+                                if idx > 0:
+                                    content = content[:idx].strip()
+                                    break
+                        else:
+                            # 正则表达式匹配
+                            match = re.search(pattern, content)
+                            if match:
+                                idx = match.start()
+                                if idx > 0:
+                                    content = content[:idx].strip()
+                                    break
+
+                    # 3. 检查是否存在句子片段（以小写字母开头的句子片段）
+                    # 通常是训练数据泄露的标志
+                    sentences = re.split(r'(?<=[.!?])\s+', content)
+                    if len(sentences) > 1:
+                        # 检查最后一个句子是否是垃圾
+                        last_sentence = sentences[-1].strip()
+                        # 如果最后一个句子以小写开头或包含特定模式，移除它
+                        if last_sentence and (
+                            last_sentence[0].islower() or
+                            re.match(r'^(is|are|was|were|the|a|an|of|for|to|in)', last_sentence, re.IGNORECASE)
+                        ):
+                            content = ' '.join(sentences[:-1]).strip()
+
+                    # 4. 确保内容以句号结尾
+                    if content and not content.endswith(('.', '!', '?')):
+                        content += '.'
+
+                    line = f"{current_prefix} {content}"
                 elif not content:
                     # 内容为空，保持标签但添加"-"
-                    line = f"{prefix} -"
+                    line = f"{current_prefix} -"
                 else:
-                    line = f"{prefix} {content}"
+                    line = f"{current_prefix} {content}"
                 break
-
-        # 检测中文字符并截断
-        import re
-        chinese_match = re.search(r'[\u4e00-\u9fff]', line)
-        if chinese_match:
-            idx = chinese_match.start()
-            # 回溯到最近的句点，确保不破坏完整句子
-            truncate_pos = idx
-            for i in range(idx - 1, max(0, idx - 50), -1):
-                if line[i] in '.!?':
-                    truncate_pos = i + 1
-                    break
-            line = line[:truncate_pos].strip()
-
-        # 常见的垃圾模式
-        unwanted_patterns = [
-            '在不失准确性',
-            '请对以下',
-            '这句话的',
-            '摘要',
-            '反义词',
-            '总结',
-            '翻译',
-            '目的 观察',
-            '方法 ',
-            '结果 ',
-            '结论 ',
-        ]
-
-        for pattern in unwanted_patterns:
-            if pattern in line:
-                idx = line.find(pattern)
-                if idx > 0:
-                    line = line[:idx].strip()
-                    break
 
         return line
 
@@ -492,6 +538,141 @@ Things to Avoid: {avoid}"""
     def __exit__(self, exc_type, exc_val, exc_tb):
         """上下文管理器: 退出时卸载模型"""
         self.unload_model()
+
+    @classmethod
+    def load_shared_base_model(cls, base_model_path: str, use_4bit: bool = True) -> bool:
+        """
+        加载共享的基础模型（所有专家共用）
+
+        这个方法用于统一测试场景，避免重复加载基础模型。
+        加载后，各个专家只需要切换LoRA权重即可。
+
+        Args:
+            base_model_path: 基础模型路径
+            use_4bit: 是否使用4bit量化
+
+        Returns:
+            bool: 是否加载成功
+        """
+        try:
+            if cls._shared_base_model is not None and cls._shared_base_model_path == base_model_path:
+                logger.info(f"共享基础模型已加载: {base_model_path}")
+                return True
+
+            logger.info(f"加载共享基础模型: {base_model_path}")
+            cls._shared_base_model = LanguageModel(
+                model_path=base_model_path,
+                use_4bit=use_4bit
+            )
+            cls._shared_base_model_path = base_model_path
+            logger.info("共享基础模型加载成功")
+            return True
+
+        except Exception as e:
+            logger.error(f"共享基础模型加载失败: {e}")
+            cls._shared_base_model = None
+            cls._shared_base_model_path = None
+            return False
+
+    @classmethod
+    def unload_shared_base_model(cls) -> bool:
+        """
+        卸载共享的基础模型
+
+        Returns:
+            bool: 是否卸载成功
+        """
+        try:
+            if cls._shared_base_model:
+                # 卸载LoRA（如果有）
+                if cls._shared_base_model.is_lora_loaded:
+                    cls._shared_base_model.unload_lora()
+
+                # 清理模型
+                del cls._shared_base_model
+                cls._shared_base_model = None
+                cls._shared_base_model_path = None
+
+                # 清理GPU缓存
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+                logger.info("共享基础模型已卸载")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"共享基础模型卸载失败: {e}")
+            return False
+
+    def load_model_with_shared_base(self) -> bool:
+        """
+        使用共享的基础模型加载专家（仅加载LoRA权重）
+
+        这个方法假设共享基础模型已经通过load_shared_base_model加载。
+        专家只需要加载自己的LoRA权重即可。
+
+        Returns:
+            bool: 是否加载成功
+        """
+        try:
+            if self.__class__._shared_base_model is None:
+                logger.error("共享基础模型未加载，请先调用load_shared_base_model")
+                return False
+
+            if self.base_model_path != self.__class__._shared_base_model_path:
+                logger.warning(f"基础模型路径不匹配：专家期望{self.base_model_path}，共享模型是{self.__class__._shared_base_model_path}")
+                logger.warning("将使用共享模型")
+
+            logger.info(f"使用共享基础模型加载{self.expert_name}...")
+
+            # 直接引用共享模型
+            self.model = self.__class__._shared_base_model
+
+            # 如果提供了LoRA路径，加载LoRA权重
+            if self.lora_path:
+                lora_path = Path(self.lora_path)
+                if lora_path.exists():
+                    logger.info(f"加载LoRA权重: {self.lora_path}")
+                    success = self.model.load_lora_from_path(str(self.lora_path))
+                    if not success:
+                        logger.warning("LoRA加载失败，使用基础模型")
+                else:
+                    logger.warning(f"LoRA路径不存在: {self.lora_path}")
+                    logger.warning("使用基础模型（未微调）")
+
+            self.is_model_loaded = True
+            logger.info(f"{self.expert_name}加载完成（使用共享基础模型）")
+            return True
+
+        except Exception as e:
+            logger.error(f"使用共享基础模型加载失败: {e}")
+            self.is_model_loaded = False
+            return False
+
+    def unload_model_keep_shared_base(self) -> bool:
+        """
+        卸载专家模型但保留共享的基础模型（仅卸载LoRA权重）
+
+        Returns:
+            bool: 是否卸载成功
+        """
+        try:
+            if self.model:
+                # 只卸载LoRA，不清理基础模型
+                if self.model.is_lora_loaded:
+                    self.model.unload_lora()
+
+                # 不删除model引用，因为它指向共享模型
+                self.model = None
+                self.is_model_loaded = False
+                logger.info(f"{self.expert_name}已卸载（保留共享基础模型）")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"卸载失败: {e}")
+            return False
 
 
 if __name__ == "__main__":
