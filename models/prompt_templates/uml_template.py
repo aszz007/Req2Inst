@@ -59,46 +59,33 @@ Important: Ensure complete JSON output with all brackets properly closed. Use En
 
     # ==================== 指令生成阶段Prompt ====================
     # 系统提示词（定义角色和核心原则）
-    SYSTEM_PROMPT = """你是一个软件架构与众包任务设计专家。请根据以下输入的UML用例图结构化数据（JSON格式），编写一个适合众包工人使用的英文业务逻辑实现指令。
+    SYSTEM_PROMPT = """You are a software architecture and crowdsourcing task design expert. Based on the input UML Use Case Diagram structured data (JSON format), write an English business logic implementation instruction for crowdsourcing workers.
 
-核心原则：
-1. 数据驱动：指令中的角色名（Actors）和用例名（Use Cases）必须严格引用JSON源数据中的英文原名，不得遗漏、缩写或改写。
-2. 逻辑优先，视觉为辅：输入数据中包含position（如top_left）等视觉布局信息，请在生成业务逻辑指令时完全忽略它们。重点解析relationships中的业务逻辑关系。
-3. 关系语义转译：
-   - include → 必须转化为"Mandatory step"（必须步骤）或"Required prerequisite"（必需前置条件）
-   - extend → 必须转化为"Conditional extension"（条件扩展）或"Optional flow"（可选流程）
-   - association → 必须转化为"Actor interaction"（角色交互）或"Triggers"（触发关系）
-4. 众包任务导向：明确这是给开发人员的实现指令，重点说明要实现什么功能、如何处理不同的业务流程分支。
-5. 结构规范：严格按照下方定义的格式输出。"""
+Core Principles:
+1. Data-Driven: Actor names and Use Case names in the instruction must strictly reference English original names from JSON source data, without omission, abbreviation or rewriting.
+2. Logic Priority, Visuals Secondary: Completely ignore visual layout information like position (e.g., top_left) in input data. Focus on parsing business logic relationships in relationships.
+3. Relationship Semantics Translation:
+   - include → Must translate to "Mandatory step" or "Required prerequisite"
+   - extend → Must translate to "Conditional extension" or "Optional flow"
+   - association → Must translate to "Actor interaction" or "Triggers"
+4. Crowdsourcing Task Oriented: Clearly indicate this is implementation instruction for developers, focusing on what functionality to implement and how to handle different business process branches.
+5. Structured Format: Strictly follow the format defined below."""
 
     # 格式要求说明
-    FORMAT_INSTRUCTIONS = """OUTPUT FORMAT REQUIREMENTS (STRICTLY FOLLOW):
+    FORMAT_INSTRUCTIONS = """You must generate a three-part instruction in the following format:
 
-Definition: In this task, implement [core system functionality] with [main actors] interacting with [key use cases]
-Emphasis & Caution: [mandatory flows and conditional extensions explanation, use "-" if none]
-Things to Avoid: [prohibited items such as not focusing on UI layout, use "-" if none]
-
-FORMAT RULES:
-1. Each section MUST be on a separate line
-2. Each line MUST start with the corresponding label ("Definition:", "Emphasis & Caution:", "Things to Avoid:")
-3. Definition MUST start with "In this task, implement"
-4. Definition MUST explicitly mention actors and use_cases
-5. Emphasis should reflect semantic translation of include/extend relationships
-6. Avoid section should mention ignoring visual information like position
-7. NO blank lines between sections
-8. DO NOT repeat labels (e.g., "Emphasis & Caution: Emphasis & Caution:" is WRONG)
-
-CORRECT EXAMPLE:
+EXAMPLE:
 Definition: In this task, implement the authentication workflow with User and Admin actors interacting with Login System and Validate Credentials use cases.
 Emphasis & Caution: Ensure Validate Credentials is a mandatory prerequisite (include) before completing login. Send Email is a conditional extension triggered on success.
 Things to Avoid: Do not focus on UI positioning or visual layout. Avoid implementing frontend styling.
 
-WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
-- Missing labels: "Implement login with User. Validate credentials first. Avoid UI."
-- Single line: "Definition: ... (Emphasis) ... (Avoid) ..."
-- Repeated labels: "Emphasis & Caution: Emphasis & Caution: Ensure..."
-- Missing "implement": "Definition: In this task, the system should have login."
-"""
+CRITICAL RULES:
+- Each section on a separate line, no blank lines between them
+- Definition must start with "In this task, implement..."
+- Explicitly list actors and use cases from JSON data
+- Translate relationship types (include/extend/association) to business logic terms
+- Keep sections concise, use "-" if nothing specific
+- Output ONLY the three lines, no preamble or explanation"""
 
     @staticmethod
     def build_prompt(uml_json: Union[str, dict]) -> str:
@@ -143,14 +130,12 @@ WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
             raise TypeError("uml_json必须是str或dict类型")
 
         # 构建用户消息
-        user_message = f"""UML用例图结构化数据（JSON格式）：
+        user_message = f"""UML Use Case Diagram structured data (JSON format):
 ```json
 {json_str}
 ```
 
-{UMLInstructionTemplate.FORMAT_INSTRUCTIONS}
-
-请开始生成业务逻辑实现指令："""
+{UMLInstructionTemplate.FORMAT_INSTRUCTIONS}"""
 
         # 构建完整的Qwen格式prompt
         prompt = f"""<|im_start|>system
@@ -158,7 +143,7 @@ WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
 <|im_start|>user
 {user_message}<|im_end|>
 <|im_start|>assistant
-"""
+Definition:"""
 
         return prompt
 

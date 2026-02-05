@@ -34,40 +34,28 @@ Please output strictly in JSON format with no other content. Use ONLY English in
 
     # ==================== 指令生成阶段Prompt ====================
     # 系统提示词（定义角色和核心原则）
-    SYSTEM_PROMPT = """你是一个计算机视觉数据专家与众包任务设计者。请根据以下输入的图像分析结构化数据，编写一个适合众包工人使用的英文图像标注任务指令。
+    SYSTEM_PROMPT = """You are a computer vision data expert and crowdsourcing task designer. Based on the input image analysis data, write an English image annotation instruction for crowdsourcing workers.
 
-核心原则：
-1. 标注导向：指令必须明确要求工人进行 "Draw bounding boxes" (画边框)。
-2. 前景提取：从 objects 中提取主要的前景实体（如人、车）作为目标，忽略背景元素。
-3. 直接引用：直接使用 JSON 中的英文术语，不要进行同义词替换。
-4. 极致精简：Emphasis 和 Avoid 部分必须言简意赅。如果 JSON 中缺乏显著的视觉特征或干扰项，直接填 "-"。"""
+Core Principles:
+1. Annotation Focus: The instruction must explicitly require workers to "draw bounding boxes"
+2. Foreground Extraction: Extract main foreground objects (e.g., people, cars) as targets from the objects list, ignore background elements  
+3. Direct Reference: Use English terms directly from the JSON data, do not replace with synonyms
+4. Extreme Conciseness: Emphasis and Avoid sections must be brief. Use "-" if no significant visual features or distractors exist"""
 
     # 格式要求说明
-    FORMAT_INSTRUCTIONS = """OUTPUT FORMAT REQUIREMENTS (STRICTLY FOLLOW):
+    FORMAT_INSTRUCTIONS = """You must generate a three-part instruction in the following format:
 
-Definition: In this task, draw bounding boxes around [main annotation objects]
-Emphasis & Caution: [key visual features or annotation focus, use "-" if none]
-Things to Avoid: [confusing background elements, use "-" if none]
-
-FORMAT RULES:
-1. Each section MUST be on a separate line
-2. Each line MUST start with the corresponding label ("Definition:", "Emphasis & Caution:", "Things to Avoid:")
-3. Definition MUST start with "In this task, draw bounding boxes"
-4. Definition MUST explicitly list the objects to annotate
-5. NO blank lines between sections
-6. DO NOT repeat labels (e.g., "Emphasis & Caution: Emphasis & Caution:" is WRONG)
-
-CORRECT EXAMPLE:
+EXAMPLE:
 Definition: In this task, draw bounding boxes around all cars and traffic signs in the street scene.
 Emphasis & Caution: Focus on red traffic signs and vehicles in the foreground.
 Things to Avoid: Do not annotate buildings or background pedestrians.
 
-WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
-- Missing labels: "Draw boxes around cars. Focus on red signs. Avoid buildings."
-- Single line: "Definition: ... (Emphasis) ... (Avoid) ..."
-- Missing "draw bounding boxes": "Definition: In this task, identify all objects."
-- Repeated labels: "Things to Avoid: Things to Avoid: Do not..."
-"""
+CRITICAL RULES:
+- Each section on a separate line, no blank lines between them
+- Definition must start with "In this task, draw bounding boxes around..."
+- Explicitly list the objects to annotate from the JSON data
+- Keep Emphasis and Avoid sections concise, use "-" if nothing to emphasize/avoid
+- Output ONLY the three lines, no preamble or explanation"""
 
     @staticmethod
     def build_prompt(image_description: Union[str, dict]) -> str:
@@ -121,14 +109,12 @@ WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
             raise TypeError("image_description必须是str或dict类型")
 
         # 构建用户消息
-        user_message = f"""图像分析结构化数据（JSON格式）：
+        user_message = f"""Image analysis structured data (JSON format):
 ```json
 {json_str}
 ```
 
-{ImageInstructionTemplate.FORMAT_INSTRUCTIONS}
-
-请开始生成图像标注指令："""
+{ImageInstructionTemplate.FORMAT_INSTRUCTIONS}"""
 
         # 构建完整的Qwen格式prompt
         prompt = f"""<|im_start|>system
@@ -136,7 +122,7 @@ WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
 <|im_start|>user
 {user_message}<|im_end|>
 <|im_start|>assistant
-"""
+Definition:"""
 
         return prompt
 

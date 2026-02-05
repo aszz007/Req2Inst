@@ -265,10 +265,18 @@ class BaseExpert(ABC):
                 extracted_text = '\n'.join(extracted_lines)
                 # 检查Definition行是否有实际内容
                 def_content = extracted_lines[0].split(':', 1)[1].strip() if ':' in extracted_lines[0] else ''
-                if def_content and def_content != '-':
+
+                # 检查Definition内容是否包含重复的标签关键词
+                invalid_keywords = ['Definition:', 'Emphasis', 'Things to Avoid', 'Caution']
+                has_invalid_keyword = any(keyword in def_content for keyword in invalid_keywords)
+
+                if def_content and def_content != '-' and not has_invalid_keyword:
                     return extracted_text
                 else:
-                    logger.debug("提取的Definition内容为空，尝试智能分割")
+                    if has_invalid_keyword:
+                        logger.debug(f"检测到重复标签，Definition内容无效: {def_content}")
+                    else:
+                        logger.debug("提取的Definition内容为空，尝试智能分割")
                     # 继续执行智能分割逻辑
 
         # 如果没有找到标准标签，尝试智能分割
@@ -383,9 +391,25 @@ Things to Avoid: {avoid}"""
         for prefix in prefixes:
             if line.startswith(prefix):
                 content = line[len(prefix):].strip()
-                # 递归移除所有重复的标签前缀
-                while content.startswith(prefix):
-                    content = content[len(prefix):].strip()
+
+                # 强力递归移除所有重复的标签前缀（包括变体）
+                max_iterations = 5  # 防止无限循环
+                iteration = 0
+                while iteration < max_iterations:
+                    iteration += 1
+                    cleaned = False
+
+                    # 检查所有可能的前缀变体
+                    for check_prefix in prefixes:
+                        if content.startswith(check_prefix):
+                            content = content[len(check_prefix):].strip()
+                            cleaned = True
+                            break
+
+                    # 如果没有找到更多重复，退出
+                    if not cleaned:
+                        break
+
                 # 如果清理后内容为空或只有"-"，保持不变
                 if content and content != '-':
                     line = f"{prefix} {content}"

@@ -10,37 +10,27 @@ class TextInstructionTemplate:
     """文本需求 → 众包指令 的Prompt模板"""
 
     # 系统提示词（定义角色和核心原则）
-    SYSTEM_PROMPT = """你是一个众包任务设计专家。请根据以下输入的需求文本，编写一个适合众包工人使用的英文任务指令。
+    SYSTEM_PROMPT = """You are a crowdsourcing task design expert. Based on the input requirement text, write an English task instruction for crowdsourcing workers.
 
-核心原则：
-1. 极致精简：众包工人时间宝贵，请使用最简练的语言。
-2. 结构规范：严格按照下方定义的格式输出。
-3. 英语输出：无论输入是何种语言，输出必须是英文。"""
+Core Principles:
+1. Extreme Conciseness: Crowdsourcing workers value time. Use the most concise language.
+2. Structured Format: Strictly follow the format defined below.
+3. English Output: Output must be in English regardless of input language."""
 
     # 格式要求说明
-    FORMAT_INSTRUCTIONS = """OUTPUT FORMAT REQUIREMENTS (STRICTLY FOLLOW):
+    FORMAT_INSTRUCTIONS = """You must generate a three-part instruction in the following format:
 
-Definition: In this task, [main task objective in imperative sentence]
-Emphasis & Caution: [key precautions or mandatory conditions, use "-" if none]
-Things to Avoid: [explicitly prohibited operations, use "-" if none]
-
-FORMAT RULES:
-1. Each section MUST be on a separate line
-2. Each line MUST start with the corresponding label ("Definition:", "Emphasis & Caution:", "Things to Avoid:")
-3. Definition content MUST start with "In this task,"
-4. NO blank lines between sections
-5. DO NOT repeat labels (e.g., "Emphasis & Caution: Emphasis & Caution:" is WRONG)
-
-CORRECT EXAMPLE:
+EXAMPLE:
 Definition: In this task, verify the user login functionality with valid credentials.
 Emphasis & Caution: Ensure both username and password validation are tested.
 Things to Avoid: Do not skip error message verification.
 
-WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
-- Missing labels: "Test the login function. Check credentials. Avoid errors."
-- Single line: "Definition: ... (Emphasis) ... (Avoid) ..."
-- Repeated labels: "Emphasis & Caution: Emphasis & Caution: Ensure..."
-"""
+CRITICAL RULES:
+- Each section on a separate line, no blank lines between them
+- Definition must start with "In this task,"
+- Keep all sections concise
+- Use "-" if nothing specific to emphasize or avoid
+- Output ONLY the three lines, no preamble or explanation"""
 
     @staticmethod
     def build_prompt(low_requirement: str) -> str:
@@ -59,12 +49,10 @@ WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
             >>> # 传递给InstructionGenerator
         """
         # 构建用户消息
-        user_message = f"""需求文本：
+        user_message = f"""Requirement text:
 {low_requirement}
 
-{TextInstructionTemplate.FORMAT_INSTRUCTIONS}
-
-请开始生成指令："""
+{TextInstructionTemplate.FORMAT_INSTRUCTIONS}"""
 
         # 构建完整的Qwen格式prompt
         prompt = f"""<|im_start|>system
@@ -72,7 +60,7 @@ WRONG EXAMPLES (DO NOT OUTPUT LIKE THIS):
 <|im_start|>user
 {user_message}<|im_end|>
 <|im_start|>assistant
-"""
+Definition:"""
 
         return prompt
 
