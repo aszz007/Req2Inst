@@ -377,7 +377,20 @@ Things to Avoid: {avoid}"""
                 line = f"{prefix} {content}"
                 break
 
-        # 常见的垃圾模式（中文、问题等）
+        # 检测中文字符并截断
+        import re
+        chinese_match = re.search(r'[\u4e00-\u9fff]', line)
+        if chinese_match:
+            idx = chinese_match.start()
+            # 回溯到最近的句点，确保不破坏完整句子
+            truncate_pos = idx
+            for i in range(idx - 1, max(0, idx - 50), -1):
+                if line[i] in '.!?':
+                    truncate_pos = i + 1
+                    break
+            line = line[:truncate_pos].strip()
+
+        # 常见的垃圾模式
         unwanted_patterns = [
             '在不失准确性',
             '请对以下',

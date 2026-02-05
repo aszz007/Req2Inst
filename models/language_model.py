@@ -343,7 +343,22 @@ class LanguageModel:
         # 移除特殊标记
         text = text.replace('<|im_end|>', '').replace('<|im_start|>', '').strip()
 
-        # 如果文本中包含多个训练样本（通常以中文或问题开头），只保留第一个完整指令
+        # 检测中文字符并截断（使用Unicode范围）
+        import re
+
+        # 查找第一个中文字符的位置
+        chinese_match = re.search(r'[\u4e00-\u9fff]', text)
+        if chinese_match:
+            idx = chinese_match.start()
+            # 回溯到最近的句点或换行符，确保不破坏完整句子
+            truncate_pos = idx
+            for i in range(idx - 1, max(0, idx - 50), -1):
+                if text[i] in '.!?\n':
+                    truncate_pos = i + 1
+                    break
+            text = text[:truncate_pos].strip()
+
+        # 如果文本中包含多个训练样本（通常以特定模式开头），只保留第一个完整指令
         # 检测常见的训练数据模式
         unwanted_patterns = [
             '在不失准确性',
@@ -354,6 +369,9 @@ class LanguageModel:
             '总结',
             '翻译',
             '目的 观察',
+            '方法 ',
+            '结果 ',
+            '结论 ',
         ]
 
         for pattern in unwanted_patterns:
