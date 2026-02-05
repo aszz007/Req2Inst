@@ -211,6 +211,11 @@ class BaseExpert(ABC):
         """
         提取三段式指令，移除多余内容
 
+        增强功能：
+        1. 优先查找标准标签格式
+        2. 如果没有标签，尝试按句子智能分割
+        3. 自动添加缺失的标签
+
         Args:
             text: 原始生成文本
 
@@ -254,8 +259,96 @@ class BaseExpert(ABC):
                     extracted_lines.append(cleaned_line)
                 return '\n'.join(extracted_lines)
 
-        # 如果没有找到完整的三段式，返回原文（让后续validate_output捕获）
-        return text
+        # 如果没有找到标准标签，尝试智能分割
+        logger.debug("未找到标准三段式标签，尝试智能分割")
+        return self._smart_split_to_three_parts(text)
+
+    def _smart_split_to_three_parts(self, text: str) -> str:
+        """
+        智能分割无标签的内容为三段式格式
+
+        策略：
+        1. 查找"In this task"开头的句子作为Definition
+        2. 查找"Focus", "Ensure", "Pay attention"等关键词的句子作为Emphasis
+        3. 查找"Do not", "Avoid", "Never"等关键词的句子作为Things to Avoid
+
+        Args:
+            text: 原始文本
+
+        Returns:
+            str: 格式化的三段式指令
+        """
+        # 移除"Task Instructions:"等标题行
+        text = text.replace('Task Instructions:', '').strip()
+
+        # 按句子分割（支持. ! ?结尾）
+        import re
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+
+        definition = None
+        emphasis = None
+        avoid = None
+
+        for sentence in sentences:
+            sentence_lower = sentence.lower()
+
+            # 识别Definition（包含"In this task"或"draw bounding box"）
+            if not definition and ('in this task' in sentence_lower or
+                                  ('draw' in sentence_lower and 'box' in sentence_lower) or
+                                  ('annotate' in sentence_lower and 'this task' not in sentence_lower)):
+                # 确保以"In this task"开头
+                if not sentence.startswith('In this task'):
+                    sentence = 'In this task, ' + sentence[0].lower() + sentence[1:]
+                definition = sentence
+
+            # 识别Emphasis（包含"Focus", "Ensure", "Pay attention"等）
+            elif not emphasis and any(kw in sentence_lower for kw in
+                                     ['focus', 'ensure', 'pay attention', 'must', 'should',
+                                      'important', 'critical', 'key']):
+                emphasis = sentence
+
+            # 识别Things to Avoid（包含"Do not", "Avoid", "Never"等）
+            elif not avoid and any(kw in sentence_lower for kw in
+                                   ['do not', "don't", 'avoid', 'never', 'not', 'skip']):
+                avoid = sentence
+
+        # 如果有未分配的句子，智能分配
+        if len(sentences) >= 3:
+            if not definition:
+                definition = sentences[0]
+                if not definition.startswith('In this task'):
+                    definition = 'In this task, ' + definition[0].lower() + definition[1:]
+            if not emphasis:
+                emphasis = sentences[1] if len(sentences) > 1 else '-'
+            if not avoid:
+                avoid = sentences[2] if len(sentences) > 2 else '-'
+        elif len(sentences) == 2:
+            if not definition:
+                definition = sentences[0]
+            if not emphasis:
+                emphasis = sentences[1]
+            if not avoid:
+                avoid = '-'
+        elif len(sentences) == 1:
+            if not definition:
+                definition = sentences[0]
+            emphasis = '-'
+            avoid = '-'
+
+        # 确保都有值
+        definition = definition or 'In this task, complete the required task.'
+        emphasis = emphasis or '-'
+        avoid = avoid or '-'
+
+        # 组装三段式格式
+        formatted_instruction = f"""Definition: {definition}
+Emphasis & Caution: {emphasis}
+Things to Avoid: {avoid}"""
+
+        logger.debug(f"智能分割完成：\n{formatted_instruction}")
+
+        return formatted_instruction
 
     def _clean_instruction_line(self, line: str) -> str:
         """
