@@ -389,7 +389,7 @@ Things to Avoid: {avoid}"""
         """
         import re
 
-        # 首先移除重复的标签前缀
+        # 定义所有可能的标签前缀
         prefixes = [
             'Definition:',
             'Emphasis & Caution:',
@@ -423,25 +423,17 @@ Things to Avoid: {avoid}"""
 
                 # 清理完重复标签后，继续清理内容部分
                 if content and content != '-':
-                    # 1. 检测中文字符并截断
-                    chinese_match = re.search(r'[\u4e00-\u9fff]', content)
-                    if chinese_match:
-                        idx = chinese_match.start()
-                        # 回溯到最近的句点，确保不破坏完整句子
-                        truncate_pos = idx
-                        for i in range(idx - 1, max(0, idx - 50), -1):
-                            if content[i] in '.!?':
-                                truncate_pos = i + 1
-                                break
-                        content = content[:truncate_pos].strip()
-
-                    # 2. 检测垃圾文本模式并截断
+                    # 1. 优先检测并截断垃圾文本模式（在检测中文前）
+                    # 扩展的垃圾模式列表，特别针对训练数据泄露
                     unwanted_patterns = [
-                        r'\.is a (list|type|kind|form|way)',
-                        r'\.(it|this|that|these|those) (is|are|was|were)',
-                        r'\.the (purpose|goal|aim|objective)',
-                        r'\.(document|software|system|program|application) (management|is|are)',
-                        r'\.(in order|to ensure|for|with)',
+                        # 句号后的垃圾模式（最常见）
+                        r'\.is a (list|type|kind|form|way|computer program|software|document)',
+                        r'\.is (often used|used|a type|the|an)',
+                        r'\.(it|this|that|these|those) (is|are|was|were|can|could|will|would)',
+                        r'\.the (purpose|goal|aim|objective|main|primary|key)',
+                        r'\.(document|software|system|program|application|tool|platform) (management|is|are|can|allows)',
+                        r'\.(in order|to ensure|for|with|by|through)',
+                        # 中文模式
                         '在不失准确性',
                         '请对以下',
                         '这句话的',
@@ -455,22 +447,36 @@ Things to Avoid: {avoid}"""
                         '结论 ',
                     ]
 
+                    # 先检查句号后的垃圾模式
                     for pattern in unwanted_patterns:
                         if isinstance(pattern, str) and not pattern.startswith(r'\.'):
-                            # 普通字符串匹配
+                            # 普通字符串匹配（中文）
                             if pattern in content:
                                 idx = content.find(pattern)
                                 if idx > 0:
                                     content = content[:idx].strip()
                                     break
                         else:
-                            # 正则表达式匹配
+                            # 正则表达式匹配（英文垃圾模式）
                             match = re.search(pattern, content)
                             if match:
                                 idx = match.start()
                                 if idx > 0:
-                                    content = content[:idx].strip()
+                                    # 截断到句号位置（包含句号）
+                                    content = content[:idx + 1].strip()
                                     break
+
+                    # 2. 检测中文字符并截断
+                    chinese_match = re.search(r'[\u4e00-\u9fff]', content)
+                    if chinese_match:
+                        idx = chinese_match.start()
+                        # 回溯到最近的句点，确保不破坏完整句子
+                        truncate_pos = idx
+                        for i in range(idx - 1, max(0, idx - 50), -1):
+                            if content[i] in '.!?':
+                                truncate_pos = i + 1
+                                break
+                        content = content[:truncate_pos].strip()
 
                     # 3. 检查是否存在句子片段（以小写字母开头的句子片段）
                     # 通常是训练数据泄露的标志
