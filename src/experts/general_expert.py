@@ -12,7 +12,12 @@
 专家变体(3个):
   - general_expert_dataset_qwen25: 使用Qwen2.5数据集混合训练
   - general_expert_dataset_qwen3: 使用Qwen3数据集混合训练
-  - general_expert_dataset_qwen235B: 使用Qwen3-235B数据集混合训练(默认)
+  - general_expert_dataset_qwen235B: 使用Qwen235B数据集混合训练(默认)
+
+说明:
+  - 所有变体都基于Qwen-7B-Chat训练
+  - dataset_version指的是混合的UML数据集版本
+  - 混合数据: text(全部) + image(全部) + UML(不同版本)
 
 作者: Expert System
 日期: 2025-02-03
@@ -52,7 +57,7 @@ class GeneralExpert(BaseExpert):
 
         path_cfg = get_path_config()
 
-        # 构建专家名称
+        # 构建专家名称: general_expert_dataset_{version}
         dataset_suffix = dataset_version.replace(".", "")
         expert_name = f'general_expert_dataset_{dataset_suffix}'
 
@@ -67,7 +72,8 @@ class GeneralExpert(BaseExpert):
             expert_name=expert_name,
             base_model_path=str(path_cfg.QWEN_7B_CHAT_PATH),
             lora_path=lora_path,
-            use_4bit=use_4bit
+            use_4bit=use_4bit,
+            version=dataset_version
         )
 
         self.dataset_version = dataset_version

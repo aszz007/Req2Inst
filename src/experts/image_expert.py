@@ -3,15 +3,15 @@
 功能:
   - 处理图像描述JSON
   - 生成三段式图像标注众包指令
-  - 支持Qwen2.5-VL和Qwen3-VL两个版本
 
-环境要求: qwen_vision25 或 qwen_vision3
+环境要求: qwen_text
 模型: Qwen-7B-Chat(用于指令生成)
-训练数据: dataset/image/
+训练数据: dataset/image/image_dataset.csv (只有1个版本)
 
-专家变体:
-  - image_expert_qwen25: 使用Qwen2.5-VL数据集训练的LoRA
-  - image_expert_qwen3: 使用Qwen3-VL数据集训练的LoRA(默认)
+说明:
+  - Image Expert只有1个,因为图像数据集只有1个版本
+  - 基础模型是Qwen-7B-Chat,不是视觉模型
+  - 输入是JSON文本描述,不是图像
 
 作者: Expert System
 日期: 2025-02-03
@@ -33,24 +33,19 @@ class ImageExpert(BaseExpert):
     """图像专家 - 图像描述转图像标注指令"""
 
     def __init__(self,
-                 version: str = 'qwen3',
                  lora_path: Optional[str] = None,
                  use_4bit: bool = True):
         """
         初始化图像专家
 
         Args:
-            version: 模型版本('qwen2.5' 或 'qwen3'),默认'qwen3'
             lora_path: LoRA权重路径(None则使用默认配置)
             use_4bit: 是否使用4bit量化
         """
-        if version not in ['qwen2.5', 'qwen3']:
-            raise ValueError(f"不支持的版本: {version},请使用'qwen2.5'或'qwen3'")
-
         path_cfg = get_path_config()
 
-        # 构建专家名称
-        expert_name = f'image_expert_{version.replace(".", "")}'
+        # 图像专家固定名称
+        expert_name = 'image_expert'
 
         # 如果没有提供lora_path,使用配置中的路径
         if lora_path is None:
@@ -63,11 +58,10 @@ class ImageExpert(BaseExpert):
             expert_name=expert_name,
             base_model_path=str(path_cfg.QWEN_7B_CHAT_PATH),
             lora_path=lora_path,
-            use_4bit=use_4bit,
-            version=version
+            use_4bit=use_4bit
         )
 
-        logger.info(f"图像专家初始化完成 - 版本: {version}")
+        logger.info("图像专家初始化完成")
 
     def generate_instruction(self, input_data: Union[str, dict]) -> str:
         """
@@ -180,23 +174,15 @@ if __name__ == "__main__":
     print("图像专家测试")
     print("=" * 60)
 
-    print("\n测试1: 使用Qwen3版本")
-    print("-" * 60)
-    expert_qwen3 = ImageExpert(version='qwen3')
-    info = expert_qwen3.get_expert_info()
+    print("\n初始化图像专家...")
+    expert = ImageExpert()
+    info = expert.get_expert_info()
     print(f"专家名称: {info['expert_name']}")
-    print(f"版本: {info['version']}")
 
-    print("\n测试2: 使用Qwen2.5版本")
-    print("-" * 60)
-    expert_qwen25 = ImageExpert(version='qwen2.5')
-    info = expert_qwen25.get_expert_info()
-    print(f"专家名称: {info['expert_name']}")
-    print(f"版本: {info['version']}")
+    print("\n加载模型...")
+    if expert.load_model():
+        print("模型加载成功")
 
-    print("\n测试3: 生成指令")
-    print("-" * 60)
-    if expert_qwen3.load_model():
         test_data = {
             "description": "A busy urban street with cars and traffic signs",
             "details": {
@@ -206,16 +192,17 @@ if __name__ == "__main__":
             "confidence": 0.95
         }
 
-        instruction = expert_qwen3.generate_instruction(test_data)
+        print("\n测试生成指令:")
+        instruction = expert.generate_instruction(test_data)
         print("\n生成的指令:")
         print("-" * 60)
         print(instruction)
         print("-" * 60)
 
-        is_valid = expert_qwen3.validate_output(instruction)
+        is_valid = expert.validate_output(instruction)
         print(f"\n格式验证: {'通过' if is_valid else '失败'}")
 
-        expert_qwen3.unload_model()
+        expert.unload_model()
     else:
         print("模型加载失败")
 

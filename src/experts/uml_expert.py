@@ -3,15 +3,21 @@ UML专家 - 将UML用例图JSON转换为业务逻辑实现指令
 功能:
   - 处理UML用例图JSON数据
   - 生成三段式业务逻辑实现众包指令
-  - 支持Qwen2.5和Qwen3两个版本
+  - 支持3个数据集版本(不同视觉模型识别生成)
 
-环境要求: qwen_text (与Text专家共用环境)
+环境要求: qwen_text
 模型: Qwen-7B-Chat
-训练数据: dataset/uml/
+训练数据: dataset/uml/uml_dataset_{version}.csv
 
-专家变体:
-  - uml_expert_qwen25: 使用Qwen2.5数据集训练的LoRA
-  - uml_expert_qwen3: 使用Qwen3数据集训练的LoRA(默认)
+专家变体(3个):
+  - uml_expert_dataset_qwen25: 使用Qwen2.5-VL识别的数据集训练
+  - uml_expert_dataset_qwen3: 使用Qwen3-VL识别的数据集训练
+  - uml_expert_dataset_qwen235B: 使用Qwen235B云端API识别的数据集训练(默认)
+
+说明:
+  - 所有变体都基于Qwen-7B-Chat训练
+  - dataset_version指的是用哪个视觉模型识别的数据集
+  - 不同版本用于对比不同识别源的效果
 
 作者: Expert System
 日期: 2025-02-03
@@ -33,24 +39,25 @@ class UMLExpert(BaseExpert):
     """UML专家 - UML用例图JSON转业务逻辑实现指令"""
 
     def __init__(self,
-                 version: str = 'qwen3',
+                 dataset_version: str = 'qwen235B',
                  lora_path: Optional[str] = None,
                  use_4bit: bool = True):
         """
         初始化UML专家
 
         Args:
-            version: 模型版本('qwen2.5' 或 'qwen3'),默认'qwen3'
+            dataset_version: 数据集版本('qwen2.5', 'qwen3', 'qwen235B'),默认'qwen235B'
             lora_path: LoRA权重路径(None则使用默认配置)
             use_4bit: 是否使用4bit量化
         """
-        if version not in ['qwen2.5', 'qwen3']:
-            raise ValueError(f"不支持的版本: {version},请使用'qwen2.5'或'qwen3'")
+        if dataset_version not in ['qwen2.5', 'qwen3', 'qwen235B']:
+            raise ValueError(f"不支持的数据集版本: {dataset_version},请使用'qwen2.5', 'qwen3'或'qwen235B'")
 
         path_cfg = get_path_config()
 
-        # 构建专家名称
-        expert_name = f'uml_expert_{version.replace(".", "")}'
+        # 构建专家名称: uml_expert_dataset_{version}
+        dataset_suffix = dataset_version.replace(".", "")
+        expert_name = f'uml_expert_dataset_{dataset_suffix}'
 
         # 如果没有提供lora_path,使用配置中的路径
         if lora_path is None:
@@ -64,10 +71,12 @@ class UMLExpert(BaseExpert):
             base_model_path=str(path_cfg.QWEN_7B_CHAT_PATH),
             lora_path=lora_path,
             use_4bit=use_4bit,
-            version=version
+            version=dataset_version
         )
 
-        logger.info(f"UML专家初始化完成 - 版本: {version}")
+        self.dataset_version = dataset_version
+
+        logger.info(f"UML专家初始化完成 - 数据集版本: {dataset_version}")
 
     def generate_instruction(self, input_data: Union[str, dict]) -> str:
         """
@@ -182,29 +191,47 @@ Things to Avoid: Do not focus on UI positioning or visual layout. Avoid implemen
 
         return fallback_instruction
 
+    def get_expert_info(self) -> dict:
+        """
+        获取专家信息(重写以包含dataset_version)
+
+        Returns:
+            dict: 专家信息
+        """
+        info = super().get_expert_info()
+        info['dataset_version'] = self.dataset_version
+        return info
+
 
 if __name__ == "__main__":
     print("=" * 60)
     print("UML专家测试")
     print("=" * 60)
 
-    print("\n测试1: 使用Qwen3版本")
+    print("\n测试1: 使用Qwen235B数据集(默认)")
     print("-" * 60)
-    expert_qwen3 = UMLExpert(version='qwen3')
+    expert_qwen235B = UMLExpert(dataset_version='qwen235B')
+    info = expert_qwen235B.get_expert_info()
+    print(f"专家名称: {info['expert_name']}")
+    print(f"数据集版本: {info['dataset_version']}")
+
+    print("\n测试2: 使用Qwen3数据集")
+    print("-" * 60)
+    expert_qwen3 = UMLExpert(dataset_version='qwen3')
     info = expert_qwen3.get_expert_info()
     print(f"专家名称: {info['expert_name']}")
-    print(f"版本: {info['version']}")
+    print(f"数据集版本: {info['dataset_version']}")
 
-    print("\n测试2: 使用Qwen2.5版本")
+    print("\n测试3: 使用Qwen2.5数据集")
     print("-" * 60)
-    expert_qwen25 = UMLExpert(version='qwen2.5')
+    expert_qwen25 = UMLExpert(dataset_version='qwen2.5')
     info = expert_qwen25.get_expert_info()
     print(f"专家名称: {info['expert_name']}")
-    print(f"版本: {info['version']}")
+    print(f"数据集版本: {info['dataset_version']}")
 
-    print("\n测试3: 生成指令")
+    print("\n测试4: 生成指令")
     print("-" * 60)
-    if expert_qwen3.load_model():
+    if expert_qwen235B.load_model():
         test_data = {
             "actors": [
                 {"name": "User", "position": "left"},
@@ -237,16 +264,16 @@ if __name__ == "__main__":
             ]
         }
 
-        instruction = expert_qwen3.generate_instruction(test_data)
+        instruction = expert_qwen235B.generate_instruction(test_data)
         print("\n生成的指令:")
         print("-" * 60)
         print(instruction)
         print("-" * 60)
 
-        is_valid = expert_qwen3.validate_output(instruction)
+        is_valid = expert_qwen235B.validate_output(instruction)
         print(f"\n格式验证: {'通过' if is_valid else '失败'}")
 
-        expert_qwen3.unload_model()
+        expert_qwen235B.unload_model()
     else:
         print("模型加载失败")
 
