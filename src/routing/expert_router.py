@@ -50,8 +50,8 @@ class ExpertRouter:
 
     DEFAULT_EXPERTS = {
         'text': 'text_expert',
-        'image': 'image_expert_qwen3',
-        'uml': 'uml_expert_qwen3_dataset_qwen235B',
+        'image': 'image_expert',
+        'uml': 'uml_expert_dataset_qwen235B',
         'general': 'general_expert_dataset_qwen235B'
     }
 
@@ -70,11 +70,13 @@ class ExpertRouter:
         """
         构建专家注册表
 
-        包含12个专家变体:
+        包含8个专家变体（符合框架文档）:
         - text_expert: 1个
-        - image_expert: 2个变体
-        - uml_expert: 6个变体(2个模型版本 × 3个数据集)
-        - general_expert: 3个变体(3个数据集)
+        - image_expert: 1个（数据集只有1个版本）
+        - uml_expert: 3个变体（3个数据集版本：qwen25/qwen3/qwen235B）
+        - general_expert: 3个变体（3个数据集版本：qwen25/qwen3/qwen235B）
+
+        重要：所有Expert都基于Qwen-7B-Chat训练，在qwen_text环境执行
         """
         registry = {
             'text': [],
@@ -83,6 +85,7 @@ class ExpertRouter:
             'general': []
         }
 
+        # Text Expert: 1个
         registry['text'].append(ExpertConfig(
             name='text_expert',
             expert_type='text',
@@ -92,30 +95,31 @@ class ExpertRouter:
             is_default=True
         ))
 
-        for version in ['qwen2.5', 'qwen3']:
-            registry['image'].append(ExpertConfig(
-                name=f'image_expert_{version}',
-                expert_type='image',
-                model_version=version,
-                dataset_variant=None,
-                path=str(self.lora_weights_dir / f'image_expert_{version}'),
-                is_default=(version == 'qwen3')
+        # Image Expert: 1个（数据集只有1个版本）
+        registry['image'].append(ExpertConfig(
+            name='image_expert',
+            expert_type='image',
+            model_version='qwen-7b',
+            dataset_variant=None,
+            path=str(self.lora_weights_dir / 'image_expert'),
+            is_default=True
+        ))
+
+        # UML Expert: 3个变体（基于不同视觉模型识别的数据集）
+        for dataset in ['qwen25', 'qwen3', 'qwen235B']:
+            expert_name = f'uml_expert_dataset_{dataset}'
+            is_default = (expert_name == self.DEFAULT_EXPERTS['uml'])
+            registry['uml'].append(ExpertConfig(
+                name=expert_name,
+                expert_type='uml',
+                model_version='qwen-7b',
+                dataset_variant=dataset,
+                path=str(self.lora_weights_dir / expert_name),
+                is_default=is_default
             ))
 
-        for model_version in ['qwen2.5', 'qwen3']:
-            for dataset in ['qwen2.5', 'qwen3', 'qwen235B']:
-                expert_name = f'uml_expert_{model_version}_dataset_{dataset}'
-                is_default = (expert_name == self.DEFAULT_EXPERTS['uml'])
-                registry['uml'].append(ExpertConfig(
-                    name=expert_name,
-                    expert_type='uml',
-                    model_version=model_version,
-                    dataset_variant=dataset,
-                    path=str(self.lora_weights_dir / expert_name),
-                    is_default=is_default
-                ))
-
-        for dataset in ['qwen2.5', 'qwen3', 'qwen235B']:
+        # General Expert: 3个变体（基于不同视觉模型识别的数据集）
+        for dataset in ['qwen25', 'qwen3', 'qwen235B']:
             expert_name = f'general_expert_dataset_{dataset}'
             is_default = (expert_name == self.DEFAULT_EXPERTS['general'])
             registry['general'].append(ExpertConfig(

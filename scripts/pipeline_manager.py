@@ -152,6 +152,9 @@ class Pipeline:
         ))
 
         # ==================== 阶段3: LoRA训练 ====================
+        # 重要：所有Expert训练都必须在qwen_text环境执行
+        # 原因：所有Expert都基于Qwen-7B-Chat训练，处理的是文本输入
+
         stages.append(PipelineStage(
             name='train_text_expert',
             script='scripts/training/train_text_expert.py',
@@ -159,27 +162,30 @@ class Pipeline:
             description='训练文本专家'
         ))
 
+        # Image Expert: 只有1个版本（数据集只有1个版本）
         stages.append(PipelineStage(
-            name=f'train_image_expert_{self.version}',
+            name='train_image_expert',
             script='scripts/training/train_image_expert.py',
-            env=vision_env,
-            args=['--version', self.version],
-            description=f'训练图像专家 ({self.version})'
+            env='text',  # 必须在text环境训练
+            description='训练图像专家'
         ))
 
+        # UML Expert: 有3个版本（根据不同视觉模型识别的数据集）
         stages.append(PipelineStage(
-            name=f'train_uml_expert_{self.version}',
+            name=f'train_uml_expert_dataset_{self.version}',
             script='scripts/training/train_uml_expert.py',
-            env=vision_env,
-            args=['--version', self.version],
-            description=f'训练UML专家 ({self.version})'
+            env='text',  # 必须在text环境训练
+            args=['--dataset', self.version],  # 指定数据集版本
+            description=f'训练UML专家 (dataset: {self.version})'
         ))
 
+        # General Expert: 有3个版本（根据不同视觉模型识别的数据集）
         stages.append(PipelineStage(
-            name='train_general_expert',
+            name=f'train_general_expert_dataset_{self.version}',
             script='scripts/training/train_general_expert.py',
-            env='text',
-            description='训练通用专家'
+            env='text',  # 必须在text环境训练
+            args=['--dataset', self.version],  # 指定数据集版本
+            description=f'训练通用专家 (dataset: {self.version})'
         ))
 
         # ==================== 阶段4: 评估 ====================
@@ -199,9 +205,9 @@ class Pipeline:
             'dataset': ['build_dataset_image', 'build_dataset_uml'],
             'training': [
                 'train_text_expert',
-                f'train_image_expert_{self.version}',
-                f'train_uml_expert_{self.version}',
-                'train_general_expert'
+                'train_image_expert',
+                f'train_uml_expert_dataset_{self.version}',
+                f'train_general_expert_dataset_{self.version}'
             ],
             'evaluation': ['evaluate_experts']
         }
