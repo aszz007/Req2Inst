@@ -47,9 +47,9 @@ Core Principles:
     FORMAT_INSTRUCTIONS = """You must generate a three-part instruction in the following format:
 
 EXAMPLE OUTPUT (copy this exact structure):
-Definition: In this task, draw bounding boxes around all cars and traffic signs in the street scene.
-Emphasis & Caution: Focus on red traffic signs and vehicles in the foreground.
-Things to Avoid: Do not annotate buildings or background pedestrians.
+Definition: In this task, draw bounding boxes around [list the specific objects from the image].
+Emphasis & Caution: [visual features to focus on or annotation guidelines].
+Things to Avoid: [elements not to annotate or common annotation mistakes].
 
 CRITICAL RULES:
 - Output MUST start with "Definition:" (include the label)

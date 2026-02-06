@@ -90,10 +90,10 @@ class TextExpert(BaseExpert):
             instruction = self._generate_with_model(
                 prompt=prompt,
                 max_new_tokens=2048,
-                temperature=0.4,  # 平衡稳定性和多样性,适合长指令生成
-                top_p=0.85,       # 稍微降低top_p以减少随机性
-                top_k=40,         # 降低top_k以提高确定性
-                repetition_penalty=1.1
+                temperature=0.7,  # 高多样性,适合处理多样化的文本需求
+                top_p=0.9,       # 提高采样范围
+                top_k=50,        # 提高候选词数量
+                repetition_penalty=1.2  # 惩罚重复
             )
 
             # 输出模型原始输出用于调试

@@ -110,9 +110,21 @@ class GeneralExpert(BaseExpert):
                 return ""
 
         try:
+            # 调试输出：显示原始输入
+            logger.info("=" * 80)
+            logger.info("[调试] 原始输入数据:")
+            logger.info("-" * 80)
+            if isinstance(input_data, dict):
+                logger.info(f"输入类型: dict")
+                logger.info(f"输入内容（前500字符）: {str(input_data)[:500]}")
+            else:
+                logger.info(f"输入类型: {type(input_data).__name__}")
+                logger.info(f"输入内容（前500字符）: {str(input_data)[:500]}")
+            logger.info("=" * 80)
+
             # 自动识别输入类型
             input_type = self._detect_input_type(input_data)
-            logger.debug(f"识别输入类型: {input_type}")
+            logger.info(f"[调试] 识别输入类型: {input_type}")
 
             # 根据类型选择合适的模板
             if input_type == 'text':
@@ -129,10 +141,10 @@ class GeneralExpert(BaseExpert):
             instruction = self._generate_with_model(
                 prompt=prompt,
                 max_new_tokens=2048,
-                temperature=0.4,  # 平衡稳定性和多样性,适合长指令生成
-                top_p=0.85,       # 稍微降低top_p以减少随机性
-                top_k=40,         # 降低top_k以提高确定性
-                repetition_penalty=1.1
+                temperature=0.7,  # 提高temperature以增加多样性
+                top_p=0.9,       # 提高top_p
+                top_k=50,        # 提高top_k
+                repetition_penalty=1.2  # 提高重复惩罚
             )
 
             # 输出模型原始输出用于调试
@@ -153,6 +165,8 @@ class GeneralExpert(BaseExpert):
 
         except Exception as e:
             logger.error(f"指令生成失败: {e}")
+            import traceback
+            logger.error(f"异常详情: {traceback.format_exc()}")
             return ""
 
     def _detect_input_type(self, input_data: Union[str, dict]) -> str:

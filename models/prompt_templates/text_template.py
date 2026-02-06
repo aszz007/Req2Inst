@@ -22,9 +22,9 @@ Core Principles:
     FORMAT_INSTRUCTIONS = """You must generate a three-part instruction in the following format:
 
 EXAMPLE OUTPUT (copy this exact structure):
-Definition: In this task, verify the user login functionality with valid credentials.
-Emphasis & Caution: Ensure both username and password validation are tested.
-Things to Avoid: Do not skip error message verification.
+Definition: In this task, [describe the specific task based on the requirement].
+Emphasis & Caution: [key points to focus on or important precautions].
+Things to Avoid: [things that should not be done or common mistakes to avoid].
 
 CRITICAL RULES:
 - Output MUST start with "Definition:" (include the label)

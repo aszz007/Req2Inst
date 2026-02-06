@@ -76,9 +76,9 @@ Core Principles:
     FORMAT_INSTRUCTIONS = """You must generate a three-part instruction in the following format:
 
 EXAMPLE OUTPUT (copy this exact structure):
-Definition: In this task, implement the authentication workflow with User and Admin actors interacting with Login System and Validate Credentials use cases.
-Emphasis & Caution: Ensure Validate Credentials is a mandatory prerequisite (include) before completing login. Send Email is a conditional extension triggered on success.
-Things to Avoid: Do not focus on UI positioning or visual layout. Avoid implementing frontend styling.
+Definition: In this task, implement [describe the workflow with specific actors and use cases from the UML].
+Emphasis & Caution: [mandatory steps, conditional flows, or relationship semantics to implement].
+Things to Avoid: [what not to focus on, such as UI details or visual elements].
 
 CRITICAL RULES:
 - Output MUST start with "Definition:" (include the label)

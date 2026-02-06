@@ -187,6 +187,14 @@ class BaseExpert(ABC):
             return ""
 
         try:
+            # 调试输出：显示完整的prompt
+            logger.info("=" * 80)
+            logger.info("[调试] 完整Prompt内容:")
+            logger.info("-" * 80)
+            logger.info(prompt)
+            logger.info("=" * 80)
+            logger.info(f"[调试] 生成参数: temp={temperature}, top_p={top_p}, top_k={top_k}, rep_penalty={repetition_penalty}")
+
             generated_text = self.model.generate(
                 prompt=prompt,
                 max_new_tokens=max_new_tokens,
@@ -197,19 +205,19 @@ class BaseExpert(ABC):
             )
 
             # 调试日志：显示原始生成内容
-            logger.debug(f"原始生成内容长度: {len(generated_text)} 字符")
-            logger.debug(f"原始生成内容（前500字符）：\n{generated_text[:500]}")
+            logger.info(f"[调试] 原始生成内容长度: {len(generated_text)} 字符")
+            logger.info(f"[调试] 原始生成内容（前500字符）：\n{generated_text[:500]}")
             if len(generated_text) > 500:
-                logger.debug(f"原始生成内容（后200字符）：\n{generated_text[-200:]}")
+                logger.info(f"[调试] 原始生成内容（后200字符）：\n{generated_text[-200:]}")
 
             # 提取三段式指令（移除多余内容）
             extracted_text = self._extract_three_part_instruction(generated_text)
 
             # 调试日志：显示提取后内容
             if extracted_text != generated_text:
-                logger.debug(f"提取后内容：\n{extracted_text}")
+                logger.info(f"[调试] 提取后内容：\n{extracted_text}")
             else:
-                logger.debug("未找到标准三段式格式，返回原始内容")
+                logger.info("[调试] 未找到标准三段式格式，返回原始内容")
 
             return extracted_text
 
@@ -232,11 +240,11 @@ class BaseExpert(ABC):
         Returns:
             str: 提取的三段式指令
         """
-        logger.info("=" * 80)
-        logger.info("[提取开始] 原始生成文本:")
-        logger.info("-" * 80)
-        logger.info(text)
-        logger.info("=" * 80)
+        # logger.info("=" * 80)
+        # logger.info("[提取开始] 原始生成文本:")
+        # logger.info("-" * 80)
+        # logger.info(text)
+        # logger.info("=" * 80)
 
         if not text:
             logger.warning("[提取结束] 输入文本为空")
@@ -244,11 +252,11 @@ class BaseExpert(ABC):
 
         # 按行分割
         lines = text.split('\n')
-        logger.info(f"[提取] 分割为 {len(lines)} 行")
+        # logger.info(f"[提取] 分割为 {len(lines)} 行")
 
         # 显示所有行（用于调试）
-        for i, line in enumerate(lines):
-            logger.info(f"[提取] 行{i}: {line[:100]}")
+        # for i, line in enumerate(lines):
+        #     logger.info(f"[提取] 行{i}: {line[:100]}")
 
         # 查找三段式指令的三个部分
         definition_line = None
@@ -263,30 +271,30 @@ class BaseExpert(ABC):
             # 检查每一行是否是三段式的开头
             if line_stripped.startswith('Definition:'):
                 definition_line = i
-                logger.info(f"[提取] 找到Definition在行{i}")
+                # logger.info(f"[提取] 找到Definition在行{i}")
             elif line_stripped.startswith('Emphasis & Caution:') or line_stripped.startswith('Emphasis and Caution:'):
                 emphasis_line = i
-                logger.info(f"[提取] 找到Emphasis在行{i}")
+                # logger.info(f"[提取] 找到Emphasis在行{i}")
             elif line_stripped.startswith('Things to Avoid:'):
                 avoid_line = i
-                logger.info(f"[提取] 找到Things to Avoid在行{i}")
+                # logger.info(f"[提取] 找到Things to Avoid在行{i}")
 
-        logger.info(f"[提取] 找到的行号 - Definition: {definition_line}, Emphasis: {emphasis_line}, Avoid: {avoid_line}")
+        # logger.info(f"[提取] 找到的行号 - Definition: {definition_line}, Emphasis: {emphasis_line}, Avoid: {avoid_line}")
 
         # 如果找到完整的三段式，只保留这三行
         if definition_line is not None and emphasis_line is not None and avoid_line is not None:
-            logger.info("[提取] 找到完整的三段式标签")
+            # logger.info("[提取] 找到完整的三段式标签")
             # 确保行号顺序正确
             if definition_line < emphasis_line < avoid_line:
-                logger.info("[提取] 行号顺序正确，开始清理每一行")
+                # logger.info("[提取] 行号顺序正确，开始清理每一行")
                 # 提取三行，并清理每行的尾部多余内容
                 extracted_lines = []
                 for idx, line_idx in enumerate([definition_line, emphasis_line, avoid_line]):
                     line = lines[line_idx].strip()
-                    logger.info(f"[提取] 清理第{idx+1}行: {line}")
+                    # logger.info(f"[提取] 清理第{idx+1}行: {line}")
                     # 如果行中包含中文或其他垃圾内容，截断
                     cleaned_line = self._clean_instruction_line(line)
-                    logger.info(f"[提取] 清理后第{idx+1}行: {cleaned_line}")
+                    # logger.info(f"[提取] 清理后第{idx+1}行: {cleaned_line}")
                     extracted_lines.append(cleaned_line)
 
                 # 检查提取的内容是否有效（不全是"-"）
@@ -303,12 +311,12 @@ class BaseExpert(ABC):
                     extracted_lines = self._ensure_definition_format(extracted_lines)
                     extracted_text = '\n'.join(extracted_lines)
 
-                    logger.info("[提取结束] 成功提取三段式指令")
-                    logger.info("=" * 80)
-                    logger.info("[提取结果]")
-                    logger.info("-" * 80)
-                    logger.info(extracted_text)
-                    logger.info("=" * 80)
+                    # logger.info("[提取结束] 成功提取三段式指令")
+                    # logger.info("=" * 80)
+                    # logger.info("[提取结果]")
+                    # logger.info("-" * 80)
+                    # logger.info(extracted_text)
+                    # logger.info("=" * 80)
                     return extracted_text
                 else:
                     if has_invalid_keyword:
@@ -322,7 +330,7 @@ class BaseExpert(ABC):
             logger.warning("[提取] 未找到完整的三段式标签")
 
         # 如果没有找到标准标签，尝试智能分割
-        logger.info("[提取] 尝试智能分割")
+        # logger.info("[提取] 尝试智能分割")
         return self._smart_split_to_three_parts(text)
 
     def _smart_split_to_three_parts(self, text: str) -> str:
@@ -426,7 +434,7 @@ Things to Avoid: {avoid}"""
         """
         import re
 
-        logger.info(f"[清理前] {line}")
+        # logger.info(f"[清理前] {line}")
 
         # 定义所有可能的标签前缀
         prefixes = [
@@ -445,12 +453,12 @@ Things to Avoid: {avoid}"""
 
         if current_prefix is None:
             # 没有找到标签,返回原始行
-            logger.info("[清理] 未找到标签前缀,返回原始行")
+            # logger.info("[清理] 未找到标签前缀,返回原始行")
             return line
 
         # 提取内容部分
         content = line[len(current_prefix):].strip()
-        logger.info(f"[步骤0] 提取内容: {content[:min(100, len(content))]}...")
+        # logger.info(f"[步骤0] 提取内容: {content[:min(100, len(content))]}...")
 
         # === 步骤1: 强力移除所有重复标签 ===
         # 递归移除直到没有任何标签前缀
@@ -462,17 +470,17 @@ Things to Avoid: {avoid}"""
                 if content.startswith(check_prefix):
                     content = content[len(check_prefix):].strip()
                     found_duplicate = True
-                    logger.info(f"[步骤1.{iteration}] 移除重复标签: {check_prefix}")
+                    # logger.info(f"[步骤1.{iteration}] 移除重复标签: {check_prefix}")
                     break
             if not found_duplicate:
                 break
 
-        if content != original_content:
-            logger.info(f"[步骤1完成] 移除重复标签后: {content[:min(100, len(content))]}...")
+        # if content != original_content:
+        #     logger.info(f"[步骤1完成] 移除重复标签后: {content[:min(100, len(content))]}...")
 
         # 如果内容为空或只是占位符,直接返回
         if not content or content == '-':
-            logger.info("[步骤1] 内容为空,返回占位符")
+            # logger.info("[步骤1] 内容为空,返回占位符")
             return f"{current_prefix} -"
 
         # === 步骤2: 检测并截断句号后的垃圾模式 ===
@@ -499,11 +507,11 @@ Things to Avoid: {avoid}"""
                 # 找到垃圾模式,截断到句号位置(保留句号)
                 idx = match.start()
                 content = content[:idx + 1].strip()
-                logger.info(f"[步骤2] 检测到垃圾模式: {pattern}, 截断到位置{idx}")
+                # logger.info(f"[步骤2] 检测到垃圾模式: {pattern}, 截断到位置{idx}")
                 break
 
-        if content != original_content:
-            logger.info(f"[步骤2完成] 截断垃圾内容后: {content}")
+        # if content != original_content:
+        #     logger.info(f"[步骤2完成] 截断垃圾内容后: {content}")
 
         # === 步骤3: 检测中文字符并截断 ===
         chinese_match = re.search(r'[\u4e00-\u9fff]', content)
@@ -516,7 +524,7 @@ Things to Avoid: {avoid}"""
                     truncate_pos = i + 1
                     break
             content = content[:truncate_pos].strip()
-            logger.info(f"[步骤3] 检测到中文字符,截断到位置{truncate_pos}")
+            # logger.info(f"[步骤3] 检测到中文字符,截断到位置{truncate_pos}")
 
         # === 步骤4: 移除以小写字母开头的句子片段 ===
         # 通常这些是训练数据泄露
@@ -527,16 +535,16 @@ Things to Avoid: {avoid}"""
             if last_sentence and len(last_sentence) > 0 and last_sentence[0].islower():
                 # 最后一个句子以小写开头,很可能是垃圾,移除它
                 content = ' '.join(sentences[:-1]).strip()
-                logger.info(f"[步骤4] 移除小写开头的尾部句子: {last_sentence[:min(50, len(last_sentence))]}")
+                # logger.info(f"[步骤4] 移除小写开头的尾部句子: {last_sentence[:min(50, len(last_sentence))]}")
 
         # === 步骤5: 确保以句号结尾 ===
         if content and not content.endswith(('.', '!', '?', '-')):
             content += '.'
-            logger.info("[步骤5] 添加结尾句号")
+            # logger.info("[步骤5] 添加结尾句号")
 
         # 重新组装清理后的行
         cleaned_line = f"{current_prefix} {content}"
-        logger.info(f"[清理后] {cleaned_line}")
+        # logger.info(f"[清理后] {cleaned_line}")
 
         return cleaned_line
 
@@ -568,7 +576,7 @@ Things to Avoid: {avoid}"""
 
         # 检查是否已经以"In this task,"开头
         if content.lower().startswith('in this task,'):
-            logger.info("[格式检查] Definition已包含'In this task,'前缀")
+            # logger.info("[格式检查] Definition已包含'In this task,'前缀")
             return lines
 
         # 如果不是，添加前缀
@@ -578,9 +586,9 @@ Things to Avoid: {avoid}"""
 
         # 重新组装
         new_definition = f"Definition: In this task, {content}"
-        logger.info(f"[格式修正] Definition添加'In this task,'前缀")
-        logger.info(f"[格式修正] 修正前: {definition_line}")
-        logger.info(f"[格式修正] 修正后: {new_definition}")
+        # logger.info(f"[格式修正] Definition添加'In this task,'前缀")
+        # logger.info(f"[格式修正] 修正前: {definition_line}")
+        # logger.info(f"[格式修正] 修正后: {new_definition}")
 
         # 替换第一行
         lines[0] = new_definition

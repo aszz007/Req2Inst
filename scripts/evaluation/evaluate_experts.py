@@ -59,10 +59,36 @@ class ExpertEvaluator:
         self.metrics = EnhancedMetrics(use_bertscore=use_bertscore)
         self.validator = QualityValidator(strict_mode=strict_validation)
         self.path_cfg = get_path_config()
+        self.show_samples = False  # 是否显示样本数据
 
         logger.info("专家评估器初始化完成")
         logger.info(f"使用BERTScore: {use_bertscore}")
         logger.info(f"严格验证模式: {strict_validation}")
+
+    def _display_samples(self, test_data: List[Dict], expert_type: str, num_display: int = 5):
+        """
+        显示测试数据样本
+
+        Args:
+            test_data: 测试数据列表
+            expert_type: 专家类型(用于日志)
+            num_display: 显示的样本数量
+        """
+        if not self.show_samples:
+            return
+
+        logger.info("=" * 80)
+        logger.info(f"[{expert_type}] 测试数据样本预览 (前{num_display}条)")
+        logger.info("=" * 80)
+
+        for i in range(min(num_display, len(test_data))):
+            input_text = test_data[i]['input']
+            # 截断过长的输入
+            if len(input_text) > 100:
+                input_text = input_text[:100] + "..."
+            logger.info(f"样本 {i+1}: {input_text}")
+
+        logger.info("=" * 80)
 
     def evaluate_text_expert(
             self,
@@ -90,6 +116,9 @@ class ExpertEvaluator:
             test_data = test_data[:num_samples]
 
         logger.info(f"测试样本数: {len(test_data)}")
+
+        # 显示样本数据
+        self._display_samples(test_data, "Text Expert")
 
         # 加载专家
         expert = TextExpert()
@@ -144,13 +173,16 @@ class ExpertEvaluator:
 
         # 加载数据集
         loader = ImageDatasetLoader()
-        data = loader.load_dataset()
+        data = loader.load_csv_file()
         _, _, test_data = split_dataset_for_expert(data, 'image')
 
         if num_samples:
             test_data = test_data[:num_samples]
 
         logger.info(f"测试样本数: {len(test_data)}")
+
+        # 显示样本数据
+        self._display_samples(test_data, "Image Expert")
 
         # 加载专家
         expert = ImageExpert()
@@ -207,13 +239,16 @@ class ExpertEvaluator:
 
         # 加载数据集
         loader = UMLDatasetLoader(dataset_version=dataset_version)
-        data = loader.load_dataset()
+        data = loader.load_csv_file()
         _, _, test_data = split_dataset_for_expert(data, 'uml')
 
         if num_samples:
             test_data = test_data[:num_samples]
 
         logger.info(f"测试样本数: {len(test_data)}")
+
+        # 显示样本数据
+        self._display_samples(test_data, f"UML Expert ({dataset_version})")
 
         # 加载专家
         expert = UMLExpert(dataset_version=dataset_version)
@@ -268,15 +303,39 @@ class ExpertEvaluator:
         logger.info(f"评估通用专家 - 数据集版本: {dataset_version}")
         logger.info("=" * 80)
 
-        # 通用专家使用混合数据集,这里简化为使用文本数据集
-        loader = TextDatasetLoader()
-        data = loader.load_csv_files()
-        _, _, test_data = split_dataset_for_expert(data, 'text')
+        # 加载三种数据集: text + image + uml
+        # 1. 加载文本数据集
+        logger.info("加载文本数据集...")
+        text_loader = TextDatasetLoader()
+        text_data = text_loader.load_csv_files()
+        _, _, text_test = split_dataset_for_expert(text_data, 'text')
+        logger.info(f"文本数据集测试集: {len(text_test)}条")
+
+        # 2. 加载图像数据集
+        logger.info("加载图像数据集...")
+        image_loader = ImageDatasetLoader()
+        image_data = image_loader.load_csv_file()
+        _, _, image_test = split_dataset_for_expert(image_data, 'image')
+        logger.info(f"图像数据集测试集: {len(image_test)}条")
+
+        # 3. 加载对应版本的UML数据集
+        logger.info(f"加载UML数据集 (版本: {dataset_version})...")
+        uml_loader = UMLDatasetLoader(dataset_version=dataset_version)
+        uml_data = uml_loader.load_csv_file()
+        _, _, uml_test = split_dataset_for_expert(uml_data, 'uml')
+        logger.info(f"UML数据集测试集: {len(uml_test)}条")
+
+        # 4. 合并三种数据集的测试集
+        test_data = text_test + image_test + uml_test
+        logger.info(f"合并后总测试集: {len(test_data)}条 (Text: {len(text_test)} + Image: {len(image_test)} + UML: {len(uml_test)})")
 
         if num_samples:
             test_data = test_data[:num_samples]
 
-        logger.info(f"测试样本数: {len(test_data)}")
+        logger.info(f"实际使用测试样本数: {len(test_data)}")
+
+        # 显示样本数据
+        self._display_samples(test_data, f"General Expert ({dataset_version})")
 
         # 加载专家
         expert = GeneralExpert(dataset_version=dataset_version)
@@ -510,6 +569,10 @@ def main():
                         help='数据集版本(用于UML/General专家)')
     parser.add_argument('--num-samples', type=int, default=None,
                         help='使用的样本数(None表示全部)')
+    parser.add_argument('--test-mode', action='store_true',
+                        help='测试模式:每个数据集只使用10条数据快速验证流程')
+    parser.add_argument('--show-samples', action='store_true',
+                        help='显示测试数据样本(前5条)')
     parser.add_argument('--use-bertscore', action='store_true',
                         help='使用BERTScore(计算较慢)')
     parser.add_argument('--strict-validation', action='store_true',
@@ -519,11 +582,24 @@ def main():
 
     args = parser.parse_args()
 
+    # 测试模式：自动设置num_samples=10
+    if args.test_mode:
+        if args.num_samples is None:
+            args.num_samples = 10
+            logger.info("=" * 80)
+            logger.info("测试模式已启用 - 每个数据集使用10条数据")
+            logger.info("=" * 80)
+        else:
+            logger.warning(f"测试模式已启用，但--num-samples已设置为{args.num_samples}，将使用该值")
+
     # 创建评估器
     evaluator = ExpertEvaluator(
         use_bertscore=args.use_bertscore,
         strict_validation=args.strict_validation
     )
+
+    # 设置是否显示样本
+    evaluator.show_samples = args.show_samples
 
     # 设置保存目录
     if args.save_dir is None:
@@ -564,3 +640,12 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# 快速测试所有专家（推荐）
+# python scripts/evaluation/evaluate_experts.py --test-mode --show-samples --expert all
+
+# 测试单个专家
+# python scripts/evaluation/evaluate_experts.py --test-mode --expert text
+
+# 查看General专家的样本数据
+# python scripts/evaluation/evaluate_experts.py --show-samples --expert general --dataset-version qwen235B --num-samples 20
