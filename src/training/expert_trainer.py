@@ -141,6 +141,24 @@ class ExpertTrainer:
         self.train_cfg = get_training_config()
         self.device_cfg = get_device_config()
 
+        # 从环境变量读取训练参数（用于批量训练脚本的测试模式）
+        import os
+        if 'TRAIN_EPOCHS' in os.environ:
+            try:
+                epochs = int(os.environ['TRAIN_EPOCHS'])
+                self.train_cfg.num_epochs = epochs
+                logger.info(f"从环境变量读取训练轮数: {epochs}")
+            except ValueError:
+                logger.warning(f"无效的TRAIN_EPOCHS环境变量: {os.environ['TRAIN_EPOCHS']}")
+
+        if 'TRAIN_BATCH_SIZE' in os.environ:
+            try:
+                batch_size = int(os.environ['TRAIN_BATCH_SIZE'])
+                self.train_cfg.batch_size = batch_size
+                logger.info(f"从环境变量读取批次大小: {batch_size}")
+            except ValueError:
+                logger.warning(f"无效的TRAIN_BATCH_SIZE环境变量: {os.environ['TRAIN_BATCH_SIZE']}")
+
         # 设置基础模型路径
         if base_model_path:
             self.base_model_path = base_model_path
@@ -373,28 +391,21 @@ class ExpertTrainer:
             if self.use_rtx4090_optimization:
                 logger.info("启用RTX 4090优化配置")
 
-                # 针对视觉模型和文本模型使用不同的策略
-                if self.expert_type in ['image', 'uml']:
-                    # 视觉模型：显存消耗大，使用小batch size + 大gradient accumulation
-                    batch_size = 1  # 降低到1以避免OOM
-                    gradient_accumulation_steps = 16  # 增加到16保持有效batch size=16
-                    dataloader_num_workers = 4  # 降低worker数量
-                    logger.info("检测到视觉模型，使用显存优化策略")
-                else:  # text, general
-                    # 文本模型：根据是否使用4bit量化选择策略
-                    if self.use_4bit:
-                        # 4bit量化：为避免OOM，使用保守的batch size策略
-                        # 虽然量化节省显存，但lm_head层在长序列下仍需大量显存
-                        batch_size = 2
-                        gradient_accumulation_steps = 8
-                        logger.info("文本模型 + 4bit量化，使用保守batch size策略（避免lm_head OOM）")
-                    else:
-                        # 无量化：显存占用大，降低batch size
-                        batch_size = 4
-                        gradient_accumulation_steps = 4
-                        logger.info("文本模型无量化，降低batch size以避免OOM")
-                    dataloader_num_workers = 8
+                # 所有Expert都是文本模型（Image/UML Expert处理的是JSON文本描述，不是图像）
+                # 根据是否使用4bit量化选择不同的配置
+                if self.use_4bit:
+                    # 4bit量化：使用保守的batch size策略
+                    # 虽然量化节省显存，但lm_head层在长序列下仍需大量显存
+                    batch_size = 2
+                    gradient_accumulation_steps = 8
+                    logger.info("使用4bit量化，batch size=2, gradient_accumulation=8")
+                else:
+                    # 无量化：显存占用大，使用最保守的配置避免OOM
+                    batch_size = 2  # 从4降到2以避免OOM
+                    gradient_accumulation_steps = 8  # 从4增加到8以保持有效batch size=16
+                    logger.info("无量化模式，使用最保守的batch size=2以避免OOM")
 
+                dataloader_num_workers = 8
                 logging_steps = 5
                 optimizer_type = "adamw_torch_fused"
             else:
@@ -430,9 +441,8 @@ class ExpertTrainer:
                 "metric_for_best_model": "eval_loss",
                 "greater_is_better": False,
 
-                # 显存优化选项 - 为所有专家启用gradient checkpointing以节省显存
-                "gradient_checkpointing": True,
-                "gradient_checkpointing_kwargs": {"use_reentrant": False},
+                # 显存优化选项 - 禁用gradient checkpointing以避免与LoRA的兼容性问题
+                "gradient_checkpointing": False,
 
                 # 4090优化选项
                 "bf16": True if self.use_rtx4090_optimization and self.device_cfg.device == "cuda" else False,
@@ -440,7 +450,7 @@ class ExpertTrainer:
                 "optim": optimizer_type,
                 "dataloader_num_workers": dataloader_num_workers,
                 "dataloader_pin_memory": True,
-                "dataloader_prefetch_factor": 2 if self.expert_type in ['image', 'uml'] else (4 if self.use_rtx4090_optimization else 2),
+                "dataloader_prefetch_factor": 2,
 
                 "fp16": False if self.use_rtx4090_optimization else (True if self.device_cfg.device == "cuda" else False),
                 "report_to": "none",
@@ -462,27 +472,21 @@ class ExpertTrainer:
                 logger.info("  ✓ BF16混合精度训练")
                 logger.info("  ✓ TF32加速")
                 logger.info("  ✓ Fused AdamW优化器")
-                logger.info("  ✓ Gradient checkpointing: True (所有模型，节省显存)")
+                logger.info("  ✓ Gradient checkpointing: False (已禁用以避免LoRA兼容性问题)")
 
-                if self.expert_type in ['image', 'uml']:
-                    logger.info("  ✓ 视觉模型显存优化:")
-                    logger.info("    - Batch size: 1 (降低显存)")
-                    logger.info("    - Gradient accumulation: 16 (保持有效batch=16)")
-                    logger.info("    - 数据加载器工作进程: 4")
-                    logger.info("    - 预取因子: 2")
+                if self.use_4bit:
+                    logger.info("  ✓ 4bit量化配置:")
+                    logger.info("    - Batch size: 2")
+                    logger.info("    - Gradient accumulation: 8")
+                    logger.info("    - 有效Batch Size: 16")
                 else:
-                    if self.use_4bit:
-                        logger.info("  ✓ 文本模型 + 4bit量化优化:")
-                        logger.info("    - Batch size: 2 (保守策略，避免lm_head OOM)")
-                        logger.info("    - Gradient accumulation: 8 (有效batch=16)")
-                        logger.info("    - Max seq length: 1536 (优化显存占用)")
-                    else:
-                        logger.info("  ✓ 文本模型无量化配置:")
-                        logger.info("    - Batch size: 4 (避免OOM)")
-                        logger.info("    - Gradient accumulation: 4 (有效batch=16)")
-                    logger.info("  ✓ 数据加载器优化 (8 workers)")
-                    logger.info("  ✓ 预取因子: 4")
+                    logger.info("  ✓ 无量化配置 (最保守策略避免OOM):")
+                    logger.info("    - Batch size: 2")
+                    logger.info("    - Gradient accumulation: 8")
+                    logger.info("    - 有效Batch Size: 16")
 
+                logger.info("  ✓ 数据加载器优化 (8 workers)")
+                logger.info("  ✓ 预取因子: 2")
                 logger.info("=" * 60)
 
             # 数据收集器
