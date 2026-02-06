@@ -32,6 +32,12 @@ from config.settings import get_path_config, get_training_config
 from src.utils.logger import get_logger
 from src.utils.file_utils import load_json
 
+# 导入Prompt模板
+from models.prompt_templates.text_template import TextInstructionTemplate
+from models.prompt_templates.image_template import ImageInstructionTemplate
+from models.prompt_templates.uml_template import UMLInstructionTemplate
+from models.prompt_templates.general_template import GeneralInstructionTemplate
+
 logger = get_logger('training.data_loader')
 
 
@@ -128,12 +134,14 @@ class InstructionDataset(Dataset):
     def __getitem__(self, idx):
         item = self.data[idx]
 
-        # 构建输入prompt
-        input_text = item['input']
+        # 使用带prompt的完整输入
+        # input_with_prompt包含完整的Qwen对话格式prompt
+        input_text = item.get('input_with_prompt', item['input'])
         output_text = item['output']
 
         # 组合输入输出
-        full_text = f"### Input:\n{input_text}\n\n### Output:\n{output_text}"
+        # 注意:input_text已经包含了完整的prompt格式,直接拼接output即可
+        full_text = f"{input_text}{output_text}"
 
         # Tokenize
         encodings = self.tokenizer(
@@ -259,8 +267,12 @@ class TextDatasetLoader:
 
                     # 跳过空值或nan
                     if low_req and low_req != 'nan' and instruction and instruction != 'nan':
+                        # 构建带prompt的输入
+                        prompt = TextInstructionTemplate.build_prompt(low_req)
+
                         all_data.append({
                             'input': low_req,
+                            'input_with_prompt': prompt,
                             'output': instruction,
                             'source': csv_file.stem
                         })
@@ -339,8 +351,12 @@ class ImageDatasetLoader:
 
                 # 跳过空值或nan
                 if description and description != 'nan' and instruction and instruction != 'nan':
+                    # 构建带prompt的输入
+                    prompt = ImageInstructionTemplate.build_prompt(description)
+
                     all_data.append({
                         'input': description,
+                        'input_with_prompt': prompt,
                         'output': instruction,
                         'source': 'image_dataset'
                     })
@@ -468,8 +484,12 @@ class UMLDatasetLoader:
                         except json.JSONDecodeError:
                             pass  # 不是JSON就保持原样
 
+                    # 构建带prompt的输入
+                    prompt = UMLInstructionTemplate.build_prompt(str(description))
+
                     data_list.append({
                         'input': str(description),
+                        'input_with_prompt': prompt,
                         'output': str(instruction),
                         'source': f'uml_dataset_{self.dataset_version}'
                     })
