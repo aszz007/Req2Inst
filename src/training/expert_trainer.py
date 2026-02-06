@@ -62,6 +62,7 @@ from src.training.data_loader import (
     TextDatasetLoader,
     ImageDatasetLoader,
     UMLDatasetLoader,
+    GeneralDatasetLoader,
     InstructionDataset,
     split_dataset_for_expert
 )
@@ -209,15 +210,10 @@ class ExpertTrainer:
                 loader = UMLDatasetLoader(dataset_version=self.dataset_version)
                 raw_data = loader.load_csv_file()
             elif self.expert_type == 'general':
-                text_loader = TextDatasetLoader()
-                image_loader = ImageDatasetLoader()
-                # General专家使用指定版本的UML数据集
-                uml_loader = UMLDatasetLoader(dataset_version=self.dataset_version)
-                raw_data = (
-                        text_loader.load_csv_files() +
-                        image_loader.load_csv_file() +
-                        uml_loader.load_csv_file()
-                )
+                # General专家使用统一的GeneralDatasetLoader
+                # 确保训练推理一致：都使用GeneralInstructionTemplate
+                loader = GeneralDatasetLoader(dataset_version=self.dataset_version)
+                raw_data = loader.load_all_data()
             else:
                 raise ValueError(f"未知的专家类型: {self.expert_type}")
 

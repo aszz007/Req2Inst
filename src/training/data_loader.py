@@ -508,6 +508,127 @@ class UMLDatasetLoader:
             return []
 
 
+class GeneralDatasetLoader:
+    """
+    通用专家数据集加载器
+
+    功能：
+    - 加载text + image + uml三种数据
+    - 统一使用GeneralInstructionTemplate处理所有输入
+    - 确保训练推理一致性
+    """
+
+    def __init__(self, dataset_version: str = 'qwen2.5'):
+        """
+        初始化通用数据加载器
+
+        Args:
+            dataset_version: UML数据集版本 ('qwen2.5', 'qwen3', 'qwen235B')
+        """
+        self.dataset_version = dataset_version
+        logger.info(f"初始化GeneralDatasetLoader - UML数据集版本: {dataset_version}")
+
+    def load_all_data(self) -> List[Dict]:
+        """
+        加载所有类型的数据并统一使用GeneralInstructionTemplate
+
+        Returns:
+            数据列表，每项包含input、input_with_prompt和output
+        """
+        all_data = []
+
+        # 1. 加载文本数据
+        logger.info("加载文本数据...")
+        text_loader = TextDatasetLoader()
+        text_raw = text_loader.load_csv_files()
+
+        # 重新构建prompt - 使用GeneralInstructionTemplate
+        for item in text_raw:
+            prompt = GeneralInstructionTemplate.build_prompt(
+                item['input'],
+                force_type='text'
+            )
+            all_data.append({
+                'input': item['input'],
+                'input_with_prompt': prompt,
+                'output': item['output'],
+                'source': item['source'],
+                'data_type': 'text'
+            })
+
+        logger.info(f"文本数据: {len(text_raw)}条")
+
+        # 2. 加载图像数据
+        logger.info("加载图像数据...")
+        image_loader = ImageDatasetLoader()
+        image_raw = image_loader.load_csv_file()
+
+        # 重新构建prompt - 使用GeneralInstructionTemplate
+        for item in image_raw:
+            # 构建图像JSON格式
+            image_json = {
+                "description": item['input'],
+                "details": {
+                    "objects": [],
+                    "scene": "image annotation task",
+                    "spatial_info": ""
+                }
+            }
+            prompt = GeneralInstructionTemplate.build_prompt(
+                image_json,
+                force_type='image'
+            )
+            all_data.append({
+                'input': item['input'],
+                'input_with_prompt': prompt,
+                'output': item['output'],
+                'source': item['source'],
+                'data_type': 'image'
+            })
+
+        logger.info(f"图像数据: {len(image_raw)}条")
+
+        # 3. 加载UML数据
+        logger.info(f"加载UML数据 (版本: {self.dataset_version})...")
+        uml_loader = UMLDatasetLoader(dataset_version=self.dataset_version)
+        uml_raw = uml_loader.load_csv_file()
+
+        # 重新构建prompt - 使用GeneralInstructionTemplate
+        for item in uml_raw:
+            # 尝试解析为JSON，如果不是JSON则构建简单格式
+            try:
+                uml_json = json.loads(item['input']) if isinstance(item['input'], str) else item['input']
+            except (json.JSONDecodeError, TypeError):
+                uml_json = {
+                    "description": item['input'],
+                    "details": {
+                        "diagram_type": "use case diagram"
+                    }
+                }
+
+            prompt = GeneralInstructionTemplate.build_prompt(
+                uml_json,
+                force_type='uml'
+            )
+            all_data.append({
+                'input': item['input'],
+                'input_with_prompt': prompt,
+                'output': item['output'],
+                'source': item['source'],
+                'data_type': 'uml'
+            })
+
+        logger.info(f"UML数据: {len(uml_raw)}条")
+
+        # 统计
+        logger.info(f"通用数据集总计: {len(all_data)}条")
+        logger.info(f"  - 文本: {len(text_raw)}条")
+        logger.info(f"  - 图像: {len(image_raw)}条")
+        logger.info(f"  - UML: {len(uml_raw)}条")
+
+        return all_data
+
+
 def split_dataset(
     data: List[Dict],
     train_ratio: float = 0.8,
