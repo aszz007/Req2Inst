@@ -151,13 +151,7 @@ class ExpertTrainer:
             except ValueError:
                 logger.warning(f"无效的TRAIN_EPOCHS环境变量: {os.environ['TRAIN_EPOCHS']}")
 
-        if 'TRAIN_BATCH_SIZE' in os.environ:
-            try:
-                batch_size = int(os.environ['TRAIN_BATCH_SIZE'])
-                self.train_cfg.batch_size = batch_size
-                logger.info(f"从环境变量读取批次大小: {batch_size}")
-            except ValueError:
-                logger.warning(f"无效的TRAIN_BATCH_SIZE环境变量: {os.environ['TRAIN_BATCH_SIZE']}")
+        # batch_size应根据量化情况自动设置，不从环境变量读取
 
         # 设置基础模型路径
         if base_model_path:
@@ -391,13 +385,11 @@ class ExpertTrainer:
             if self.use_rtx4090_optimization:
                 logger.info("启用RTX 4090优化配置")
 
-                # 所有Expert都是文本模型（Image/UML Expert处理的是JSON文本描述，不是图像）
                 # 根据是否使用4bit量化选择不同的配置
                 if self.use_4bit:
-                    # 4bit量化：使用保守的batch size策略
-                    # 虽然量化节省显存，但lm_head层在长序列下仍需大量显存
-                    batch_size = 2
-                    gradient_accumulation_steps = 8
+                    # 4bit量化：保守配置以确保稳定性
+                    batch_size = 2  # 降低到2以彻底避免OOM
+                    gradient_accumulation_steps = 8  # 保持有效batch size=16
                     logger.info("使用4bit量化，batch size=2, gradient_accumulation=8")
                 else:
                     # 无量化：显存占用大，使用最保守的配置避免OOM
@@ -475,7 +467,7 @@ class ExpertTrainer:
                 logger.info("  ✓ Gradient checkpointing: False (已禁用以避免LoRA兼容性问题)")
 
                 if self.use_4bit:
-                    logger.info("  ✓ 4bit量化配置:")
+                    logger.info("  ✓ 4bit量化配置 (QLoRA标准方案):")
                     logger.info("    - Batch size: 2")
                     logger.info("    - Gradient accumulation: 8")
                     logger.info("    - 有效Batch Size: 16")

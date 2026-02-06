@@ -99,9 +99,7 @@ class TrainingTask:
         if self.expert_type in ['uml', 'general']:
             cmd.extend(['--dataset', self.dataset_version])
 
-        # 测试模式:使用no_4bit减少显存,并通过环境变量设置1个epoch
-        if test_mode:
-            cmd.append('--no_4bit')
+        # 默认使用4bit量化以节省显存，无需额外标志
 
         return cmd
 
@@ -109,9 +107,9 @@ class TrainingTask:
         """生成环境变量"""
         env_vars = {}
         if test_mode:
-            # 测试模式:1个epoch,小batch
+            # 测试模式:1个epoch
             env_vars['TRAIN_EPOCHS'] = '1'
-            env_vars['TRAIN_BATCH_SIZE'] = '2'
+            # batch_size由expert_trainer根据量化情况自动设置
         return env_vars
 
     def __str__(self):
