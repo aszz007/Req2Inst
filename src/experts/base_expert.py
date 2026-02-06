@@ -475,17 +475,7 @@ Things to Avoid: {avoid}"""
             logger.info("[步骤1] 内容为空,返回占位符")
             return f"{current_prefix} -"
 
-        # === 步骤2: 首先找到第一个完整的句子（以句号结尾） ===
-        # 对于Things to Avoid行，只保留第一个完整句子
-        if current_prefix == 'Things to Avoid:':
-            # 找到第一个句号的位置
-            first_period = content.find('.')
-            if first_period != -1:
-                # 只保留到第一个句号
-                content = content[:first_period + 1].strip()
-                logger.info(f"[步骤2-特殊] Things to Avoid行截断到第一个句号: {content}")
-
-        # === 步骤3: 检测并截断句号后的垃圾模式 ===
+        # === 步骤2: 检测并截断句号后的垃圾模式 ===
         # 这些模式通常表示训练数据泄露
         garbage_patterns = [
             # 最常见的垃圾模式 - 扩展版本
@@ -509,13 +499,13 @@ Things to Avoid: {avoid}"""
                 # 找到垃圾模式,截断到句号位置(保留句号)
                 idx = match.start()
                 content = content[:idx + 1].strip()
-                logger.info(f"[步骤3] 检测到垃圾模式: {pattern}, 截断到位置{idx}")
+                logger.info(f"[步骤2] 检测到垃圾模式: {pattern}, 截断到位置{idx}")
                 break
 
         if content != original_content:
-            logger.info(f"[步骤3完成] 截断垃圾内容后: {content}")
+            logger.info(f"[步骤2完成] 截断垃圾内容后: {content}")
 
-        # === 步骤4: 检测中文字符并截断 ===
+        # === 步骤3: 检测中文字符并截断 ===
         chinese_match = re.search(r'[\u4e00-\u9fff]', content)
         if chinese_match:
             idx = chinese_match.start()
@@ -526,9 +516,9 @@ Things to Avoid: {avoid}"""
                     truncate_pos = i + 1
                     break
             content = content[:truncate_pos].strip()
-            logger.info(f"[步骤4] 检测到中文字符,截断到位置{truncate_pos}")
+            logger.info(f"[步骤3] 检测到中文字符,截断到位置{truncate_pos}")
 
-        # === 步骤5: 移除以小写字母开头的句子片段 ===
+        # === 步骤4: 移除以小写字母开头的句子片段 ===
         # 通常这些是训练数据泄露
         sentences = re.split(r'(?<=[.!?])\s+', content)
         if len(sentences) > 1:
@@ -537,12 +527,12 @@ Things to Avoid: {avoid}"""
             if last_sentence and len(last_sentence) > 0 and last_sentence[0].islower():
                 # 最后一个句子以小写开头,很可能是垃圾,移除它
                 content = ' '.join(sentences[:-1]).strip()
-                logger.info(f"[步骤5] 移除小写开头的尾部句子: {last_sentence[:min(50, len(last_sentence))]}")
+                logger.info(f"[步骤4] 移除小写开头的尾部句子: {last_sentence[:min(50, len(last_sentence))]}")
 
-        # === 步骤6: 确保以句号结尾 ===
+        # === 步骤5: 确保以句号结尾 ===
         if content and not content.endswith(('.', '!', '?', '-')):
             content += '.'
-            logger.info("[步骤6] 添加结尾句号")
+            logger.info("[步骤5] 添加结尾句号")
 
         # 重新组装清理后的行
         cleaned_line = f"{current_prefix} {content}"
