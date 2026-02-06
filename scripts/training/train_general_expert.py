@@ -185,10 +185,7 @@ def main():
     if is_rtx4090:
         logger.info("检测到RTX 4090，启用优化配置")
 
-    # 打印配置
-    print_config(dataset_version, args.use_4bit, use_rtx4090_opt)
-
-    # 创建训练器
+    # 创建训练器（会自动打印实际配置）
     logger.info(f"创建通用专家训练器（数据集:{dataset_version}）...")
     try:
         trainer = ExpertTrainer(

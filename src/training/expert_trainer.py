@@ -201,9 +201,60 @@ class ExpertTrainer:
         logger.info(f"基础模型: {self.base_model_path}")
         logger.info(f"输出目录: {self.output_dir}")
         logger.info(f"4bit量化: {use_4bit}")
-        if expert_type == 'uml':
+        if expert_type in ['uml', 'general']:
             logger.info(f"数据集版本: {self.dataset_version}")
         logger.info(f"RTX 4090优化: {use_rtx4090_optimization}")
+
+        # 打印实际训练配置
+        self._print_training_config()
+
+    def _print_training_config(self):
+        """打印实际训练配置（包含从环境变量读取的参数）"""
+        print()
+        print("训练配置信息:")
+        print("-" * 80)
+        print(f"专家类型: {self.expert_type.upper()} Expert")
+        if self.expert_type in ['uml', 'general']:
+            print(f"数据集版本: {self.dataset_version}")
+        print(f"基础模型: {self.base_model_path}")
+        print(f"输出目录: {self.output_dir}")
+        print()
+        print(f"LoRA配置:")
+        print(f"  - Rank: {self.lora_cfg.rank}")
+        print(f"  - Alpha: {self.lora_cfg.alpha}")
+        print(f"  - Dropout: {self.lora_cfg.dropout}")
+        print(f"  - Target Modules: ['c_attn'] (Qwen-7B-Chat)")
+        print()
+
+        if self.use_rtx4090_optimization:
+            print(f"训练参数 (RTX 4090优化):")
+            if self.use_4bit:
+                print(f"  - Batch Size: 2 (4bit量化)")
+                print(f"  - Gradient Accumulation: 8")
+            else:
+                print(f"  - Batch Size: 2 (无量化)")
+                print(f"  - Gradient Accumulation: 8")
+            print(f"  - 有效Batch Size: 16")
+            print(f"  - Epochs: {self.train_cfg.num_epochs}")
+            print(f"  - Learning Rate: {self.train_cfg.learning_rate}")
+            print(f"  - Max Seq Length: {self.train_cfg.max_seq_length}")
+            print(f"  - 4bit量化: {'是' if self.use_4bit else '否'}")
+            print(f"  - BF16混合精度: True")
+            print(f"  - TF32加速: True")
+            print(f"  - Fused优化器: True")
+            print(f"  - 数据加载器工作进程: 8")
+        else:
+            print(f"训练参数:")
+            print(f"  - Batch Size: {self.train_cfg.batch_size}")
+            print(f"  - Gradient Accumulation: {self.train_cfg.gradient_accumulation_steps}")
+            print(f"  - 有效Batch Size: {self.train_cfg.batch_size * self.train_cfg.gradient_accumulation_steps}")
+            print(f"  - Epochs: {self.train_cfg.num_epochs}")
+            print(f"  - Learning Rate: {self.train_cfg.learning_rate}")
+            print(f"  - Max Seq Length: {self.train_cfg.max_seq_length}")
+            print(f"  - 4bit量化: {'是' if self.use_4bit else '否'}")
+
+        print("-" * 80)
+        print()
 
     def prepare_data(self) -> bool:
         """准备训练数据"""
