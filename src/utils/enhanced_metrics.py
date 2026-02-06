@@ -1,120 +1,84 @@
 """
-Enhanced Metrics for MoE Instruction Generation System
-MoE指令生成系统的增强评估指标
+Enhanced Metrics Module - Comprehensive Evaluation Metrics
+增强的评估指标模块
 
-评估指标体系:
-1. 生成质量指标(Generation Quality Metrics)
-   - BLEU, ROUGE, METEOR: 词汇匹配指标
-   - BERTScore: 语义相似度指标
+功能:
+  - 生成质量指标: BLEU, ROUGE, METEOR, BERTScore
+  - 指令格式指标: Definition/Emphasis/Avoid完整性和格式分数
+  - 统计指标: 长度统计、专家使用统计
+  - 综合评估报告生成
 
-2. 指令格式指标(Instruction Format Metrics)
-   - 三段式结构完整性
-   - 各段落有效性检查
+环境要求: qwen_text (评估通常在此环境进行)
 
-3. 统计指标(Statistical Metrics)
-   - 生成长度统计
-   - 专家使用统计
-
-Author: Claude
-Date: 2026-02-03
+作者: Evaluation System
+日期: 2025-02-06
 """
 
 import re
-import numpy as np
-from typing import List, Dict, Tuple, Optional, Union
-from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from typing import Dict, List, Tuple, Optional, Any
+from collections import defaultdict
 import warnings
 
-try:
-    from evaluate import load
+# 忽略BERTScore的警告
+warnings.filterwarnings('ignore')
 
-    HAS_EVALUATE = True
-except ImportError:
-    HAS_EVALUATE = False
-    warnings.warn("evaluate library not installed. BLEU/ROUGE/METEOR will be unavailable.")
+from src.utils.logger import get_logger
 
-try:
-    from bert_score import score as bert_score_fn
-
-    HAS_BERTSCORE = True
-except ImportError:
-    HAS_BERTSCORE = False
-    warnings.warn("bert_score library not installed. BERTScore will be unavailable.")
+logger = get_logger('metrics.enhanced')
 
 
-@dataclass
-class GenerationMetrics:
-    """生成质量指标"""
-    bleu: float = 0.0
-    rouge1: float = 0.0
-    rouge2: float = 0.0
-    rougeL: float = 0.0
-    meteor: float = 0.0
-    bert_score_f1: float = 0.0
-    bert_score_precision: float = 0.0
-    bert_score_recall: float = 0.0
-
-
-@dataclass
-class InstructionFormatMetrics:
-    """指令格式指标"""
-    has_definition: bool = False
-    has_emphasis: bool = False
-    has_things_to_avoid: bool = False
-    is_complete: bool = False
-    definition_valid: bool = False
-    emphasis_valid: bool = False
-    avoid_valid: bool = False
-    format_score: float = 0.0
-
-
-@dataclass
-class StatisticalMetrics:
-    """统计指标"""
-    avg_length: float = 0.0
-    min_length: int = 0
-    max_length: int = 0
-    std_length: float = 0.0
-    avg_word_count: float = 0.0
-    length_in_range: bool = True
-
-
-@dataclass
-class ComprehensiveMetrics:
-    """综合评估结果"""
-    generation: GenerationMetrics = field(default_factory=GenerationMetrics)
-    format: InstructionFormatMetrics = field(default_factory=InstructionFormatMetrics)
-    statistical: StatisticalMetrics = field(default_factory=StatisticalMetrics)
-    expert_usage: Dict[str, int] = field(default_factory=dict)
-
-
-class InstructionMetricsCalculator:
+class EnhancedMetrics:
     """
-    指令评估指标计算器
+    增强的评估指标系统
 
-    提供完整的评估指标计算功能
+    包含生成质量、格式检查、统计分析三大类指标
     """
 
-    def __init__(self):
-        """初始化评估器"""
-        self.bleu = None
-        self.rouge = None
-        self.meteor = None
+    def __init__(self, use_bertscore: bool = True):
+        """
+        初始化评估指标
 
-        if HAS_EVALUATE:
+        Args:
+            use_bertscore: 是否使用BERTScore(需要额外依赖)
+        """
+        self.use_bertscore = use_bertscore
+
+        # 延迟导入evaluate库,避免环境兼容问题
+        self.bleu_metric = None
+        self.rouge_metric = None
+        self.meteor_metric = None
+        self.bertscore_metric = None
+
+        logger.info("初始化增强评估指标模块")
+
+    def _lazy_load_metrics(self):
+        """延迟加载评估指标(避免import错误)"""
+        if self.bleu_metric is None:
             try:
-                self.bleu = load('bleu')
-                self.rouge = load('rouge')
-                self.meteor = load('meteor')
-            except Exception as e:
-                warnings.warn(f"Failed to load evaluate metrics: {e}")
+                from evaluate import load
+                self.bleu_metric = load('bleu')
+                self.rouge_metric = load('rouge')
+                self.meteor_metric = load('meteor')
 
-    def calculate_generation_metrics(
-            self,
-            predictions: List[str],
-            references: List[str]
-    ) -> GenerationMetrics:
+                if self.use_bertscore:
+                    try:
+                        self.bertscore_metric = load('bertscore')
+                        logger.info("BERTScore加载成功")
+                    except Exception as e:
+                        logger.warning(f"BERTScore加载失败: {e}")
+                        logger.warning("将跳过BERTScore计算")
+                        self.use_bertscore = False
+
+                logger.info("评估指标加载完成")
+            except Exception as e:
+                logger.error(f"评估指标加载失败: {e}")
+                raise
+
+    def calculate_generation_quality(
+        self,
+        predictions: List[str],
+        references: List[str]
+    ) -> Dict[str, float]:
         """
         计算生成质量指标
 
@@ -123,306 +87,475 @@ class InstructionMetricsCalculator:
             references: 参考指令列表
 
         Returns:
-            GenerationMetrics
+            dict: 包含BLEU, ROUGE, METEOR, BERTScore的指标字典
         """
-        metrics = GenerationMetrics()
-
-        if not predictions or not references:
-            return metrics
+        self._lazy_load_metrics()
 
         if len(predictions) != len(references):
-            warnings.warn(f"Predictions ({len(predictions)}) and references ({len(references)}) length mismatch")
-            min_len = min(len(predictions), len(references))
-            predictions = predictions[:min_len]
-            references = references[:min_len]
+            raise ValueError(
+                f"预测和参考数量不匹配: {len(predictions)} vs {len(references)}"
+            )
 
-        if HAS_EVALUATE and self.bleu:
+        logger.info(f"计算生成质量指标 - 样本数: {len(predictions)}")
+
+        results = {}
+
+        # BLEU
+        try:
+            bleu_result = self.bleu_metric.compute(
+                predictions=predictions,
+                references=[[ref] for ref in references]
+            )
+            results['bleu'] = bleu_result['bleu']
+            logger.info(f"BLEU: {results['bleu']:.4f}")
+        except Exception as e:
+            logger.error(f"BLEU计算失败: {e}")
+            results['bleu'] = 0.0
+
+        # ROUGE
+        try:
+            rouge_result = self.rouge_metric.compute(
+                predictions=predictions,
+                references=references
+            )
+            results['rouge1'] = rouge_result['rouge1']
+            results['rouge2'] = rouge_result['rouge2']
+            results['rougeL'] = rouge_result['rougeL']
+            logger.info(f"ROUGE-L: {results['rougeL']:.4f}")
+        except Exception as e:
+            logger.error(f"ROUGE计算失败: {e}")
+            results['rouge1'] = results['rouge2'] = results['rougeL'] = 0.0
+
+        # METEOR
+        try:
+            meteor_result = self.meteor_metric.compute(
+                predictions=predictions,
+                references=references
+            )
+            results['meteor'] = meteor_result['meteor']
+            logger.info(f"METEOR: {results['meteor']:.4f}")
+        except Exception as e:
+            logger.error(f"METEOR计算失败: {e}")
+            results['meteor'] = 0.0
+
+        # BERTScore
+        if self.use_bertscore and self.bertscore_metric is not None:
             try:
-                bleu_result = self.bleu.compute(
+                bertscore_result = self.bertscore_metric.compute(
                     predictions=predictions,
-                    references=references
+                    references=references,
+                    lang='en'
                 )
-                metrics.bleu = bleu_result.get('bleu', 0.0)
+                # 取平均值
+                results['bertscore_precision'] = sum(bertscore_result['precision']) / len(predictions)
+                results['bertscore_recall'] = sum(bertscore_result['recall']) / len(predictions)
+                results['bertscore_f1'] = sum(bertscore_result['f1']) / len(predictions)
+                logger.info(f"BERTScore F1: {results['bertscore_f1']:.4f}")
             except Exception as e:
-                warnings.warn(f"BLEU calculation failed: {e}")
+                logger.error(f"BERTScore计算失败: {e}")
+                results['bertscore_precision'] = 0.0
+                results['bertscore_recall'] = 0.0
+                results['bertscore_f1'] = 0.0
 
-        if HAS_EVALUATE and self.rouge:
-            try:
-                rouge_result = self.rouge.compute(
-                    predictions=predictions,
-                    references=references
-                )
-                metrics.rouge1 = rouge_result.get('rouge1', 0.0)
-                metrics.rouge2 = rouge_result.get('rouge2', 0.0)
-                metrics.rougeL = rouge_result.get('rougeL', 0.0)
-            except Exception as e:
-                warnings.warn(f"ROUGE calculation failed: {e}")
+        return results
 
-        if HAS_EVALUATE and self.meteor:
-            try:
-                meteor_result = self.meteor.compute(
-                    predictions=predictions,
-                    references=references
-                )
-                metrics.meteor = meteor_result.get('meteor', 0.0)
-            except Exception as e:
-                warnings.warn(f"METEOR calculation failed: {e}")
-
-        if HAS_BERTSCORE:
-            try:
-                P, R, F1 = bert_score_fn(
-                    predictions,
-                    references,
-                    lang='en',
-                    verbose=False
-                )
-                metrics.bert_score_precision = P.mean().item()
-                metrics.bert_score_recall = R.mean().item()
-                metrics.bert_score_f1 = F1.mean().item()
-            except Exception as e:
-                warnings.warn(f"BERTScore calculation failed: {e}")
-
-        return metrics
-
-    def check_instruction_format(self, instruction: str) -> InstructionFormatMetrics:
+    def calculate_format_metrics(
+        self,
+        instructions: List[str]
+    ) -> Dict[str, Any]:
         """
-        检查单条指令的格式完整性
+        计算指令格式指标(重新设计)
 
-        三段式格式要求:
-        1. Definition: 必须有实际内容
-        2. Emphasis/Caution: 可以有内容或显式的"-"
-        3. Things to Avoid: 可以有内容或显式的"-"
+        新的格式要求:
+        - Definition必须有实际内容(不能只是"-")
+        - Emphasis/Avoid可以是内容或显式"-"
+        - 三段式完整性检查
+        - 格式分数(0-1)
+
+        Args:
+            instructions: 指令列表
+
+        Returns:
+            dict: 格式指标字典
+        """
+        logger.info(f"计算格式指标 - 样本数: {len(instructions)}")
+
+        format_results = []
+
+        for instruction in instructions:
+            result = self._check_single_instruction_format(instruction)
+            format_results.append(result)
+
+        # 统计汇总
+        total = len(format_results)
+
+        summary = {
+            'total_samples': total,
+            'valid_count': sum(1 for r in format_results if r['is_valid']),
+            'valid_rate': sum(1 for r in format_results if r['is_valid']) / total if total > 0 else 0,
+
+            # Definition指标
+            'definition_present': sum(1 for r in format_results if r['has_definition']) / total if total > 0 else 0,
+            'definition_has_content': sum(1 for r in format_results if r['definition_has_content']) / total if total > 0 else 0,
+            'definition_in_this_task': sum(1 for r in format_results if r['definition_starts_with_in_this_task']) / total if total > 0 else 0,
+
+            # Emphasis指标
+            'emphasis_present': sum(1 for r in format_results if r['has_emphasis']) / total if total > 0 else 0,
+            'emphasis_valid': sum(1 for r in format_results if r['emphasis_is_valid']) / total if total > 0 else 0,
+
+            # Avoid指标
+            'avoid_present': sum(1 for r in format_results if r['has_avoid']) / total if total > 0 else 0,
+            'avoid_valid': sum(1 for r in format_results if r['avoid_is_valid']) / total if total > 0 else 0,
+
+            # 格式分数(0-1)
+            'avg_format_score': sum(r['format_score'] for r in format_results) / total if total > 0 else 0,
+
+            # 详细结果
+            'detailed_results': format_results
+        }
+
+        logger.info(f"格式验证通过率: {summary['valid_rate']:.2%}")
+        logger.info(f"平均格式分数: {summary['avg_format_score']:.4f}")
+
+        return summary
+
+    def _check_single_instruction_format(self, instruction: str) -> Dict[str, Any]:
+        """
+        检查单条指令的格式
 
         Args:
             instruction: 指令文本
 
         Returns:
-            InstructionFormatMetrics
+            dict: 格式检查结果
         """
-        metrics = InstructionFormatMetrics()
+        result = {
+            'is_valid': False,
+            'has_definition': False,
+            'definition_has_content': False,
+            'definition_starts_with_in_this_task': False,
+            'has_emphasis': False,
+            'emphasis_is_valid': False,
+            'has_avoid': False,
+            'avoid_is_valid': False,
+            'format_score': 0.0,
+            'errors': []
+        }
 
-        instruction_lower = instruction.lower()
+        lines = instruction.split('\n')
 
-        metrics.has_definition = self._check_section_exists(
-            instruction_lower,
-            ['definition', 'in this task']
-        )
-        metrics.has_emphasis = self._check_section_exists(
-            instruction_lower,
-            ['emphasis', 'caution']
-        )
-        metrics.has_things_to_avoid = self._check_section_exists(
-            instruction_lower,
-            ['things to avoid', 'avoid']
-        )
+        # 查找三段式的三个部分
+        definition_line = None
+        emphasis_line = None
+        avoid_line = None
 
-        metrics.definition_valid = self._validate_definition(instruction)
-        metrics.emphasis_valid = self._validate_optional_section(
-            instruction,
-            ['emphasis', 'caution']
-        )
-        metrics.avoid_valid = self._validate_optional_section(
-            instruction,
-            ['things to avoid', 'avoid']
-        )
+        for line in lines:
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
 
-        metrics.is_complete = (
-                metrics.has_definition and
-                metrics.has_emphasis and
-                metrics.has_things_to_avoid and
-                metrics.definition_valid
-        )
+            if line_stripped.startswith('Definition:'):
+                definition_line = line_stripped
+                result['has_definition'] = True
+            elif line_stripped.startswith('Emphasis & Caution:') or line_stripped.startswith('Emphasis and Caution:'):
+                emphasis_line = line_stripped
+                result['has_emphasis'] = True
+            elif line_stripped.startswith('Things to Avoid:'):
+                avoid_line = line_stripped
+                result['has_avoid'] = True
 
-        valid_sections = sum([
-            metrics.definition_valid,
-            metrics.emphasis_valid,
-            metrics.avoid_valid
-        ])
-        metrics.format_score = valid_sections / 3.0
+        # 检查Definition
+        if definition_line:
+            content = definition_line.split('Definition:', 1)[1].strip()
 
-        return metrics
+            # Definition不能只是"-"
+            if content and content != '-':
+                result['definition_has_content'] = True
+            else:
+                result['errors'].append('Definition没有实际内容')
 
-    def _check_section_exists(self, text: str, keywords: List[str]) -> bool:
-        """检查段落是否存在"""
-        return any(keyword in text for keyword in keywords)
+            # 检查是否以"In this task"开头
+            if content.lower().startswith('in this task'):
+                result['definition_starts_with_in_this_task'] = True
+        else:
+            result['errors'].append('缺少Definition')
 
-    def _validate_definition(self, instruction: str) -> bool:
-        """
-        验证Definition段落
+        # 检查Emphasis(可以是内容或显式"-")
+        if emphasis_line:
+            content = emphasis_line.split(':', 1)[1].strip()
+            # 有内容或者是显式的"-"都算有效
+            if content:
+                result['emphasis_is_valid'] = True
+        else:
+            result['errors'].append('缺少Emphasis & Caution')
 
-        Definition必须有实际内容，不能只是"-"
-        """
-        patterns = [
-            r'definition[:\s]+(.+?)(?:emphasis|caution|things to avoid|$)',
-            r'in this task[,\s]+(.+?)(?:emphasis|caution|things to avoid|$)'
+        # 检查Avoid(可以是内容或显式"-")
+        if avoid_line:
+            content = avoid_line.split(':', 1)[1].strip()
+            # 有内容或者是显式的"-"都算有效
+            if content:
+                result['avoid_is_valid'] = True
+        else:
+            result['errors'].append('缺少Things to Avoid')
+
+        # 计算格式分数(0-1)
+        score_components = [
+            result['has_definition'],
+            result['definition_has_content'],
+            result['definition_starts_with_in_this_task'],
+            result['has_emphasis'],
+            result['emphasis_is_valid'],
+            result['has_avoid'],
+            result['avoid_is_valid']
         ]
+        result['format_score'] = sum(score_components) / len(score_components)
 
-        for pattern in patterns:
-            match = re.search(pattern, instruction, re.IGNORECASE | re.DOTALL)
-            if match:
-                content = match.group(1).strip()
-                if content and content != '-' and len(content) > 10:
-                    return True
+        # 综合判断是否有效
+        # 新的有效标准:
+        # 1. Definition必须存在且有内容
+        # 2. Emphasis必须存在
+        # 3. Avoid必须存在
+        result['is_valid'] = (
+            result['definition_has_content'] and
+            result['has_emphasis'] and
+            result['has_avoid']
+        )
 
-        return False
-
-    def _validate_optional_section(
-            self,
-            instruction: str,
-            keywords: List[str]
-    ) -> bool:
-        """
-        验证可选段落(Emphasis或Things to Avoid)
-
-        有内容或显式的"-"都算有效
-        """
-        for keyword in keywords:
-            pattern = rf'{keyword}[:\s]+(.+?)(?:definition|emphasis|caution|things to avoid|$)'
-            match = re.search(pattern, instruction, re.IGNORECASE | re.DOTALL)
-            if match:
-                content = match.group(1).strip()
-                if content:
-                    return True
-
-        return False
-
-    def calculate_format_metrics_batch(
-            self,
-            instructions: List[str]
-    ) -> Tuple[float, int, int]:
-        """
-        批量计算格式指标
-
-        Args:
-            instructions: 指令列表
-
-        Returns:
-            (平均格式分数, 完整指令数量, 总指令数量)
-        """
-        if not instructions:
-            return 0.0, 0, 0
-
-        total_score = 0.0
-        complete_count = 0
-
-        for instruction in instructions:
-            format_metrics = self.check_instruction_format(instruction)
-            total_score += format_metrics.format_score
-            if format_metrics.is_complete:
-                complete_count += 1
-
-        avg_score = total_score / len(instructions)
-        return avg_score, complete_count, len(instructions)
+        return result
 
     def calculate_statistical_metrics(
-            self,
-            instructions: List[str],
-            min_length: int = 50,
-            max_length: int = 1000
-    ) -> StatisticalMetrics:
+        self,
+        instructions: List[str],
+        expert_usage: Optional[Dict[str, int]] = None
+    ) -> Dict[str, Any]:
         """
         计算统计指标
 
         Args:
             instructions: 指令列表
-            min_length: 最小合理长度
-            max_length: 最大合理长度
+            expert_usage: 专家使用统计字典(可选)
 
         Returns:
-            StatisticalMetrics
+            dict: 统计指标字典
         """
-        metrics = StatisticalMetrics()
+        logger.info(f"计算统计指标 - 样本数: {len(instructions)}")
 
-        if not instructions:
-            return metrics
-
+        # 长度统计
         lengths = [len(inst) for inst in instructions]
         word_counts = [len(inst.split()) for inst in instructions]
+        line_counts = [len(inst.split('\n')) for inst in instructions]
 
-        metrics.avg_length = np.mean(lengths)
-        metrics.min_length = np.min(lengths)
-        metrics.max_length = np.max(lengths)
-        metrics.std_length = np.std(lengths)
-        metrics.avg_word_count = np.mean(word_counts)
+        stats = {
+            # 字符长度统计
+            'char_length': {
+                'mean': sum(lengths) / len(lengths) if lengths else 0,
+                'min': min(lengths) if lengths else 0,
+                'max': max(lengths) if lengths else 0,
+                'median': sorted(lengths)[len(lengths)//2] if lengths else 0
+            },
 
-        in_range_count = sum(
-            1 for length in lengths
-            if min_length <= length <= max_length
-        )
-        metrics.length_in_range = (in_range_count / len(instructions)) > 0.8
+            # 单词数统计
+            'word_count': {
+                'mean': sum(word_counts) / len(word_counts) if word_counts else 0,
+                'min': min(word_counts) if word_counts else 0,
+                'max': max(word_counts) if word_counts else 0,
+                'median': sorted(word_counts)[len(word_counts)//2] if word_counts else 0
+            },
 
-        return metrics
+            # 行数统计
+            'line_count': {
+                'mean': sum(line_counts) / len(line_counts) if line_counts else 0,
+                'min': min(line_counts) if line_counts else 0,
+                'max': max(line_counts) if line_counts else 0,
+                'median': sorted(line_counts)[len(line_counts)//2] if line_counts else 0
+            }
+        }
 
-    def evaluate_comprehensive(
-            self,
-            predictions: List[str],
-            references: List[str],
-            expert_usage: Optional[Dict[str, int]] = None
-    ) -> ComprehensiveMetrics:
+        # 专家使用统计
+        if expert_usage:
+            total_usage = sum(expert_usage.values())
+            stats['expert_usage'] = {
+                'total_calls': total_usage,
+                'usage_by_expert': expert_usage,
+                'usage_percentage': {
+                    expert: (count / total_usage * 100) if total_usage > 0 else 0
+                    for expert, count in expert_usage.items()
+                }
+            }
+
+        logger.info(f"平均字符长度: {stats['char_length']['mean']:.1f}")
+        logger.info(f"平均单词数: {stats['word_count']['mean']:.1f}")
+
+        return stats
+
+    def generate_comprehensive_report(
+        self,
+        predictions: List[str],
+        references: List[str],
+        expert_usage: Optional[Dict[str, int]] = None,
+        save_path: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
-        综合评估
+        生成综合评估报告
 
         Args:
             predictions: 生成的指令列表
             references: 参考指令列表
             expert_usage: 专家使用统计
+            save_path: 保存路径(可选)
 
         Returns:
-            ComprehensiveMetrics
+            dict: 综合评估报告
         """
-        result = ComprehensiveMetrics()
+        logger.info("=" * 80)
+        logger.info("生成综合评估报告")
+        logger.info("=" * 80)
 
-        result.generation = self.calculate_generation_metrics(predictions, references)
+        report = {
+            'metadata': {
+                'total_samples': len(predictions),
+                'timestamp': self._get_timestamp()
+            }
+        }
 
-        avg_format_score, complete_count, total_count = self.calculate_format_metrics_batch(predictions)
-        if predictions:
-            format_metrics = self.check_instruction_format(predictions[0])
-            format_metrics.format_score = avg_format_score
-            result.format = format_metrics
+        # 1. 生成质量指标
+        logger.info("\n[1/3] 计算生成质量指标...")
+        report['generation_quality'] = self.calculate_generation_quality(
+            predictions, references
+        )
 
-        result.statistical = self.calculate_statistical_metrics(predictions)
+        # 2. 格式指标
+        logger.info("\n[2/3] 计算格式指标...")
+        report['format_metrics'] = self.calculate_format_metrics(predictions)
 
-        if expert_usage:
-            result.expert_usage = expert_usage
+        # 3. 统计指标
+        logger.info("\n[3/3] 计算统计指标...")
+        report['statistical_metrics'] = self.calculate_statistical_metrics(
+            predictions, expert_usage
+        )
 
-        return result
+        # 保存报告
+        if save_path:
+            self._save_report(report, save_path)
 
-    def print_metrics_report(self, metrics: ComprehensiveMetrics):
-        """打印评估报告"""
-        print("\n" + "=" * 60)
-        print("MoE Instruction Generation - Evaluation Report")
-        print("=" * 60)
+        logger.info("=" * 80)
+        logger.info("综合评估报告生成完成")
+        logger.info("=" * 80)
 
-        print("\n[Generation Quality Metrics]")
-        print(f"  BLEU:              {metrics.generation.bleu:.4f}")
-        print(f"  ROUGE-1:           {metrics.generation.rouge1:.4f}")
-        print(f"  ROUGE-2:           {metrics.generation.rouge2:.4f}")
-        print(f"  ROUGE-L:           {metrics.generation.rougeL:.4f}")
-        print(f"  METEOR:            {metrics.generation.meteor:.4f}")
-        if metrics.generation.bert_score_f1 > 0:
-            print(f"  BERTScore (F1):    {metrics.generation.bert_score_f1:.4f}")
-            print(f"  BERTScore (P):     {metrics.generation.bert_score_precision:.4f}")
-            print(f"  BERTScore (R):     {metrics.generation.bert_score_recall:.4f}")
+        return report
 
-        print("\n[Instruction Format Metrics]")
-        print(f"  Format Score:      {metrics.format.format_score:.2%}")
-        print(f"  Has Definition:    {metrics.format.has_definition}")
-        print(f"  Has Emphasis:      {metrics.format.has_emphasis}")
-        print(f"  Has Avoid:         {metrics.format.has_things_to_avoid}")
-        print(f"  Is Complete:       {metrics.format.is_complete}")
+    def _get_timestamp(self) -> str:
+        """获取当前时间戳"""
+        from datetime import datetime
+        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        print("\n[Statistical Metrics]")
-        print(f"  Avg Length:        {metrics.statistical.avg_length:.1f} chars")
-        print(f"  Length Range:      [{metrics.statistical.min_length}, {metrics.statistical.max_length}]")
-        print(f"  Std Dev:           {metrics.statistical.std_length:.1f}")
-        print(f"  Avg Word Count:    {metrics.statistical.avg_word_count:.1f}")
-        print(f"  Length In Range:   {metrics.statistical.length_in_range}")
+    def _save_report(self, report: Dict, save_path: str):
+        """
+        保存评估报告
 
-        if metrics.expert_usage:
-            print("\n[Expert Usage Statistics]")
-            total = sum(metrics.expert_usage.values())
-            for expert, count in sorted(metrics.expert_usage.items()):
-                percentage = (count / total * 100) if total > 0 else 0
-                print(f"  {expert:30s}: {count:4d} ({percentage:5.1f}%)")
+        Args:
+            report: 报告字典
+            save_path: 保存路径
+        """
+        import json
+        from pathlib import Path
 
-        print("\n" + "=" * 60)
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(save_path, 'w', encoding='utf-8') as f:
+            json.dump(report, f, indent=2, ensure_ascii=False)
+
+        logger.info(f"评估报告已保存至: {save_path}")
+
+    def print_report_summary(self, report: Dict):
+        """
+        打印报告摘要
+
+        Args:
+            report: 评估报告字典
+        """
+        print("\n" + "=" * 80)
+        print("评估报告摘要")
+        print("=" * 80)
+
+        # 生成质量
+        print("\n[生成质量指标]")
+        quality = report['generation_quality']
+        print(f"  BLEU:      {quality['bleu']:.4f}")
+        print(f"  ROUGE-1:   {quality['rouge1']:.4f}")
+        print(f"  ROUGE-2:   {quality['rouge2']:.4f}")
+        print(f"  ROUGE-L:   {quality['rougeL']:.4f}")
+        print(f"  METEOR:    {quality['meteor']:.4f}")
+        if 'bertscore_f1' in quality:
+            print(f"  BERTScore: {quality['bertscore_f1']:.4f}")
+
+        # 格式指标
+        print("\n[格式指标]")
+        format_m = report['format_metrics']
+        print(f"  格式验证通过率: {format_m['valid_rate']:.2%}")
+        print(f"  平均格式分数:   {format_m['avg_format_score']:.4f}")
+        print(f"  Definition有效: {format_m['definition_has_content']:.2%}")
+        print(f"  Emphasis有效:   {format_m['emphasis_valid']:.2%}")
+        print(f"  Avoid有效:      {format_m['avoid_valid']:.2%}")
+
+        # 统计指标
+        print("\n[统计指标]")
+        stats = report['statistical_metrics']
+        print(f"  平均字符长度: {stats['char_length']['mean']:.1f}")
+        print(f"  平均单词数:   {stats['word_count']['mean']:.1f}")
+        print(f"  平均行数:     {stats['line_count']['mean']:.1f}")
+
+        if 'expert_usage' in stats:
+            print("\n[专家使用统计]")
+            for expert, pct in stats['expert_usage']['usage_percentage'].items():
+                print(f"  {expert}: {pct:.1f}%")
+
+        print("=" * 80 + "\n")
+
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("增强评估指标模块测试")
+    print("=" * 60)
+
+    # 创建评估器
+    metrics = EnhancedMetrics(use_bertscore=False)
+
+    # 测试数据
+    predictions = [
+        "Definition: In this task, draw bounding boxes around objects.\nEmphasis & Caution: Be accurate.\nThings to Avoid: Do not annotate backgrounds.",
+        "Definition: In this task, implement login functionality.\nEmphasis & Caution: -\nThings to Avoid: Do not skip validation.",
+        "Definition: -\nEmphasis & Caution: Test thoroughly.\nThings to Avoid: -"
+    ]
+
+    references = [
+        "Definition: In this task, annotate all visible objects with bounding boxes.\nEmphasis & Caution: Focus on foreground objects.\nThings to Avoid: Avoid partial objects.",
+        "Definition: In this task, create user authentication system.\nEmphasis & Caution: Ensure security.\nThings to Avoid: Do not store plain passwords.",
+        "Definition: In this task, test the login feature.\nEmphasis & Caution: Cover edge cases.\nThings to Avoid: Do not skip error handling."
+    ]
+
+    print("\n测试1: 格式指标")
+    print("-" * 60)
+    format_results = metrics.calculate_format_metrics(predictions)
+    print(f"格式验证通过率: {format_results['valid_rate']:.2%}")
+    print(f"平均格式分数: {format_results['avg_format_score']:.4f}")
+
+    print("\n测试2: 生成质量指标")
+    print("-" * 60)
+    try:
+        quality_results = metrics.calculate_generation_quality(predictions, references)
+        print(f"BLEU: {quality_results['bleu']:.4f}")
+        print(f"ROUGE-L: {quality_results['rougeL']:.4f}")
+        print(f"METEOR: {quality_results['meteor']:.4f}")
+    except Exception as e:
+        print(f"生成质量指标计算失败(可能缺少依赖): {e}")
+
+    print("\n测试3: 统计指标")
+    print("-" * 60)
+    expert_usage = {'text_expert': 1, 'image_expert': 1, 'uml_expert': 1}
+    stats_results = metrics.calculate_statistical_metrics(predictions, expert_usage)
+    print(f"平均字符长度: {stats_results['char_length']['mean']:.1f}")
+    print(f"平均单词数: {stats_results['word_count']['mean']:.1f}")
+
+    print("\n测试完成!")

@@ -3,15 +3,14 @@
 负责整合MoE系统生成最终指令
 """
 
-# 待实现的生成模块导入（阶段5会用到）
-
-# from .generator import InstructionGenerator
-# from .quality_validator import QualityValidator
+from .generator import InstructionGenerator
+from .quality_validator import QualityValidator, ValidationResult
 
 __all__ = [
-    # 'InstructionGenerator',
-    # 'QualityValidator',
+    'InstructionGenerator',
+    'QualityValidator',
+    'ValidationResult',
 ]
 
 # 版本信息
-__version__ = '0.1.0'
+__version__ = '1.0.0'

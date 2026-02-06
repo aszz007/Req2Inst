@@ -48,6 +48,9 @@ from .file_utils import (
     create_backup
 )
 
+# 增强评估指标
+from .enhanced_metrics import EnhancedMetrics
+
 # 定义公开的API
 __all__ = [
     # 日志系统
@@ -88,8 +91,11 @@ __all__ = [
     # 其他工具
     'get_file_size',
     'copy_file_safe',
-    'create_backup'
+    'create_backup',
+
+    # 评估指标
+    'EnhancedMetrics'
 ]
 
 # 版本信息
-__version__ = '1.0.1'
+__version__ = '1.1.0'
