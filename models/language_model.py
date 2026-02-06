@@ -8,7 +8,13 @@
 """
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    StoppingCriteria,
+    StoppingCriteriaList
+)
 
 # 尝试导入流式生成支持（仅qwen_text环境需要）
 try:
@@ -33,6 +39,73 @@ from config.settings import get_path_config, get_device_config
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class ThreePartInstructionStoppingCriteria(StoppingCriteria):
+    """
+    自定义停止条件：检测完整的三段式指令生成
+
+    当检测到以下模式时停止生成：
+    1. Definition: ...
+    2. Emphasis & Caution: ...
+    3. Things to Avoid: ...
+
+    这可以防止模型继续生成训练数据中的其他示例（训练数据泄露）
+
+    关键修复：只检测生成的部分，不包括prompt中的示例
+    """
+
+    def __init__(self, tokenizer, input_length):
+        """
+        初始化停止条件
+
+        Args:
+            tokenizer: 用于解码的tokenizer
+            input_length: 输入prompt的长度(token数)
+        """
+        self.tokenizer = tokenizer
+        self.input_length = input_length
+        # 需要检测的关键标签
+        self.labels = [
+            "Definition:",
+            "Emphasis & Caution:",
+            "Emphasis and Caution:",  # 兼容变体
+            "Things to Avoid:"
+        ]
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+        """
+        检查是否应该停止生成
+
+        Args:
+            input_ids: 当前生成的token序列(包含prompt+生成)
+            scores: 当前的分数
+
+        Returns:
+            bool: True表示停止，False表示继续
+        """
+        # 只解码生成的部分，跳过prompt
+        generated_ids = input_ids[0][self.input_length:]
+        generated_text = self.tokenizer.decode(generated_ids, skip_special_tokens=False)
+
+        # 检查生成部分是否包含所有三个标签
+        has_definition = "Definition:" in generated_text
+        has_emphasis = "Emphasis & Caution:" in generated_text or "Emphasis and Caution:" in generated_text
+        has_avoid = "Things to Avoid:" in generated_text
+
+        # 如果找到完整的三段式结构
+        if has_definition and has_emphasis and has_avoid:
+            # 检查Things to Avoid后是否有句号或足够内容
+            avoid_idx = generated_text.rfind("Things to Avoid:")
+
+            if avoid_idx != -1:
+                after_avoid = generated_text[avoid_idx + len("Things to Avoid:"):]
+                # 检查是否有句号、换行或足够的内容(至少20个字符)
+                if '.' in after_avoid or '\n' in after_avoid or len(after_avoid.strip()) > 20:
+                    logger.debug("[StoppingCriteria] 检测到完整三段式指令，停止生成")
+                    return True
+
+        return False
 
 
 class LanguageModel:
@@ -295,11 +368,22 @@ class LanguageModel:
             if self.tokenizer.eos_token_id is not None:
                 stop_tokens.append(self.tokenizer.eos_token_id)
 
+            # 添加<|im_end|>作为停止token
             im_end_id = self.tokenizer.convert_tokens_to_ids('<|im_end|>')
             if im_end_id is not None and im_end_id != self.tokenizer.unk_token_id:
                 stop_tokens.append(im_end_id)
 
+            # 添加<|endoftext|>作为停止token（Qwen-7B-Chat的文档结束标记）
+            endoftext_id = self.tokenizer.convert_tokens_to_ids('<|endoftext|>')
+            if endoftext_id is not None and endoftext_id != self.tokenizer.unk_token_id:
+                stop_tokens.append(endoftext_id)
+
             stop_tokens = list(set(stop_tokens))
+
+            # 创建自定义停止条件：检测完整三段式指令（传入input_length）
+            stopping_criteria = StoppingCriteriaList([
+                ThreePartInstructionStoppingCriteria(self.tokenizer, input_length)
+            ])
 
             # 生成配置
             generation_config = {
@@ -310,7 +394,8 @@ class LanguageModel:
                 "repetition_penalty": repetition_penalty,
                 "do_sample": True if temperature > 0 else False,
                 "pad_token_id": self.tokenizer.pad_token_id,
-                "eos_token_id": stop_tokens
+                "eos_token_id": stop_tokens,
+                "stopping_criteria": stopping_criteria
             }
 
             # 生成文本
