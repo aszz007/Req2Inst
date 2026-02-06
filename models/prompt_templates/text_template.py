@@ -13,27 +13,22 @@ class TextInstructionTemplate:
     SYSTEM_PROMPT = """You are a crowdsourcing task design expert. Based on the input requirement text, write an English task instruction for crowdsourcing workers.
 
 Core Principles:
-1. Extreme Conciseness: Crowdsourcing workers value time. Use the most concise language.
-2. Structured Format: Strictly follow the format defined below.
-3. English Output: Output must be in English regardless of input language.
-4. Stop Immediately: Generate ONLY the three-part instruction, then STOP. Do not generate any additional content, examples, explanations, or code."""
+1. Extreme Conciseness: Crowdsourcing workers value time. Use the most concise language possible.
+2. Structured Format: Strictly follow the three-part format defined below.
+3. English Output: Output must be in English regardless of input language."""
 
     # 格式要求说明
-    FORMAT_INSTRUCTIONS = """You must generate a three-part instruction in the following format:
+    FORMAT_INSTRUCTIONS = """Output Format Requirements:
 
-EXAMPLE OUTPUT (copy this exact structure):
-Definition: In this task, [describe the specific task based on the requirement].
-Emphasis & Caution: [key points to focus on or important precautions].
-Things to Avoid: [things that should not be done or common mistakes to avoid].
+Definition: Use a clear imperative sentence to describe the main objective. Must start with "In this task,".
+Emphasis & Caution: Only highlight conditions most prone to error or that must be met. Use "-" if nothing specific to emphasize.
+Things to Avoid: Only list prohibited operations. Use "-" if nothing specific to avoid.
 
 CRITICAL RULES:
-- Output MUST start with "Definition:" (include the label)
-- Each section on a separate line, no blank lines between them
-- Definition must include "In this task," after the label
+- Each section must be on a separate line
+- Each line must start with the section label (Definition: / Emphasis & Caution: / Things to Avoid:)
 - Keep all sections concise
-- Use "-" if nothing specific to emphasize or avoid
-- Output ONLY these three lines with labels, nothing before or after
-- Do NOT add any preamble, explanation, or additional content"""
+- Output ONLY these three lines, nothing else"""
 
     @staticmethod
     def build_prompt(low_requirement: str) -> str:

@@ -59,36 +59,31 @@ Important: Ensure complete JSON output with all brackets properly closed. Use En
 
     # ==================== 指令生成阶段Prompt ====================
     # 系统提示词（定义角色和核心原则）
-    SYSTEM_PROMPT = """You are a software architecture and crowdsourcing task design expert. Based on the input UML Use Case Diagram structured data (JSON format), write an English business logic implementation instruction for crowdsourcing workers.
+    SYSTEM_PROMPT = """You are a software architecture and crowdsourcing task design expert. Based on the input UML Use Case Diagram structured data (JSON format), write an English task instruction for crowdsourcing workers.
 
 Core Principles:
-1. Data-Driven: Actor names and Use Case names in the instruction must strictly reference English original names from JSON source data, without omission, abbreviation or rewriting.
-2. Logic Priority, Visuals Secondary: Completely ignore visual layout information like position (e.g., top_left) in input data. Focus on parsing business logic relationships in relationships.
+1. Data-Driven: Actor names and Use Case names in the instruction must strictly reference the original names from JSON source data. Do not omit, abbreviate, or rewrite.
+2. Logic Priority, Visuals Secondary: Completely ignore visual layout information like position (e.g., top_left) in input data. Focus on parsing business logic in relationships.
 3. Relationship Semantics Translation:
-   - include → Must translate to "Mandatory step" or "Required prerequisite"
-   - extend → Must translate to "Conditional extension" or "Optional flow"
-   - association → Must translate to "Actor interaction" or "Triggers"
-4. Crowdsourcing Task Oriented: Clearly indicate this is implementation instruction for developers, focusing on what functionality to implement and how to handle different business process branches.
-5. Structured Format: Strictly follow the format defined below.
-6. Stop Immediately: Generate ONLY the three-part instruction, then STOP. Do not generate any additional content, examples, explanations, or code."""
+   - include -> Translate to "Mandatory step" or "Required prerequisite"
+   - extend -> Translate to "Conditional flow" or "Optional"
+   - association -> Translate to "Interaction" or "Access"
+4. Structured Format: Strictly follow the three-part format defined below."""
 
     # 格式要求说明
-    FORMAT_INSTRUCTIONS = """You must generate a three-part instruction in the following format:
+    FORMAT_INSTRUCTIONS = """Output Format Requirements:
 
-EXAMPLE OUTPUT (copy this exact structure):
-Definition: In this task, implement [describe the workflow with specific actors and use cases from the UML].
-Emphasis & Caution: [mandatory steps, conditional flows, or relationship semantics to implement].
-Things to Avoid: [what not to focus on, such as UI details or visual elements].
+Definition: Use a clear imperative sentence to describe the core system objective. Must start with "In this task,".
+Emphasis & Caution: Highlight mandatory flows (include) and conditional extension flows (extend). Use "-" if none.
+Things to Avoid: List prohibited operations (e.g., focusing on node positions, implementing UI styles). Use "-" if nothing specific.
 
 CRITICAL RULES:
-- Output MUST start with "Definition:" (include the label)
-- Each section on a separate line, no blank lines between them
-- Definition must start with "In this task, implement..."
-- Explicitly list actors and use cases from JSON data
+- Each section must be on a separate line
+- Each line must start with the section label (Definition: / Emphasis & Caution: / Things to Avoid:)
+- Definition must start with "In this task," and explicitly list actors and use cases from JSON data
 - Translate relationship types (include/extend/association) to business logic terms
-- Keep sections concise, use "-" if nothing specific
-- Output ONLY these three lines with labels, nothing before or after
-- Do NOT add any preamble, explanation, or additional content"""
+- Keep all sections concise
+- Output ONLY these three lines, nothing else"""
 
     @staticmethod
     def build_prompt(uml_json: Union[str, dict]) -> str:

@@ -34,31 +34,27 @@ Please output strictly in JSON format with no other content. Use ONLY English in
 
     # ==================== 指令生成阶段Prompt ====================
     # 系统提示词（定义角色和核心原则）
-    SYSTEM_PROMPT = """You are a computer vision data expert and crowdsourcing task designer. Based on the input image analysis data, write an English image annotation instruction for crowdsourcing workers.
+    SYSTEM_PROMPT = """You are a computer vision data expert and crowdsourcing task designer. Based on the input image analysis structured data, write an English image annotation instruction for crowdsourcing workers.
 
 Core Principles:
-1. Annotation Focus: The instruction must explicitly require workers to "draw bounding boxes"
-2. Foreground Extraction: Extract main foreground objects (e.g., people, cars) as targets from the objects list, ignore background elements  
-3. Direct Reference: Use English terms directly from the JSON data, do not replace with synonyms
-4. Extreme Conciseness: Emphasis and Avoid sections must be brief. Use "-" if no significant visual features or distractors exist
-5. Stop Immediately: Generate ONLY the three-part instruction, then STOP. Do not generate any additional content, examples, explanations, or code."""
+1. Annotation Focus: The instruction must explicitly require workers to draw bounding boxes.
+2. Foreground Extraction: Extract main foreground objects (e.g., people, vehicles) from the objects list as annotation targets. Ignore background elements.
+3. Direct Reference: Use English terms directly from the JSON data. Do not replace with synonyms.
+4. Extreme Conciseness: Keep Emphasis and Avoid sections brief. Use "-" if no significant visual features or distractors exist."""
 
     # 格式要求说明
-    FORMAT_INSTRUCTIONS = """You must generate a three-part instruction in the following format:
+    FORMAT_INSTRUCTIONS = """Output Format Requirements:
 
-EXAMPLE OUTPUT (copy this exact structure):
-Definition: In this task, draw bounding boxes around [list the specific objects from the image].
-Emphasis & Caution: [visual features to focus on or annotation guidelines].
-Things to Avoid: [elements not to annotate or common annotation mistakes].
+Definition: Use a clear imperative sentence to describe the annotation targets. Must start with "In this task," and explicitly mention "draw bounding boxes around".
+Emphasis & Caution: Only list highly distinctive visual features (e.g., specific colors, positions). Use "-" if nothing specific to emphasize.
+Things to Avoid: Only list confusing background distractors. Use "-" if nothing specific to avoid.
 
 CRITICAL RULES:
-- Output MUST start with "Definition:" (include the label)
-- Each section on a separate line, no blank lines between them
-- Definition must start with "In this task, draw bounding boxes around..."
-- Explicitly list the objects to annotate from the JSON data
-- Keep Emphasis and Avoid sections concise, use "-" if nothing to emphasize/avoid
-- Output ONLY these three lines with labels, nothing before or after
-- Do NOT add any preamble, explanation, or additional content"""
+- Each section must be on a separate line
+- Each line must start with the section label (Definition: / Emphasis & Caution: / Things to Avoid:)
+- Definition must include "draw bounding boxes around" and list specific objects from JSON data
+- Keep all sections concise
+- Output ONLY these three lines, nothing else"""
 
     @staticmethod
     def build_prompt(image_description: Union[str, dict]) -> str:
