@@ -18,6 +18,8 @@ Evaluate Experts - Comprehensive Expert Performance Evaluation
 import sys
 import json
 import argparse
+import gc
+import time
 from pathlib import Path
 from typing import List, Dict, Optional
 from datetime import datetime
@@ -64,6 +66,32 @@ class ExpertEvaluator:
         logger.info("专家评估器初始化完成")
         logger.info(f"使用BERTScore: {use_bertscore}")
         logger.info(f"严格验证模式: {strict_validation}")
+
+    def _force_cleanup_gpu(self):
+        """
+        强制清理GPU显存
+
+        在每个专家评估完成后调用，确保显存被完全释放
+        """
+        import torch
+
+        logger.info("强制清理GPU显存...")
+
+        # 多次调用gc和cuda清理
+        for _ in range(3):
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+
+        # 短暂延迟，让GPU有时间释放资源
+        time.sleep(2)
+
+        if torch.cuda.is_available():
+            memory_allocated = torch.cuda.memory_allocated() / 1024**3
+            memory_reserved = torch.cuda.memory_reserved() / 1024**3
+            logger.info(f"GPU显存状态 - 已分配: {memory_allocated:.2f}GB, 已保留: {memory_reserved:.2f}GB")
+
 
     def _display_samples(self, test_data: List[Dict], expert_type: str, num_display: int = 5):
         """
@@ -145,6 +173,10 @@ class ExpertEvaluator:
         # 卸载模型
         expert.unload_model()
 
+        # 强制清理GPU显存
+        del expert
+        self._force_cleanup_gpu()
+
         # 评估
         results = self._evaluate_predictions(
             predictions=predictions,
@@ -208,6 +240,10 @@ class ExpertEvaluator:
 
         # 卸载模型
         expert.unload_model()
+
+        # 强制清理GPU显存
+        del expert
+        self._force_cleanup_gpu()
 
         # 评估
         results = self._evaluate_predictions(
@@ -274,6 +310,10 @@ class ExpertEvaluator:
 
         # 卸载模型
         expert.unload_model()
+
+        # 强制清理GPU显存
+        del expert
+        self._force_cleanup_gpu()
 
         # 评估
         results = self._evaluate_predictions(
@@ -361,6 +401,10 @@ class ExpertEvaluator:
 
         # 卸载模型
         expert.unload_model()
+
+        # 强制清理GPU显存
+        del expert
+        self._force_cleanup_gpu()
 
         # 评估
         results = self._evaluate_predictions(
@@ -466,24 +510,32 @@ class ExpertEvaluator:
             all_results['text_expert'] = self.evaluate_text_expert(num_samples)
         except Exception as e:
             logger.error(f"文本专家评估失败: {e}")
+            # 即使失败也要清理GPU显存
+            self._force_cleanup_gpu()
 
         # 图像专家
         try:
             all_results['image_expert'] = self.evaluate_image_expert(num_samples)
         except Exception as e:
             logger.error(f"图像专家评估失败: {e}")
+            # 即使失败也要清理GPU显存
+            self._force_cleanup_gpu()
 
         # UML专家(默认版本)
         try:
             all_results['uml_expert'] = self.evaluate_uml_expert('qwen235B', num_samples)
         except Exception as e:
             logger.error(f"UML专家评估失败: {e}")
+            # 即使失败也要清理GPU显存
+            self._force_cleanup_gpu()
 
         # 通用专家(默认版本)
         try:
             all_results['general_expert'] = self.evaluate_general_expert('qwen235B', num_samples)
         except Exception as e:
             logger.error(f"通用专家评估失败: {e}")
+            # 即使失败也要清理GPU显存
+            self._force_cleanup_gpu()
 
         # 保存结果
         if save_dir:
