@@ -297,6 +297,11 @@ class ExpertTrainer:
             logger.info(f"  验证集: {len(val_data)}条")
             logger.info(f"  测试集: {len(test_data)}条")
 
+            # 保存原始数据（用于调试和验证）
+            self.train_data = train_data
+            self.val_data = val_data
+            self.test_data = test_data
+
             # 加载tokenizer
             # ⚠️ 重要：所有Expert（包括Image/UML）都直接加载tokenizer
             # 因为它们处理的都是文本输入（Image/UML Expert的输入是JSON文本描述）
@@ -540,7 +545,7 @@ class ExpertTrainer:
 
             # ===== 调试输出：打印前5个训练样本的完整prompt =====
             logger.info("=" * 80)
-            logger.info("[训练数据调试] 前5个训练样本的完整prompt:")
+            logger.info("[训练数据调试] 前5个训练样本的完整内容:")
             logger.info("=" * 80)
 
             num_samples_to_show = min(5, len(self.train_data))
@@ -549,31 +554,20 @@ class ExpertTrainer:
                 logger.info(f"\n[样本 {i+1}/{num_samples_to_show}]")
                 logger.info("-" * 80)
 
-                # 打印input和input_with_prompt
+                # 打印完整的input
                 if 'input' in sample:
                     input_data = sample['input']
-                    # 截断过长的input（只显示前200字符）
-                    if isinstance(input_data, str) and len(input_data) > 200:
-                        logger.info(f"Input（前200字符）: {input_data[:200]}...")
-                    else:
-                        logger.info(f"Input: {input_data}")
+                    logger.info(f"Input (完整):\n{input_data}")
 
+                # 打印完整的input_with_prompt
                 if 'input_with_prompt' in sample:
                     prompt = sample['input_with_prompt']
-                    # 显示prompt的前1000字符（包含系统提示和用户消息）
-                    logger.info(f"\nPrompt（前1000字符）:")
-                    logger.info(prompt[:1000])
-                    if len(prompt) > 1000:
-                        logger.info("...")
-                        logger.info(f"\nPrompt总长度: {len(prompt)}字符")
+                    logger.info(f"\nPrompt (完整, {len(prompt)}字符):\n{prompt}")
 
+                # 打印完整的output
                 if 'output' in sample:
                     output_data = sample['output']
-                    # 截断过长的output
-                    if len(output_data) > 200:
-                        logger.info(f"\nOutput（前200字符）: {output_data[:200]}...")
-                    else:
-                        logger.info(f"\nOutput: {output_data}")
+                    logger.info(f"\nOutput (完整):\n{output_data}")
 
                 logger.info("-" * 80)
 
