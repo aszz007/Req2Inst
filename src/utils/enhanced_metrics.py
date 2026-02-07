@@ -56,12 +56,22 @@ class EnhancedMetrics:
         if self.bleu_metric is None:
             try:
                 from evaluate import load
+
+                # 预先下载NLTK数据(METEOR依赖)
+                self._ensure_nltk_data()
+
+                logger.info("加载BLEU指标...")
                 self.bleu_metric = load('bleu')
+
+                logger.info("加载ROUGE指标...")
                 self.rouge_metric = load('rouge')
+
+                logger.info("加载METEOR指标...")
                 self.meteor_metric = load('meteor')
 
                 if self.use_bertscore:
                     try:
+                        logger.info("加载BERTScore指标...")
                         self.bertscore_metric = load('bertscore')
                         logger.info("BERTScore加载成功")
                     except Exception as e:
@@ -73,6 +83,49 @@ class EnhancedMetrics:
             except Exception as e:
                 logger.error(f"评估指标加载失败: {e}")
                 raise
+
+    def _ensure_nltk_data(self):
+        """
+        确保NLTK数据已下载(METEOR依赖)
+
+        METEOR需要的NLTK数据包:
+        - wordnet: 词汇数据库
+        - punkt: 句子分词器
+        - omw-1.4: 开放多语言词网
+        """
+        try:
+            import nltk
+            from nltk.data import find
+
+            required_data = [
+                ('corpora/wordnet', 'wordnet'),
+                ('corpora/omw-1.4', 'omw-1.4'),
+                ('tokenizers/punkt', 'punkt'),
+                ('tokenizers/punkt_tab', 'punkt_tab')
+            ]
+
+            logger.info("检查NLTK数据包...")
+
+            for data_path, data_name in required_data:
+                try:
+                    find(data_path)
+                    logger.debug(f"NLTK数据包已存在: {data_name}")
+                except LookupError:
+                    logger.warning(f"NLTK数据包缺失: {data_name}, 尝试下载...")
+                    try:
+                        nltk.download(data_name, quiet=True)
+                        logger.info(f"NLTK数据包下载成功: {data_name}")
+                    except Exception as e:
+                        logger.warning(f"NLTK数据包下载失败: {data_name} - {e}")
+                        logger.warning(f"METEOR计算可能会失败或变慢")
+
+            logger.info("NLTK数据检查完成")
+
+        except ImportError:
+            logger.warning("NLTK未安装, METEOR计算可能会失败")
+        except Exception as e:
+            logger.warning(f"NLTK数据检查失败: {e}")
+            logger.warning("继续执行, 但METEOR计算可能会失败")
 
     def calculate_generation_quality(
         self,
@@ -102,18 +155,20 @@ class EnhancedMetrics:
 
         # BLEU
         try:
+            logger.info("开始计算BLEU指标...")
             bleu_result = self.bleu_metric.compute(
                 predictions=predictions,
                 references=[[ref] for ref in references]
             )
             results['bleu'] = bleu_result['bleu']
-            logger.info(f"BLEU: {results['bleu']:.4f}")
+            logger.info(f"BLEU计算完成: {results['bleu']:.4f}")
         except Exception as e:
             logger.error(f"BLEU计算失败: {e}")
             results['bleu'] = 0.0
 
         # ROUGE
         try:
+            logger.info("开始计算ROUGE指标...")
             rouge_result = self.rouge_metric.compute(
                 predictions=predictions,
                 references=references
@@ -121,26 +176,35 @@ class EnhancedMetrics:
             results['rouge1'] = rouge_result['rouge1']
             results['rouge2'] = rouge_result['rouge2']
             results['rougeL'] = rouge_result['rougeL']
-            logger.info(f"ROUGE-L: {results['rougeL']:.4f}")
+            logger.info(f"ROUGE计算完成 - ROUGE-L: {results['rougeL']:.4f}")
         except Exception as e:
             logger.error(f"ROUGE计算失败: {e}")
             results['rouge1'] = results['rouge2'] = results['rougeL'] = 0.0
 
         # METEOR
         try:
+            logger.info("开始计算METEOR指标...")
+            logger.info(f"METEOR计算中 - 样本数: {len(predictions)}, 请耐心等待...")
+
+            # METEOR计算可能较慢,添加详细日志
             meteor_result = self.meteor_metric.compute(
                 predictions=predictions,
                 references=references
             )
             results['meteor'] = meteor_result['meteor']
-            logger.info(f"METEOR: {results['meteor']:.4f}")
+            logger.info(f"METEOR计算完成: {results['meteor']:.4f}")
         except Exception as e:
             logger.error(f"METEOR计算失败: {e}")
+            logger.error(f"可能原因: NLTK数据缺失或网络问题")
+            logger.error(f"建议: 手动下载NLTK数据或禁用METEOR")
             results['meteor'] = 0.0
 
         # BERTScore
         if self.use_bertscore and self.bertscore_metric is not None:
             try:
+                logger.info("开始计算BERTScore指标...")
+                logger.info(f"BERTScore计算中 - 这可能需要几分钟...")
+
                 bertscore_result = self.bertscore_metric.compute(
                     predictions=predictions,
                     references=references,
@@ -150,13 +214,14 @@ class EnhancedMetrics:
                 results['bertscore_precision'] = sum(bertscore_result['precision']) / len(predictions)
                 results['bertscore_recall'] = sum(bertscore_result['recall']) / len(predictions)
                 results['bertscore_f1'] = sum(bertscore_result['f1']) / len(predictions)
-                logger.info(f"BERTScore F1: {results['bertscore_f1']:.4f}")
+                logger.info(f"BERTScore计算完成 - F1: {results['bertscore_f1']:.4f}")
             except Exception as e:
                 logger.error(f"BERTScore计算失败: {e}")
                 results['bertscore_precision'] = 0.0
                 results['bertscore_recall'] = 0.0
                 results['bertscore_f1'] = 0.0
 
+        logger.info("所有生成质量指标计算完成")
         return results
 
     def calculate_format_metrics(
