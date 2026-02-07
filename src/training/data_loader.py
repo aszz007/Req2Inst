@@ -343,8 +343,14 @@ class ImageDatasetLoader:
                     desc_json = json.loads(desc_str)
                     # 验证是否包含description字段
                     if 'description' in desc_json:
-                        # 保留完整JSON（包含description、details、objects、scene等）
-                        description = desc_str.strip()  # 使用完整JSON字符串
+                        # 过滤掉无用的元数据字段
+                        # 只保留description和details，移除confidence, recognition_status, processing_time
+                        filtered_json = {
+                            'description': desc_json.get('description', ''),
+                            'details': desc_json.get('details', {})
+                        }
+                        # 转换回JSON字符串
+                        description = json.dumps(filtered_json, ensure_ascii=False)
                     else:
                         # 如果JSON不包含description字段，可能格式错误，跳过
                         logger.warning(f"行{idx}: JSON不包含description字段，跳过")
