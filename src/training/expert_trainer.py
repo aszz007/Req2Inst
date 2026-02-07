@@ -538,6 +538,50 @@ class ExpertTrainer:
                 mlm=False  # 因果语言建模
             )
 
+            # ===== 调试输出：打印前5个训练样本的完整prompt =====
+            logger.info("=" * 80)
+            logger.info("[训练数据调试] 前5个训练样本的完整prompt:")
+            logger.info("=" * 80)
+
+            num_samples_to_show = min(5, len(self.train_data))
+            for i in range(num_samples_to_show):
+                sample = self.train_data[i]
+                logger.info(f"\n[样本 {i+1}/{num_samples_to_show}]")
+                logger.info("-" * 80)
+
+                # 打印input和input_with_prompt
+                if 'input' in sample:
+                    input_data = sample['input']
+                    # 截断过长的input（只显示前200字符）
+                    if isinstance(input_data, str) and len(input_data) > 200:
+                        logger.info(f"Input（前200字符）: {input_data[:200]}...")
+                    else:
+                        logger.info(f"Input: {input_data}")
+
+                if 'input_with_prompt' in sample:
+                    prompt = sample['input_with_prompt']
+                    # 显示prompt的前1000字符（包含系统提示和用户消息）
+                    logger.info(f"\nPrompt（前1000字符）:")
+                    logger.info(prompt[:1000])
+                    if len(prompt) > 1000:
+                        logger.info("...")
+                        logger.info(f"\nPrompt总长度: {len(prompt)}字符")
+
+                if 'output' in sample:
+                    output_data = sample['output']
+                    # 截断过长的output
+                    if len(output_data) > 200:
+                        logger.info(f"\nOutput（前200字符）: {output_data[:200]}...")
+                    else:
+                        logger.info(f"\nOutput: {output_data}")
+
+                logger.info("-" * 80)
+
+            logger.info("=" * 80)
+            logger.info("[调试输出结束] 请检查上述样本的prompt是否包含完整JSON结构")
+            logger.info("=" * 80)
+            # ===== 调试输出结束 =====
+
             # 创建Trainer
             trainer = Trainer(
                 model=self.model,

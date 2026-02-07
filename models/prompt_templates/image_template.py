@@ -85,14 +85,24 @@ CRITICAL RULES:
         """
         # 处理输入格式
         if isinstance(image_description, dict):
-            # 如果是字典，转为JSON字符串
-            json_str = json.dumps(image_description, ensure_ascii=False, indent=2)
+            # 过滤元数据字段（confidence、recognition_status、processing_time等）
+            filtered_data = {
+                k: v for k, v in image_description.items()
+                if k not in ['confidence', 'recognition_status', 'processing_time']
+            }
+            # 转为JSON字符串
+            json_str = json.dumps(filtered_data, ensure_ascii=False, indent=2)
         elif isinstance(image_description, str):
             # 尝试解析为JSON
             try:
                 parsed = json.loads(image_description)
-                # 如果能解析，格式化输出
-                json_str = json.dumps(parsed, ensure_ascii=False, indent=2)
+                # 过滤元数据字段
+                filtered_data = {
+                    k: v for k, v in parsed.items()
+                    if k not in ['confidence', 'recognition_status', 'processing_time']
+                }
+                # 格式化输出
+                json_str = json.dumps(filtered_data, ensure_ascii=False, indent=2)
             except json.JSONDecodeError:
                 # 如果不是JSON，当作纯文本description处理
                 # 构建一个简单的JSON结构

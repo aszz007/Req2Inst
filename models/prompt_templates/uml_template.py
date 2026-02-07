@@ -113,14 +113,24 @@ CRITICAL RULES:
         """
         # 处理输入格式
         if isinstance(uml_json, dict):
-            # 如果是字典，转为JSON字符串
-            json_str = json.dumps(uml_json, ensure_ascii=False, indent=2)
+            # 过滤元数据字段（confidence、recognition_status、processing_time等）
+            filtered_data = {
+                k: v for k, v in uml_json.items()
+                if k not in ['confidence', 'recognition_status', 'processing_time']
+            }
+            # 转为JSON字符串
+            json_str = json.dumps(filtered_data, ensure_ascii=False, indent=2)
         elif isinstance(uml_json, str):
             # 尝试解析为JSON以验证格式
             try:
                 parsed = json.loads(uml_json)
-                # 如果能解析，格式化输出
-                json_str = json.dumps(parsed, ensure_ascii=False, indent=2)
+                # 过滤元数据字段
+                filtered_data = {
+                    k: v for k, v in parsed.items()
+                    if k not in ['confidence', 'recognition_status', 'processing_time']
+                }
+                # 格式化输出
+                json_str = json.dumps(filtered_data, ensure_ascii=False, indent=2)
             except json.JSONDecodeError:
                 # 如果不是有效JSON，直接使用
                 json_str = uml_json
