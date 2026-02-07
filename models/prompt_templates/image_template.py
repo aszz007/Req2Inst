@@ -90,8 +90,8 @@ CRITICAL RULES:
                 k: v for k, v in image_description.items()
                 if k not in ['confidence', 'recognition_status', 'processing_time']
             }
-            # 转为JSON字符串
-            json_str = json.dumps(filtered_data, ensure_ascii=False, indent=2)
+            # 转为压缩JSON字符串（无空格、无换行）
+            json_str = json.dumps(filtered_data, ensure_ascii=False, separators=(',', ':'))
         elif isinstance(image_description, str):
             # 尝试解析为JSON
             try:
@@ -101,11 +101,11 @@ CRITICAL RULES:
                     k: v for k, v in parsed.items()
                     if k not in ['confidence', 'recognition_status', 'processing_time']
                 }
-                # 格式化输出
-                json_str = json.dumps(filtered_data, ensure_ascii=False, indent=2)
+                # 转为压缩JSON字符串（无空格、无换行）
+                json_str = json.dumps(filtered_data, ensure_ascii=False, separators=(',', ':'))
             except json.JSONDecodeError:
                 # 如果不是JSON，当作纯文本description处理
-                # 构建一个简单的JSON结构
+                # 构建一个简单的JSON结构（压缩格式）
                 json_str = json.dumps({
                     "description": image_description,
                     "details": {
@@ -113,7 +113,7 @@ CRITICAL RULES:
                         "scene": "unknown",
                         "spatial_info": ""
                     }
-                }, ensure_ascii=False, indent=2)
+                }, ensure_ascii=False, separators=(',', ':'))
         else:
             raise TypeError("image_description必须是str或dict类型")
 

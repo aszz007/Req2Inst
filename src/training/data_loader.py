@@ -213,6 +213,31 @@ def find_column(df: pd.DataFrame, possible_names: List[str]) -> Optional[str]:
     return None
 
 
+def normalize_json_string(json_str: str) -> str:
+    """
+    统一JSON字符串格式为压缩格式（无空格、无换行）
+
+    优势：
+    1. Token数量少，节省显存和计算
+    2. 不受缩进风格影响，训练稳定
+    3. 与API返回格式一致
+
+    Args:
+        json_str: JSON字符串（可能格式化或未格式化）
+
+    Returns:
+        压缩后的JSON字符串
+    """
+    try:
+        # 解析JSON对象
+        obj = json.loads(json_str)
+        # 重新序列化为压缩格式：separators=(',', ':')移除所有空格
+        return json.dumps(obj, ensure_ascii=False, separators=(',', ':'))
+    except (json.JSONDecodeError, TypeError):
+        # 如果不是有效JSON，直接返回原字符串
+        return json_str
+
+
 class TextDatasetLoader:
     """文本数据集加载器 - 优化版"""
 
@@ -349,8 +374,8 @@ class ImageDatasetLoader:
                             'description': desc_json.get('description', ''),
                             'details': desc_json.get('details', {})
                         }
-                        # 转换回JSON字符串
-                        description = json.dumps(filtered_json, ensure_ascii=False)
+                        # 统一为压缩JSON格式（无空格、无换行）
+                        description = normalize_json_string(json.dumps(filtered_json, ensure_ascii=False))
                     else:
                         # 如果JSON不包含description字段，可能格式错误，跳过
                         logger.warning(f"行{idx}: JSON不包含description字段，跳过")
@@ -487,17 +512,17 @@ class UMLDatasetLoader:
                     if pd.isna(description) or pd.isna(instruction):
                         continue
 
-                    # 如果description是JSON字符串，验证并保留完整JSON
+                    # 如果description是JSON字符串，验证并统一格式
                     if isinstance(description, str) and description.strip().startswith('{'):
                         try:
                             desc_json = json.loads(description)
                             # 验证是否包含必要字段（actors或use_cases）
                             if 'actors' in desc_json or 'use_cases' in desc_json:
-                                # 保留完整JSON字符串（包含actors、use_cases、relationships等）
-                                description = description  # 使用完整JSON字符串
+                                # 统一为压缩JSON格式（无空格、无换行）
+                                description = normalize_json_string(description)
                             elif 'description' in desc_json:
-                                # 如果只有description字段，也保留完整JSON
-                                description = description
+                                # 如果只有description字段，也统一格式
+                                description = normalize_json_string(description)
                             else:
                                 # JSON格式不符合预期，记录警告
                                 logger.warning(f"行{idx}: UML JSON格式不符合预期，跳过")

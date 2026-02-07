@@ -113,12 +113,13 @@ CRITICAL RULES:
 
         # 处理输入数据格式
         if isinstance(input_data, dict):
-            input_str = json.dumps(input_data, ensure_ascii=False, indent=2)
+            # 转为压缩JSON字符串（无空格、无换行）
+            input_str = json.dumps(input_data, ensure_ascii=False, separators=(',', ':'))
         elif isinstance(input_data, str):
             try:
-                # 尝试解析并格式化JSON
+                # 尝试解析并转为压缩JSON（无空格、无换行）
                 parsed = json.loads(input_data)
-                input_str = json.dumps(parsed, ensure_ascii=False, indent=2)
+                input_str = json.dumps(parsed, ensure_ascii=False, separators=(',', ':'))
             except json.JSONDecodeError:
                 # 纯文本
                 input_str = input_data
