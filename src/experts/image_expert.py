@@ -93,23 +93,35 @@ class ImageExpert(BaseExpert):
                 return ""
 
         try:
-            # 提取description字段(如果是完整JSON)
+            # === 调试输出：显示接收到的原始数据 ===
+            logger.info("=" * 80)
+            logger.info("[Image Expert 调试] 接收到的原始输入数据:")
+            logger.info("-" * 80)
+            logger.info(f"数据类型: {type(input_data).__name__}")
+
             if isinstance(input_data, dict):
-                description = ImageInstructionTemplate.extract_description_from_json(input_data)
+                logger.info("数据内容（dict格式）:")
+                logger.info(json.dumps(input_data, indent=2, ensure_ascii=False))
             elif isinstance(input_data, str):
+                logger.info(f"数据内容（str格式，前500字符）:")
+                logger.info(input_data[:500])
+                # 尝试解析JSON
                 try:
                     parsed = json.loads(input_data)
-                    description = ImageInstructionTemplate.extract_description_from_json(parsed)
+                    logger.info("\n可以解析为JSON:")
+                    logger.info(json.dumps(parsed, indent=2, ensure_ascii=False))
                 except json.JSONDecodeError:
-                    description = input_data
+                    logger.info("\n无法解析为JSON，是纯文本description")
             else:
-                logger.error(f"不支持的输入类型: {type(input_data)}")
-                return ""
+                logger.info(f"未知数据类型: {input_data}")
+            logger.info("=" * 80)
+            # === 调试输出结束 ===
 
-            # 使用ImageInstructionTemplate构建prompt
-            prompt = ImageInstructionTemplate.build_prompt(description)
+            # 直接使用完整的input_data构建prompt
+            # ImageInstructionTemplate.build_prompt会自动处理dict、JSON字符串和纯文本
+            prompt = ImageInstructionTemplate.build_prompt(input_data)
 
-            logger.debug(f"生成指令 - 图像描述: {description[:100]}...")
+            logger.debug(f"生成指令 - 输入数据类型: {type(input_data).__name__}")
 
             # 调用模型生成
             instruction = self._generate_with_model(
@@ -135,7 +147,7 @@ class ImageExpert(BaseExpert):
             else:
                 logger.warning("指令格式验证失败,尝试回退方案")
                 logger.warning(f"失败的指令内容：\n{instruction}")
-                return self._fallback_generation(description)
+                return self._fallback_generation(input_data)
 
         except Exception as e:
             logger.error(f"指令生成失败: {e}")
@@ -168,12 +180,12 @@ class ImageExpert(BaseExpert):
 
         return True
 
-    def _fallback_generation(self, description: str) -> str:
+    def _fallback_generation(self, input_data: Union[str, dict]) -> str:
         """
         回退方案: 生成基础格式的图像标注指令
 
         Args:
-            description: 图像描述
+            input_data: 输入数据（完整JSON或纯文本）
 
         Returns:
             str: 基础格式的指令

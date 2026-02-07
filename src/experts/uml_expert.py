@@ -108,6 +108,30 @@ class UMLExpert(BaseExpert):
                 return ""
 
         try:
+            # === 调试输出：显示接收到的原始数据 ===
+            logger.info("=" * 80)
+            logger.info("[UML Expert 调试] 接收到的原始输入数据:")
+            logger.info("-" * 80)
+            logger.info(f"数据类型: {type(input_data).__name__}")
+
+            if isinstance(input_data, dict):
+                logger.info("数据内容（dict格式）:")
+                logger.info(json.dumps(input_data, indent=2, ensure_ascii=False))
+            elif isinstance(input_data, str):
+                logger.info(f"数据内容（str格式，前500字符）:")
+                logger.info(input_data[:500])
+                # 尝试解析JSON
+                try:
+                    parsed = json.loads(input_data)
+                    logger.info("\n可以解析为JSON:")
+                    logger.info(json.dumps(parsed, indent=2, ensure_ascii=False))
+                except json.JSONDecodeError:
+                    logger.info("\n无法解析为JSON")
+            else:
+                logger.info(f"未知数据类型: {input_data}")
+            logger.info("=" * 80)
+            # === 调试输出结束 ===
+
             # 解析输入数据
             if isinstance(input_data, str):
                 try:

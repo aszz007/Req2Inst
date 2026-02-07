@@ -338,13 +338,19 @@ class ImageDatasetLoader:
                 # 解析Description（可能是JSON字符串）
                 desc_str = str(row[desc_col])
 
-                # 尝试解析JSON
+                # 尝试解析JSON验证格式
                 try:
                     desc_json = json.loads(desc_str)
-                    # 只提取description字段（忽略confidence等元数据）
-                    description = desc_json.get('description', '').strip()
+                    # 验证是否包含description字段
+                    if 'description' in desc_json:
+                        # 保留完整JSON（包含description、details、objects、scene等）
+                        description = desc_str.strip()  # 使用完整JSON字符串
+                    else:
+                        # 如果JSON不包含description字段，可能格式错误，跳过
+                        logger.warning(f"行{idx}: JSON不包含description字段，跳过")
+                        continue
                 except (json.JSONDecodeError, TypeError, ValueError):
-                    # 如果不是JSON，直接使用原始值
+                    # 如果不是JSON，当作纯文本description处理
                     description = desc_str.strip()
 
                 instruction = str(row[instruction_col]).strip()
@@ -475,14 +481,24 @@ class UMLDatasetLoader:
                     if pd.isna(description) or pd.isna(instruction):
                         continue
 
-                    # 如果description是JSON字符串，提取其中的description字段
+                    # 如果description是JSON字符串，验证并保留完整JSON
                     if isinstance(description, str) and description.strip().startswith('{'):
                         try:
                             desc_json = json.loads(description)
-                            if 'description' in desc_json:
-                                description = desc_json['description']
+                            # 验证是否包含必要字段（actors或use_cases）
+                            if 'actors' in desc_json or 'use_cases' in desc_json:
+                                # 保留完整JSON字符串（包含actors、use_cases、relationships等）
+                                description = description  # 使用完整JSON字符串
+                            elif 'description' in desc_json:
+                                # 如果只有description字段，也保留完整JSON
+                                description = description
+                            else:
+                                # JSON格式不符合预期，记录警告
+                                logger.warning(f"行{idx}: UML JSON格式不符合预期，跳过")
+                                continue
                         except json.JSONDecodeError:
-                            pass  # 不是JSON就保持原样
+                            # 不是有效JSON，当作纯文本处理
+                            pass
 
                     # 构建带prompt的输入
                     prompt = UMLInstructionTemplate.build_prompt(str(description))
@@ -565,17 +581,10 @@ class GeneralDatasetLoader:
 
         # 重新构建prompt - 使用GeneralInstructionTemplate
         for item in image_raw:
-            # 构建图像JSON格式
-            image_json = {
-                "description": item['input'],
-                "details": {
-                    "objects": [],
-                    "scene": "image annotation task",
-                    "spatial_info": ""
-                }
-            }
+            # item['input']可能是完整JSON字符串或纯文本description
+            # 直接传给GeneralInstructionTemplate，它会自动处理
             prompt = GeneralInstructionTemplate.build_prompt(
-                image_json,
+                item['input'],
                 force_type='image'
             )
             all_data.append({
