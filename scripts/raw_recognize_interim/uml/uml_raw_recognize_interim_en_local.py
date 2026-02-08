@@ -59,7 +59,7 @@ def parse_args():
     parser.add_argument(
         '--streaming',
         action='store_true',
-        help='启用流式输出（实时显示生成内容）'
+        help='启用流式输出模式（实时显示生成内容）'
     )
     return parser.parse_args()
 
@@ -71,7 +71,6 @@ def recognize_single_uml(image_path: str, version: str = 'qwen2.5', streaming: b
     Args:
         image_path: 图片路径
         version: 模型版本
-        streaming: 是否使用流式输出
 
     Returns:
         dict: 识别结果
@@ -86,7 +85,6 @@ def recognize_single_uml(image_path: str, version: str = 'qwen2.5', streaming: b
     print(f"{'='*80}")
     print(f"模型版本: {version.upper()}")
     print(f"图片路径: {image_path}")
-    print(f"流式输出: {'启用' if streaming else '禁用'}")
     print(f"{'='*80}\n")
 
     # 初始化模型
@@ -147,7 +145,6 @@ def batch_recognize_uml(
         image_folder: 图片文件夹路径
         version: 模型版本（'qwen2.5' 或 'qwen3'）
         output_file: 输出JSON文件路径（None则自动生成）
-        streaming: 是否使用流式输出
 
     Returns:
         list: 所有识别结果的列表
@@ -173,7 +170,6 @@ def batch_recognize_uml(
     print(f"模型版本: {version.upper()}")
     print(f"图片文件夹: {image_folder}")
     print(f"找到图片数量: {total_images}")
-    print(f"流式输出: {'启用' if streaming else '禁用'}")
     print(f"{'='*80}\n")
 
     if total_images == 0:
@@ -283,16 +279,12 @@ def main():
             result = recognize_single_uml(args.single, args.version, args.streaming)
 
             # 保存结果
-            if args.output:
-                output_file = Path(args.output)
-                output_file.parent.mkdir(parents=True, exist_ok=True)
-            else:
-                path_cfg = get_path_config()
-                output_dir = path_cfg.UML_RECOGNITION_DIR
-                output_dir.mkdir(parents=True, exist_ok=True)
+            path_cfg = get_path_config()
+            output_dir = path_cfg.UML_RECOGNITION_DIR
+            output_dir.mkdir(parents=True, exist_ok=True)
 
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                output_file = output_dir / f"single_uml_{timestamp}.json"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_file = output_dir / f"single_uml_{timestamp}.json"
 
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(result, f, ensure_ascii=False, indent=2)
@@ -307,7 +299,7 @@ def main():
             else:
                 # 使用配置中的默认测试目录
                 path_cfg = get_path_config()
-                image_folder = path_cfg.PLANT_UML_DIR
+                image_folder = path_cfg.MDPI_UML_DIR
                 print(f"[提示] 使用默认输入目录: {image_folder}")
                 print(f"[提示] 可使用 --input 参数指定其他目录\n")
 

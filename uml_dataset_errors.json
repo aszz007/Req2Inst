@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-09T01:06:00.210139",
+  "timestamp": "2026-02-09T05:21:20.906778",
   "statistics": {
-    "total_images": 62,
-    "total_json_entries": 62,
-    "matched": 62,
+    "total_images": 600,
+    "total_json_entries": 600,
+    "matched": 600,
     "images_without_json": 0,
     "json_without_images": 0,
     "failed_recognitions": 0

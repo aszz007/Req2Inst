@@ -23,6 +23,7 @@ from peft import PeftModel, PeftConfig
 import json
 import re
 import gc
+import threading
 from typing import Dict, Optional, Tuple
 from pathlib import Path
 from threading import Thread
@@ -126,11 +127,20 @@ class VisionModel:
         """加载基础模型（支持动态精度选择）"""
         try:
             # 加载processor
-            logger.info("加载processor...")
             self.processor = AutoProcessor.from_pretrained(
                 self.model_path,
                 trust_remote_code=True
             )
+
+            # 修复Qwen tokenizer的pad_token问题
+            if self.processor.tokenizer.pad_token is None:
+                logger.info("检测到tokenizer没有pad_token，设置为eos_token")
+                self.processor.tokenizer.pad_token = self.processor.tokenizer.eos_token
+                self.processor.tokenizer.pad_token_id = self.processor.tokenizer.eos_token_id
+
+            # 确保padding方向正确（Qwen模型通常使用left padding）
+            if not hasattr(self.processor.tokenizer, 'padding_side'):
+                self.processor.tokenizer.padding_side = 'left'
 
             # 根据GPU型号选择量化配置
             if self.use_quantization:
@@ -299,20 +309,39 @@ class VisionModel:
             if torch.cuda.is_available():
                 inputs = inputs.to("cuda")
 
+            # 正确处理eos_token_id
+            eos_token_id = self.processor.tokenizer.eos_token_id
+
             # 生成（优化参数）
             with torch.no_grad():
-                with torch.amp.autocast('cuda'):
+                # 重要：4bit量化时不使用autocast，避免精度冲突
+                if self.use_quantization:
                     generated_ids = self.model.generate(
                         **inputs,
                         max_new_tokens=max_new_tokens,
+                        min_new_tokens=1,
                         temperature=temperature if do_sample else 1.0,
                         top_p=top_p if do_sample else 1.0,
                         do_sample=do_sample,
                         use_cache=True,
-                        num_beams=1,  # 明确设置beam search为1（贪心解码）
+                        num_beams=1,
                         pad_token_id=self.processor.tokenizer.pad_token_id,
-                        eos_token_id=self.processor.tokenizer.eos_token_id,
+                        eos_token_id=eos_token_id,
                     )
+                else:
+                    with torch.amp.autocast('cuda'):
+                        generated_ids = self.model.generate(
+                            **inputs,
+                            max_new_tokens=max_new_tokens,
+                            min_new_tokens=1,
+                            temperature=temperature if do_sample else 1.0,
+                            top_p=top_p if do_sample else 1.0,
+                            do_sample=do_sample,
+                            use_cache=True,
+                            num_beams=1,
+                            pad_token_id=self.processor.tokenizer.pad_token_id,
+                            eos_token_id=eos_token_id,
+                        )
 
             # 解码
             generated_ids_trimmed = [
@@ -430,10 +459,10 @@ class VisionModel:
 
         logger.info(f"识别UML图: {Path(uml_path).name}")
         logger.info(f"使用生成配置: max_tokens={self.uml_gen_config['max_new_tokens']}, temp={self.uml_gen_config['temperature']}")
+        logger.info(f"流式输出: {'启用' if use_streaming else '禁用'}")
 
         for attempt in range(max_retries):
             try:
-                logger.info(f"[尝试 {attempt + 1}/{max_retries}] 准备输入消息...")
                 # 使用 Transformers 原生接口
                 messages = [
                     {
@@ -445,7 +474,6 @@ class VisionModel:
                     }
                 ]
 
-                logger.info(f"[尝试 {attempt + 1}/{max_retries}] 应用chat template...")
                 # 使用 processor 的 apply_chat_template
                 inputs = self.processor.apply_chat_template(
                     messages,
@@ -455,26 +483,21 @@ class VisionModel:
                     return_tensors="pt"
                 )
 
-                logger.info(f"[尝试 {attempt + 1}/{max_retries}] 移动输入到GPU...")
                 if torch.cuda.is_available():
                     inputs = inputs.to("cuda")
 
                 # 根据配置选择生成模式
                 if use_streaming:
-                    logger.info(f"[尝试 {attempt + 1}/{max_retries}] 开始生成（流式输出模式）...")
                     response = self._generate_streaming(inputs, task_type='uml')
                 else:
-                    logger.info(f"[尝试 {attempt + 1}/{max_retries}] 开始生成（标准模式）...")
                     response = self._generate_standard(inputs, task_type='uml')
 
-                logger.info(f"[尝试 {attempt + 1}/{max_retries}] 生成完成，清理显存...")
                 # 清理
                 del inputs
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
                 gc.collect()
 
-                logger.info(f"[尝试 {attempt + 1}/{max_retries}] 解析响应...")
                 # 解析
                 result = self._parse_uml_response(response, uml_path)
 
@@ -513,30 +536,76 @@ class VisionModel:
         """
         gen_config = self.uml_gen_config if task_type == 'uml' else self.image_gen_config
 
+        # 正确处理eos_token_id（可能是列表）
+        eos_token_id = self.processor.tokenizer.eos_token_id
+        if isinstance(eos_token_id, list):
+            logger.info(f"[标准生成] eos_token_id是列表: {eos_token_id}")
+        else:
+            logger.info(f"[标准生成] eos_token_id: {eos_token_id}")
+
+        logger.info(f"[标准生成] pad_token_id: {self.processor.tokenizer.pad_token_id}")
+        logger.info(f"[标准生成] 模型eval模式: {not self.model.training}")
+        logger.info(f"[标准生成] 输入input_ids长度: {inputs.input_ids.shape[1]}")
+        logger.info(f"[标准生成] max_new_tokens: {gen_config['max_new_tokens']}")
+        logger.info(f"[标准生成] 使用量化: {self.use_quantization}")
+
         with torch.no_grad():
-            with torch.amp.autocast('cuda'):
+            # 重要：4bit量化时不使用autocast，避免精度冲突
+            if self.use_quantization:
+                logger.info("[标准生成] 4bit量化模式，不使用autocast")
+                logger.info("[标准生成] 开始调用model.generate()...")
                 generated_ids = self.model.generate(
                     **inputs,
                     max_new_tokens=gen_config['max_new_tokens'],
+                    min_new_tokens=1,
                     temperature=gen_config['temperature'],
                     do_sample=True,
                     top_p=gen_config['top_p'],
                     use_cache=gen_config['use_cache'],
                     num_beams=1,
                     pad_token_id=self.processor.tokenizer.pad_token_id,
-                    eos_token_id=self.processor.tokenizer.eos_token_id,
+                    eos_token_id=eos_token_id,
                 )
+            else:
+                logger.info("[标准生成] FP16模式，使用autocast")
+                logger.info("[标准生成] 开始调用model.generate()...")
+                with torch.amp.autocast('cuda'):
+                    generated_ids = self.model.generate(
+                        **inputs,
+                        max_new_tokens=gen_config['max_new_tokens'],
+                        min_new_tokens=1,
+                        temperature=gen_config['temperature'],
+                        do_sample=True,
+                        top_p=gen_config['top_p'],
+                        use_cache=gen_config['use_cache'],
+                        num_beams=1,
+                        pad_token_id=self.processor.tokenizer.pad_token_id,
+                        eos_token_id=eos_token_id,
+                    )
+            logger.info("[标准生成] model.generate()调用完成")
+
+        logger.info(f"[标准生成] 生成完成，generated_ids shape: {generated_ids.shape}")
+        logger.info(f"[标准生成] 输入长度: {inputs.input_ids.shape[1]}, 输出长度: {generated_ids.shape[1]}")
+        logger.info(f"[标准生成] 新生成的token数: {generated_ids.shape[1] - inputs.input_ids.shape[1]}")
 
         # 解码
         generated_ids_trimmed = [
             out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
         ]
 
+        logger.info(f"[标准生成] 裁剪后的token数: {len(generated_ids_trimmed[0])}")
+
         response = self.processor.batch_decode(
             generated_ids_trimmed,
             skip_special_tokens=True,
             clean_up_tokenization_spaces=False
         )[0]
+
+        logger.info(f"[标准生成] 解码完成，生成文本长度: {len(response)}")
+        if len(response) > 0:
+            logger.info(f"[标准生成] 生成文本预览: {response[:100]}...")
+        else:
+            logger.error("[标准生成] 生成的文本为空！")
 
         # 清理
         del generated_ids, generated_ids_trimmed
@@ -547,7 +616,7 @@ class VisionModel:
 
     def _generate_streaming(self, inputs, task_type: str = 'uml') -> str:
         """
-        流式生成模式（实时输出）
+        流式生成模式（采用transformers官方推荐方式，增强诊断日志）
 
         Args:
             inputs: 模型输入
@@ -555,62 +624,144 @@ class VisionModel:
 
         Returns:
             str: 生成的文本
+
+        参考：transformers.TextIteratorStreamer官方用法
         """
+        import time
+        import queue
+
         gen_config = self.uml_gen_config if task_type == 'uml' else self.image_gen_config
 
-        # 创建流式输出器
-        streamer = TextIteratorStreamer(
-            self.processor.tokenizer,
-            skip_prompt=True,
-            skip_special_tokens=True
-        )
+        # 用于捕获线程内异常
+        thread_error = {'error': None}
 
-        # 准备生成参数
-        generation_kwargs = {
-            **inputs,
-            'max_new_tokens': gen_config['max_new_tokens'],
-            'temperature': gen_config['temperature'],
-            'do_sample': True,
-            'top_p': gen_config['top_p'],
-            'use_cache': gen_config['use_cache'],
-            'num_beams': 1,
-            'pad_token_id': self.processor.tokenizer.pad_token_id,
-            'eos_token_id': self.processor.tokenizer.eos_token_id,
-            'streamer': streamer,
-        }
+        # 正确处理eos_token_id（可能是列表）
+        eos_token_id = self.processor.tokenizer.eos_token_id
 
-        # 定义生成函数（在线程中运行，需要正确的torch上下文）
-        def generate_with_context():
-            with torch.no_grad():
-                with torch.amp.autocast('cuda'):
-                    self.model.generate(**generation_kwargs)
+        try:
+            # 创建流式输出器
+            streamer = TextIteratorStreamer(
+                self.processor.tokenizer,
+                skip_prompt=True,
+                skip_special_tokens=True,
+                timeout=5.0
+            )
 
-        # 在单独的线程中运行生成
-        thread = Thread(target=generate_with_context)
-        thread.start()
+            # 构建生成参数
+            generation_kwargs = {
+                **inputs,
+                'max_new_tokens': gen_config['max_new_tokens'],
+                'min_new_tokens': 1,  # 确保至少生成1个token
+                'temperature': gen_config['temperature'],
+                'do_sample': True,
+                'top_p': gen_config['top_p'],
+                'use_cache': gen_config['use_cache'],
+                'num_beams': 1,
+                'pad_token_id': self.processor.tokenizer.pad_token_id,
+                'eos_token_id': eos_token_id,
+                'streamer': streamer,
+            }
 
-        # 实时打印生成的文本
-        print("\n" + "="*80)
-        print("实时生成内容：")
-        print("="*80)
-        generated_text = ""
-        for new_text in streamer:
-            print(new_text, end='', flush=True)
-            generated_text += new_text
-        print("\n" + "="*80)
+            # 定义线程包装函数以捕获异常
+            def generate_with_error_capture():
+                try:
+                    with torch.no_grad():
+                        result = self.model.generate(**generation_kwargs)
+                except Exception as e:
+                    import traceback
+                    error_msg = f"线程内异常: {str(e)}\n{traceback.format_exc()}"
+                    logger.error(f"[流式生成-线程] {error_msg}")
+                    thread_error['error'] = error_msg
 
-        # 等待生成完成
-        thread.join()
+            # 使用Thread + 包装函数
+            thread = Thread(target=generate_with_error_capture)
+            thread.daemon = False
+            thread.start()
 
-        return generated_text
+            # 短暂等待确保线程开始执行
+            time.sleep(0.5)
+
+            # 实时打印生成的文本
+            print("\n" + "="*80)
+            print("实时生成内容：")
+            print("="*80)
+            print("", flush=True)
+
+            generated_text = ""
+            last_output_time = time.time()
+            chunk_count = 0
+            iteration_count = 0
+
+            # 从streamer读取生成的内容
+            try:
+                for new_text in streamer:
+                    iteration_count += 1
+                    logger.debug(f"[流式生成-迭代] 第{iteration_count}次迭代，获得文本长度: {len(new_text) if new_text else 0}")
+
+                    if new_text:
+                        print(new_text, end='', flush=True)
+                        generated_text += new_text
+                        last_output_time = time.time()
+                        chunk_count += 1
+
+            except queue.Empty as e:
+                logger.error(f"[流式生成] Streamer超时异常: {str(e)}")
+                logger.error(f"[流式生成] 已迭代次数: {iteration_count}, 已生成字符数: {len(generated_text)}")
+                logger.error(f"[流式生成] 线程存活状态: {thread.is_alive()}")
+
+                # 检查线程是否有错误
+                if thread_error['error']:
+                    logger.error(f"[流式生成] 检测到线程内异常:\n{thread_error['error']}")
+
+                raise
+
+            print("\n" + "="*80)
+
+            # 等待线程结束
+            thread.join(timeout=10.0)
+
+            # 检查线程错误
+            if thread_error['error']:
+                logger.error(f"[流式生成] 线程执行时发生错误:\n{thread_error['error']}")
+                raise RuntimeError(thread_error['error'])
+
+            # 检查是否成功生成了内容
+            if not generated_text.strip():
+                logger.error("[流式生成] 未生成任何内容")
+                raise ValueError("流式生成未产生任何输出")
+
+            return generated_text
+
+        except queue.Empty:
+            logger.error("[流式生成] Streamer超时")
+            logger.info("[流式生成] 降级到标准生成模式")
+            return self._generate_standard(inputs, task_type)
+
+        except Exception as e:
+            import traceback
+            logger.error(f"[流式生成] 失败: {str(e)}")
+            logger.error(f"[流式生成] 异常详情:\n{traceback.format_exc()}")
+            logger.info("[流式生成] 降级到标准生成模式")
+
+            # 降级到标准模式
+            try:
+                return self._generate_standard(inputs, task_type)
+            except Exception as fallback_error:
+                logger.error(f"[标准生成] 降级失败: {str(fallback_error)}")
+                raise RuntimeError(f"流式生成和标准生成均失败: 流式={str(e)}, 标准={str(fallback_error)}")
 
     def _generate_with_confidence(self, inputs) -> Tuple[str, float]:
         """生成文本并计算置信度（基于熵，使用动态配置）"""
+        # 正确处理eos_token_id
+        eos_token_id = self.processor.tokenizer.eos_token_id
+
         with torch.no_grad():
-            with torch.cuda.amp.autocast():
+            # 重要：4bit量化时不使用autocast，避免精度冲突
+            if self.use_quantization:
                 outputs = self.model.generate(
                     **inputs,
                     max_new_tokens=self.image_gen_config['max_new_tokens'],
+                    min_new_tokens=1,
                     temperature=self.image_gen_config['temperature'],
                     do_sample=True,
                     top_p=self.image_gen_config['top_p'],
@@ -619,8 +770,24 @@ class VisionModel:
                     return_dict_in_generate=True,
                     output_scores=True,
                     pad_token_id=self.processor.tokenizer.pad_token_id,
-                    eos_token_id=self.processor.tokenizer.eos_token_id,
+                    eos_token_id=eos_token_id,
                 )
+            else:
+                with torch.cuda.amp.autocast():
+                    outputs = self.model.generate(
+                        **inputs,
+                        max_new_tokens=self.image_gen_config['max_new_tokens'],
+                        min_new_tokens=1,
+                        temperature=self.image_gen_config['temperature'],
+                        do_sample=True,
+                        top_p=self.image_gen_config['top_p'],
+                        use_cache=self.image_gen_config['use_cache'],
+                        num_beams=1,
+                        return_dict_in_generate=True,
+                        output_scores=True,
+                        pad_token_id=self.processor.tokenizer.pad_token_id,
+                        eos_token_id=eos_token_id,
+                    )
 
         # 计算置信度
         scores = outputs.scores
