@@ -93,6 +93,7 @@ class PathConfig:
         # 原始数据默认测试目录（用于批量识别脚本）
         self.COCO_500_DIR = self.RAW_IMAGE_DIR / "coco_500"
         self.ROBOFLOW_UML_DIR = self.RAW_UML_DIR / "roboflow_uml"
+        self.MDPI_UML_DIR = self.RAW_UML_DIR / "mdpi_uml"
 
         # 中间处理结果子目录
         self.INTERIM_IMAGE_DIR = self.INTERIM_DATA_DIR / "image"

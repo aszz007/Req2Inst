@@ -7,8 +7,8 @@ UML用例图识别脚本（简化版）
   - 直接调用VisionModel，无冗余代码
 
 用法：
-  python uml_raw_recognize_interim_en_local.py --version qwen2.5
-  python uml_raw_recognize_interim_en_local.py --version qwen3
+  python scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --version qwen2.5
+  python scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --version qwen3
 """
 
 import argparse
@@ -149,7 +149,7 @@ def batch_recognize_uml(
         raise FileNotFoundError(f"文件夹不存在: {image_folder}")
 
     # 获取所有图片文件（去重）
-    image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif']
+    image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp']
     image_files = set()
     for ext in image_extensions:
         image_files.update(image_folder.glob(f"*{ext}"))
@@ -293,7 +293,7 @@ def main():
             else:
                 # 使用配置中的默认测试目录
                 path_cfg = get_path_config()
-                image_folder = path_cfg.ROBOFLOW_UML_DIR
+                image_folder = path_cfg.MDPI_UML_DIR
                 print(f"[提示] 使用默认输入目录: {image_folder}")
                 print(f"[提示] 可使用 --input 参数指定其他目录\n")
 
