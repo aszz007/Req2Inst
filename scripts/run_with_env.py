@@ -45,7 +45,7 @@ def run_in_env(env_name: str, script_path: str, args: list = None):
 
     # 自动添加 --version 参数（如果推断出了版本且参数中没有 --version）
     if qwen_version and '--version' not in args:
-        args = ['--version', qwen_version] + args
+        args = args + ['--version', qwen_version]
 
     # 构建conda命令
     cmd = [
@@ -77,51 +77,41 @@ def run_in_env(env_name: str, script_path: str, args: list = None):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='环境管理脚本：自动切换Conda环境执行脚本',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-使用示例：
-  # 运行文本任务
-  python scripts/run_with_env.py --env text --script scripts/training/train_text_expert.py
+    # 手动解析参数，更宽松地处理脚本参数
+    args = sys.argv[1:]
 
-  # 运行图像识别（Qwen2.5）
-  python scripts/run_with_env.py --env image_qwen2.5 --script models/vision_model.py inputs/image/test.jpg
+    env_name = None
+    script_path = None
+    script_args = []
 
-  # 运行UML识别（Qwen3）
-  python scripts/run_with_env.py --env uml_qwen3 --script scripts/training/train_uml_expert.py
-        """
-    )
+    i = 0
+    while i < len(args):
+        if args[i] == '--env' and i + 1 < len(args):
+            env_key = args[i + 1]
+            if env_key not in ENV_MAP:
+                print(f"错误: 无效的环境类型 '{env_key}'")
+                print(f"可用选项: {', '.join(ENV_MAP.keys())}")
+                sys.exit(1)
+            env_name = ENV_MAP[env_key]
+            i += 2
+        elif args[i] == '--script' and i + 1 < len(args):
+            script_path = args[i + 1]
+            i += 2
+            # --script 之后的所有参数都是脚本参数
+            script_args = args[i:]
+            break
+        else:
+            i += 1
 
-    parser.add_argument(
-        '--env',
-        type=str,
-        required=True,
-        choices=list(ENV_MAP.keys()),
-        help='环境类型'
-    )
+    if not env_name or not script_path:
+        print("使用方法: python scripts/run_with_env.py --env <环境类型> --script <脚本路径> [脚本参数...]")
+        print(f"\n可用环境类型: {', '.join(ENV_MAP.keys())}")
+        print("\n示例:")
+        print(
+            "  python scripts/run_with_env.py --env uml_qwen3 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --single data/test.png --streaming")
+        sys.exit(1)
 
-    parser.add_argument(
-        '--script',
-        type=str,
-        required=True,
-        help='要执行的脚本路径'
-    )
-
-    parser.add_argument(
-        'script_args',
-        nargs='*',
-        help='传递给脚本的参数（可选）'
-    )
-
-    args, unknown_args = parser.parse_known_args()
-
-    # 合并位置参数和未知参数
-    all_script_args = unknown_args + (args.script_args or [])
-
-    env_name = ENV_MAP[args.env]
-    exit_code = run_in_env(env_name, args.script, all_script_args)
-
+    exit_code = run_in_env(env_name, script_path, script_args)
     sys.exit(exit_code)
 
 
