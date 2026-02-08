@@ -114,10 +114,13 @@ def main():
         help='传递给脚本的参数（可选）'
     )
 
-    args = parser.parse_args()
+    args, unknown_args = parser.parse_known_args()
+
+    # 合并位置参数和未知参数
+    all_script_args = unknown_args + (args.script_args or [])
 
     env_name = ENV_MAP[args.env]
-    exit_code = run_in_env(env_name, args.script, args.script_args)
+    exit_code = run_in_env(env_name, args.script, all_script_args)
 
     sys.exit(exit_code)
 

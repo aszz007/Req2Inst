@@ -94,7 +94,7 @@ class PathConfig:
         self.COCO_500_DIR = self.RAW_IMAGE_DIR / "coco_500"
         self.ROBOFLOW_UML_DIR = self.RAW_UML_DIR / "roboflow_uml"
         self.MDPI_UML_DIR = self.RAW_UML_DIR / "mdpi_uml"
-        self.PLANTUML_USECASE_DIR = self.RAW_UML_DIR / "plantuml_usecase"
+        self.PLANT_UML_DIR = self.RAW_UML_DIR / "plant_uml"
 
         # 中间处理结果子目录
         self.INTERIM_IMAGE_DIR = self.INTERIM_DATA_DIR / "image"

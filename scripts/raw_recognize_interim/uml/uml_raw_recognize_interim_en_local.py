@@ -273,12 +273,16 @@ def main():
             result = recognize_single_uml(args.single, args.version)
 
             # 保存结果
-            path_cfg = get_path_config()
-            output_dir = path_cfg.UML_RECOGNITION_DIR
-            output_dir.mkdir(parents=True, exist_ok=True)
+            if args.output:
+                output_file = Path(args.output)
+                output_file.parent.mkdir(parents=True, exist_ok=True)
+            else:
+                path_cfg = get_path_config()
+                output_dir = path_cfg.UML_RECOGNITION_DIR
+                output_dir.mkdir(parents=True, exist_ok=True)
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_file = output_dir / f"single_uml_{timestamp}.json"
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_file = output_dir / f"single_uml_{timestamp}.json"
 
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(result, f, ensure_ascii=False, indent=2)
@@ -293,7 +297,7 @@ def main():
             else:
                 # 使用配置中的默认测试目录
                 path_cfg = get_path_config()
-                image_folder = path_cfg.MDPI_UML_DIR
+                image_folder = path_cfg.PLANT_UML_DIR
                 print(f"[提示] 使用默认输入目录: {image_folder}")
                 print(f"[提示] 可使用 --input 参数指定其他目录\n")
 

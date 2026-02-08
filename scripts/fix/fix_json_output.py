@@ -2,8 +2,8 @@ import json
 import os
 
 # 输入和输出路径（相对于项目根目录）
-input_path = "outputs/recognition_results/uml/uml_recognition_qwen3_20260129_174404.json"
-output_path = "outputs/recognition_results/uml/uml_recognition_qwen3_20260129_174404_fixed.json"
+input_path = "outputs/recognition_results/uml/uml_recognition_qwen3_20260209_001336.json"
+output_path = "outputs/recognition_results/uml/uml_recognition_qwen3_20260209_001336_fixed.json"
 
 # 确保输出目录存在
 os.makedirs(os.path.dirname(output_path), exist_ok=True)

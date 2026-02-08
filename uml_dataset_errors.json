@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-02-09T01:06:00.210139",
+  "statistics": {
+    "total_images": 62,
+    "total_json_entries": 62,
+    "matched": 62,
+    "images_without_json": 0,
+    "json_without_images": 0,
+    "failed_recognitions": 0
+  },
+  "errors": []
+}
