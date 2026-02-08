@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """
-PlantUML用例图批量生成工具
-功能：自动生成800-1000张高清用例图用于模型训练
+PlantUML用例图批量生成工具（随机化版本）
+功能：自动生成600张真正不同的高清用例图用于模型训练
 输出：PNG格式，150 DPI，保存至data/raw/uml/plantuml_usecase/
+策略：
+- 总数：600张图（10领域 × 60张/领域）
+- 复杂度分布：简单20张 + 中等30张 + 复杂10张
+- 真正的随机化：随机actors、usecases、relationships
 """
 
 import subprocess
@@ -10,12 +14,12 @@ import shutil
 import urllib.request
 import sys
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 import random
 
 
 class PlantUMLGenerator:
-    """PlantUML用例图生成器"""
+    """PlantUML用例图生成器 - 支持真正的随机化"""
 
     def __init__(self, output_dir: Path):
         """
@@ -28,447 +32,388 @@ class PlantUMLGenerator:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.plantuml_jar = Path(__file__).parent.parent / "plantuml.jar"
 
-        self.domains = self._init_domain_templates()
+        self.domains = self._init_domain_pools()
 
-    def _init_domain_templates(self) -> dict:
-        """
-        初始化10个领域的用例图模板
-
-        Returns:
-            dict: 领域模板字典
-        """
-        return {
-            "ecommerce": self._get_ecommerce_templates(),
-            "authentication": self._get_authentication_templates(),
-            "content_management": self._get_content_management_templates(),
-            "social_interaction": self._get_social_interaction_templates(),
-            "customer_service": self._get_customer_service_templates(),
-            "data_analysis": self._get_data_analysis_templates(),
-            "permission_management": self._get_permission_management_templates(),
-            "notification_system": self._get_notification_system_templates(),
-            "file_management": self._get_file_management_templates(),
-            "booking_system": self._get_booking_system_templates()
+        self.complexity_config = {
+            'simple': {'min_usecases': 5, 'max_usecases': 8, 'min_actors': 1, 'max_actors': 2, 'count': 20},
+            'medium': {'min_usecases': 10, 'max_usecases': 15, 'min_actors': 2, 'max_actors': 4, 'count': 30},
+            'complex': {'min_usecases': 18, 'max_usecases': 25, 'min_actors': 3, 'max_actors': 6, 'count': 10}
         }
 
-    def _get_ecommerce_templates(self) -> List[Tuple[str, List[str], List[str], List[Tuple]]]:
+    def _init_domain_pools(self) -> dict:
         """
-        电商系统模板 (100个场景)
+        初始化10个领域的资源池（actors和use cases）
 
         Returns:
-            List[Tuple]: [(场景名, actors, use_cases, relationships), ...]
+            dict: 领域资源池字典
         """
-        templates = []
+        return {
+            "ecommerce": self._get_ecommerce_pool(),
+            "authentication": self._get_authentication_pool(),
+            "content_management": self._get_content_management_pool(),
+            "social_interaction": self._get_social_interaction_pool(),
+            "customer_service": self._get_customer_service_pool(),
+            "data_analysis": self._get_data_analysis_pool(),
+            "permission_management": self._get_permission_management_pool(),
+            "notification_system": self._get_notification_system_pool(),
+            "file_management": self._get_file_management_pool(),
+            "booking_system": self._get_booking_system_pool()
+        }
 
-        base_scenarios = [
-            ("Basic Shopping", ["Customer"], ["Browse Products", "Search Items", "View Details"], [
-                ("Customer", "Browse Products", "association"),
-                ("Customer", "Search Items", "association"),
-                ("Browse Products", "View Details", "include")
-            ]),
-            ("Purchase Flow", ["Customer"], ["Add to Cart", "Checkout", "Make Payment", "Confirm Order"], [
-                ("Customer", "Add to Cart", "association"),
-                ("Add to Cart", "Checkout", "extend"),
-                ("Checkout", "Make Payment", "include"),
-                ("Make Payment", "Confirm Order", "include")
-            ]),
-            ("Order Management", ["Customer", "Admin"], ["Track Order", "Cancel Order", "Process Refund"], [
-                ("Customer", "Track Order", "association"),
-                ("Customer", "Cancel Order", "association"),
-                ("Cancel Order", "Process Refund", "include"),
-                ("Admin", "Process Refund", "association")
-            ]),
-            ("Product Review", ["Customer"], ["Write Review", "Rate Product", "Upload Photos"], [
-                ("Customer", "Write Review", "association"),
-                ("Write Review", "Rate Product", "include"),
-                ("Write Review", "Upload Photos", "extend")
-            ]),
-            ("Wishlist Management", ["Customer"], ["Add to Wishlist", "Share Wishlist", "Move to Cart"], [
-                ("Customer", "Add to Wishlist", "association"),
-                ("Add to Wishlist", "Share Wishlist", "extend"),
-                ("Add to Wishlist", "Move to Cart", "extend")
-            ])
-        ]
+    def _get_ecommerce_pool(self) -> dict:
+        """电商系统资源池"""
+        return {
+            'actors': [
+                "Customer", "Guest", "Admin", "Seller", "Buyer",
+                "Payment Gateway", "Shipping Service", "Inventory System",
+                "Marketing Manager", "Support Agent", "Warehouse Staff"
+            ],
+            'usecases': [
+                "Browse Products", "Search Items", "View Details", "Filter Results",
+                "Add to Cart", "Remove from Cart", "Update Quantity", "Save for Later",
+                "Checkout", "Make Payment", "Apply Coupon", "Calculate Tax",
+                "Confirm Order", "Track Order", "Cancel Order", "Return Item",
+                "Write Review", "Rate Product", "Upload Photos", "Report Issue",
+                "Add to Wishlist", "Share Wishlist", "Compare Products",
+                "Manage Inventory", "Update Stock", "Set Pricing", "Create Promotion",
+                "Process Refund", "Handle Dispute", "Generate Invoice", "Send Notification",
+                "Manage Categories", "Update Product Info", "Bulk Import", "Export Data"
+            ],
+            'scenarios': [
+                "Product Discovery", "Shopping Cart", "Checkout Flow", "Order Management",
+                "Customer Service", "Inventory Control", "Marketing Campaign", "Payment Processing"
+            ]
+        }
 
-        for i, (name, actors, usecases, rels) in enumerate(base_scenarios):
-            for variant in range(20):
-                variant_name = f"{name}_v{variant + 1}"
-                templates.append((f"ecommerce_{i}_{variant}", variant_name, actors, usecases, rels))
+    def _get_authentication_pool(self) -> dict:
+        """认证系统资源池"""
+        return {
+            'actors': [
+                "User", "Admin", "Guest", "System Administrator",
+                "OAuth Provider", "Email Service", "SMS Gateway",
+                "Security Manager", "Audit System", "Token Service"
+            ],
+            'usecases': [
+                "Login", "Logout", "Register", "Validate Credentials",
+                "Generate Token", "Refresh Token", "Revoke Token",
+                "Verify Email", "Send Verification", "Confirm Account",
+                "Request Reset", "Verify Identity", "Update Password",
+                "Enable 2FA", "Disable 2FA", "Send OTP", "Verify OTP",
+                "Login with OAuth", "Authorize App", "Link Account", "Unlink Account",
+                "Manage Sessions", "Track Activity", "Detect Anomaly",
+                "Lock Account", "Unlock Account", "Force Logout",
+                "Update Profile", "Change Email", "Verify Phone",
+                "Set Security Questions", "Remember Device", "Clear Sessions"
+            ],
+            'scenarios': [
+                "User Login", "Registration", "Password Management", "Two Factor Auth",
+                "Social Login", "Session Management", "Security Monitoring", "Account Recovery"
+            ]
+        }
 
-        return templates
+    def _get_content_management_pool(self) -> dict:
+        """内容管理系统资源池"""
+        return {
+            'actors': [
+                "Author", "Editor", "Moderator", "Admin", "Reviewer",
+                "Publisher", "Content Creator", "SEO Specialist",
+                "Media Manager", "Workflow Manager", "Reader"
+            ],
+            'usecases': [
+                "Create Article", "Edit Document", "Delete Content", "Restore Version",
+                "Submit for Review", "Approve", "Reject", "Publish", "Unpublish",
+                "Upload Media", "Compress Image", "Generate Thumbnail", "Optimize File",
+                "Review Content", "Flag Inappropriate", "Remove Content", "Archive",
+                "Save Version", "Compare Versions", "Rollback Changes",
+                "Assign Task", "Set Deadline", "Monitor Progress", "Send Reminder",
+                "Tag Content", "Categorize", "Set Metadata", "Add Keywords",
+                "Schedule Publication", "Auto-Publish", "Manage Draft",
+                "Collaborate", "Add Comment", "Track Changes", "Resolve Conflict",
+                "Export Content", "Import Content", "Bulk Operations"
+            ],
+            'scenarios': [
+                "Article Publishing", "Media Management", "Content Moderation",
+                "Version Control", "Workflow Management", "Collaboration", "SEO Optimization"
+            ]
+        }
 
-    def _get_authentication_templates(self) -> List[Tuple[str, List[str], List[str], List[Tuple]]]:
+    def _get_social_interaction_pool(self) -> dict:
+        """社交互动系统资源池"""
+        return {
+            'actors': [
+                "User", "Friend", "Follower", "Group Admin", "Moderator",
+                "Content Creator", "Advertiser", "Influencer",
+                "Notification Service", "Recommendation Engine", "Analytics System"
+            ],
+            'usecases': [
+                "Follow User", "Unfollow User", "Send Request", "Accept Request", "Decline Request",
+                "Create Post", "Edit Post", "Delete Post", "Share Post", "Repost",
+                "Like Post", "Unlike", "React", "Bookmark",
+                "Comment", "Reply", "Delete Comment", "Report Comment",
+                "Send Message", "Receive Message", "Encrypt Message", "Delete Chat",
+                "Create Group", "Join Group", "Leave Group", "Invite Member",
+                "Post in Group", "Moderate Group", "Set Rules",
+                "Go Live", "Stream Video", "Watch Stream", "Send Gift",
+                "Create Story", "View Story", "React to Story",
+                "Tag User", "Mention", "Check-in Location",
+                "Block User", "Unblock User", "Report User", "Mute Notifications",
+                "Customize Privacy", "Hide Post", "Filter Feed"
+            ],
+            'scenarios': [
+                "User Connection", "Post Interaction", "Direct Messaging", "Group Activity",
+                "Live Streaming", "Story Feature", "Privacy Management", "Content Moderation"
+            ]
+        }
+
+    def _get_customer_service_pool(self) -> dict:
+        """客户服务系统资源池"""
+        return {
+            'actors': [
+                "Customer", "Support Agent", "Supervisor", "Manager",
+                "Chatbot", "Ticketing System", "Knowledge Base",
+                "QA Team", "Escalation Handler", "Technical Support"
+            ],
+            'usecases': [
+                "Create Ticket", "Assign Ticket", "Update Status", "Close Ticket",
+                "Escalate Issue", "Transfer Ticket", "Merge Tickets",
+                "Chat with Agent", "Send Message", "Upload Attachment",
+                "Search Articles", "View Solution", "Rate Helpfulness",
+                "Submit Feedback", "Rate Service", "Provide Suggestions",
+                "Make Call", "Route Call", "Record Call", "End Call",
+                "Track History", "View Conversation", "Export Chat",
+                "Set Priority", "Add Tags", "Assign Category",
+                "Request Callback", "Schedule Appointment", "Send Follow-up",
+                "Generate Report", "Analyze Metrics", "Monitor Performance"
+            ],
+            'scenarios': [
+                "Ticket Management", "Live Chat Support", "Knowledge Base",
+                "Feedback Collection", "Call Center", "Issue Resolution", "Performance Monitoring"
+            ]
+        }
+
+    def _get_data_analysis_pool(self) -> dict:
+        """数据分析系统资源池"""
+        return {
+            'actors': [
+                "Analyst", "Data Scientist", "Manager", "Admin",
+                "User", "Report Viewer", "Dashboard Creator",
+                "BI Specialist", "Data Engineer", "Stakeholder"
+            ],
+            'usecases': [
+                "Select Data", "Apply Filters", "Generate Report", "Export Report",
+                "Export Data", "Choose Format", "Schedule Export", "Batch Export",
+                "View Dashboard", "Customize Widgets", "Refresh Data", "Share Dashboard",
+                "Create Chart", "Select Metrics", "Share Visualization", "Embed Chart",
+                "Run Query", "Optimize Query", "Save Query", "Schedule Query",
+                "Analyze Trends", "Detect Anomalies", "Predict Outcomes",
+                "Create Dataset", "Join Tables", "Transform Data", "Clean Data",
+                "Set Alerts", "Configure Threshold", "Receive Notification",
+                "Manage Access", "Grant Permissions", "Audit Usage",
+                "Import Data", "Validate Data", "Archive Data"
+            ],
+            'scenarios': [
+                "Report Generation", "Data Export", "Dashboard View", "Data Visualization",
+                "Query Execution", "Trend Analysis", "Data Management", "Access Control"
+            ]
+        }
+
+    def _get_permission_management_pool(self) -> dict:
+        """权限管理系统资源池"""
+        return {
+            'actors': [
+                "Admin", "User", "Manager", "Security Officer",
+                "System Administrator", "Auditor", "Role Manager",
+                "Resource Owner", "Access Controller", "Compliance Officer"
+            ],
+            'usecases': [
+                "Create Role", "Edit Role", "Delete Role", "Assign Role",
+                "Grant Permission", "Revoke Permission", "Check Access",
+                "Create User", "Deactivate User", "Update User Info",
+                "Assign Resource", "Remove Resource", "Share Resource",
+                "Set Policy", "Update Policy", "Enforce Policy",
+                "View Audit Log", "Export Log", "Generate Report",
+                "Request Access", "Approve Request", "Deny Request",
+                "Delegate Authority", "Inherit Permissions", "Override Rule",
+                "Create Group", "Add Member", "Remove Member",
+                "Set Expiry", "Renew Access", "Auto-Revoke",
+                "Encrypt Data", "Decrypt Data", "Mask Sensitive Info",
+                "Monitor Activity", "Detect Violation", "Alert Admin"
+            ],
+            'scenarios': [
+                "Role Management", "Permission Control", "User Management",
+                "Resource Access", "Policy Enforcement", "Audit Trail",
+                "Access Request", "Group Management", "Security Monitoring"
+            ]
+        }
+
+    def _get_notification_system_pool(self) -> dict:
+        """通知系统资源池"""
+        return {
+            'actors': [
+                "User", "System", "Admin", "Service",
+                "Email Gateway", "SMS Gateway", "Push Server",
+                "Scheduler", "Template Engine", "Analytics Service"
+            ],
+            'usecases': [
+                "Send Email", "Send SMS", "Send Push", "Send In-App",
+                "Configure Preferences", "Enable Channel", "Disable Channel",
+                "Create Template", "Edit Template", "Activate Template",
+                "Schedule Notification", "Cancel Schedule", "Reschedule",
+                "Track Delivery", "Check Status", "Retry Failed",
+                "Subscribe Topic", "Unsubscribe", "Manage Subscriptions",
+                "Set Frequency", "Configure Quiet Hours", "Apply Rules",
+                "Batch Send", "Personalize Message", "Add Attachment",
+                "Generate Preview", "Test Notification", "A/B Test",
+                "View History", "Export Logs", "Analyze Performance",
+                "Filter Spam", "Block Sender", "Whitelist",
+                "Trigger Alert", "Escalate Priority", "Send Reminder"
+            ],
+            'scenarios': [
+                "Multi-Channel Delivery", "Preference Management", "Template Management",
+                "Scheduling", "Delivery Tracking", "Subscription Management",
+                "Batch Operations", "Analytics", "Spam Control"
+            ]
+        }
+
+    def _get_file_management_pool(self) -> dict:
+        """文件管理系统资源池"""
+        return {
+            'actors': [
+                "User", "Admin", "Collaborator", "Viewer",
+                "Storage Service", "Sync Service", "Search Engine",
+                "Backup Service", "Virus Scanner", "Media Processor"
+            ],
+            'usecases': [
+                "Upload File", "Download File", "Delete File", "Restore File",
+                "Create Folder", "Rename Folder", "Move Folder", "Delete Folder",
+                "Share File", "Revoke Access", "Set Permissions", "Get Link",
+                "Search Files", "Filter Results", "Sort Files", "Tag File",
+                "Preview File", "View Metadata", "Edit Online", "Comment",
+                "Version Control", "Restore Version", "Compare Versions",
+                "Sync Files", "Auto-Upload", "Selective Sync",
+                "Compress File", "Extract Archive", "Convert Format",
+                "Scan Virus", "Quarantine File", "Clean File",
+                "Backup Data", "Schedule Backup", "Restore Backup",
+                "Generate Thumbnail", "Process Media", "Extract Text",
+                "Set Expiry", "Archive Old Files", "Free Space",
+                "Track Changes", "View Activity", "Export Report"
+            ],
+            'scenarios': [
+                "File Operations", "Folder Management", "Sharing", "Search",
+                "Preview and Edit", "Version Control", "Synchronization",
+                "Security Scan", "Backup and Restore", "Storage Management"
+            ]
+        }
+
+    def _get_booking_system_pool(self) -> dict:
+        """预订系统资源池"""
+        return {
+            'actors': [
+                "Customer", "Admin", "Service Provider", "Guest",
+                "Payment Gateway", "Calendar Service", "Notification Service",
+                "Resource Manager", "Scheduler", "Analytics Service"
+            ],
+            'usecases': [
+                "Search Availability", "View Calendar", "Select Time", "Check Slot",
+                "Make Booking", "Confirm Booking", "Cancel Booking", "Reschedule",
+                "Process Payment", "Refund Payment", "Apply Discount",
+                "Receive Confirmation", "Send Reminder", "Update Status",
+                "Check-in", "Check-out", "No-show", "Late Arrival",
+                "Manage Slots", "Set Capacity", "Block Dates", "Open Slots",
+                "Create Service", "Update Service", "Set Pricing", "Add Rules",
+                "View Bookings", "Filter List", "Export Data", "Generate Report",
+                "Rate Service", "Leave Review", "Respond to Review",
+                "Send Notification", "Automated Reminder", "Follow-up Email",
+                "Waitlist Add", "Waitlist Notify", "Auto-Book",
+                "Group Booking", "Multi-Day Reservation", "Recurring Booking",
+                "Track Occupancy", "Forecast Demand", "Optimize Schedule"
+            ],
+            'scenarios': [
+                "Booking Process", "Payment Handling", "Schedule Management",
+                "Resource Management", "Customer Communication", "Check-in/out",
+                "Reviews and Ratings", "Waitlist Management", "Analytics"
+            ]
+        }
+
+    def _generate_random_diagram(self, domain_name: str, pool: dict,
+                                 complexity: str, index: int) -> Tuple[str, str, List[str], List[str], List[Tuple]]:
         """
-        认证系统模板 (100个场景)
+        生成随机用例图
+
+        Args:
+            domain_name: 领域名称
+            pool: 资源池
+            complexity: 复杂度级别（simple/medium/complex）
+            index: 序号
+
+        Returns:
+            Tuple: (file_id, scenario_name, actors, use_cases, relationships)
         """
-        templates = []
+        config = self.complexity_config[complexity]
 
-        base_scenarios = [
-            ("User Login", ["User"], ["Login", "Validate Credentials", "Generate Token"], [
-                ("User", "Login", "association"),
-                ("Login", "Validate Credentials", "include"),
-                ("Validate Credentials", "Generate Token", "include")
-            ]),
-            ("User Registration", ["User"], ["Register", "Verify Email", "Create Profile"], [
-                ("User", "Register", "association"),
-                ("Register", "Verify Email", "include"),
-                ("Verify Email", "Create Profile", "include")
-            ]),
-            ("Password Reset", ["User"], ["Request Reset", "Verify Identity", "Update Password"], [
-                ("User", "Request Reset", "association"),
-                ("Request Reset", "Verify Identity", "include"),
-                ("Verify Identity", "Update Password", "include")
-            ]),
-            ("Two Factor Auth", ["User"], ["Login", "Send OTP", "Verify OTP"], [
-                ("User", "Login", "association"),
-                ("Login", "Send OTP", "extend"),
-                ("Send OTP", "Verify OTP", "include")
-            ]),
-            ("Social Login", ["User"], ["Login with OAuth", "Authorize App", "Link Account"], [
-                ("User", "Login with OAuth", "association"),
-                ("Login with OAuth", "Authorize App", "include"),
-                ("Authorize App", "Link Account", "extend")
-            ])
-        ]
+        num_actors = random.randint(config['min_actors'], config['max_actors'])
+        num_usecases = random.randint(config['min_usecases'], config['max_usecases'])
 
-        for i, (name, actors, usecases, rels) in enumerate(base_scenarios):
-            for variant in range(20):
-                variant_name = f"{name}_v{variant + 1}"
-                templates.append((f"auth_{i}_{variant}", variant_name, actors, usecases, rels))
+        selected_actors = random.sample(pool['actors'], min(num_actors, len(pool['actors'])))
+        selected_usecases = random.sample(pool['usecases'], min(num_usecases, len(pool['usecases'])))
 
-        return templates
+        scenario_name = random.choice(pool['scenarios'])
+        file_id = f"{domain_name}_{complexity}_{index}"
 
-    def _get_content_management_templates(self) -> List[Tuple[str, List[str], List[str], List[Tuple]]]:
+        relationships = self._generate_relationships(selected_actors, selected_usecases)
+
+        return file_id, scenario_name, selected_actors, selected_usecases, relationships
+
+    def _generate_relationships(self, actors: List[str], usecases: List[str]) -> List[Tuple]:
         """
-        内容管理系统模板 (100个场景)
+        自动生成合理的relationships
+
+        Args:
+            actors: actors列表
+            usecases: use cases列表
+
+        Returns:
+            List[Tuple]: relationships列表
         """
-        templates = []
+        relationships = []
 
-        base_scenarios = [
-            ("Article Publishing", ["Author", "Editor"], ["Create Article", "Submit for Review", "Approve", "Publish"], [
-                ("Author", "Create Article", "association"),
-                ("Author", "Submit for Review", "association"),
-                ("Submit for Review", "Approve", "include"),
-                ("Editor", "Approve", "association"),
-                ("Approve", "Publish", "include")
-            ]),
-            ("Media Upload", ["Author"], ["Upload Media", "Compress Image", "Generate Thumbnail"], [
-                ("Author", "Upload Media", "association"),
-                ("Upload Media", "Compress Image", "include"),
-                ("Compress Image", "Generate Thumbnail", "include")
-            ]),
-            ("Content Moderation", ["Moderator"], ["Review Content", "Flag Inappropriate", "Remove Content"], [
-                ("Moderator", "Review Content", "association"),
-                ("Review Content", "Flag Inappropriate", "extend"),
-                ("Flag Inappropriate", "Remove Content", "include")
-            ]),
-            ("Version Control", ["Author"], ["Edit Document", "Save Version", "Restore Previous"], [
-                ("Author", "Edit Document", "association"),
-                ("Edit Document", "Save Version", "include"),
-                ("Edit Document", "Restore Previous", "extend")
-            ]),
-            ("Workflow Management", ["Editor"], ["Assign Task", "Set Deadline", "Monitor Progress"], [
-                ("Editor", "Assign Task", "association"),
-                ("Assign Task", "Set Deadline", "include"),
-                ("Assign Task", "Monitor Progress", "extend")
-            ])
-        ]
+        used_usecases = set()
 
-        for i, (name, actors, usecases, rels) in enumerate(base_scenarios):
-            for variant in range(20):
-                variant_name = f"{name}_v{variant + 1}"
-                templates.append((f"cms_{i}_{variant}", variant_name, actors, usecases, rels))
+        for actor in actors:
+            num_associations = random.randint(1, min(3, len(usecases)))
+            for _ in range(num_associations):
+                usecase = random.choice(usecases)
+                relationships.append((actor, usecase, "association"))
+                used_usecases.add(usecase)
 
-        return templates
+        for usecase in usecases:
+            if usecase not in used_usecases and random.random() < 0.5:
+                actor = random.choice(actors)
+                relationships.append((actor, usecase, "association"))
+                used_usecases.add(usecase)
 
-    def _get_social_interaction_templates(self) -> List[Tuple[str, List[str], List[str], List[Tuple]]]:
+        num_includes = random.randint(1, max(1, len(usecases) // 4))
+        for _ in range(num_includes):
+            if len(usecases) >= 2:
+                from_uc, to_uc = random.sample(usecases, 2)
+                relationships.append((from_uc, to_uc, random.choice(["include", "extend"])))
+
+        return relationships
+
+    def _sanitize_name(self, name: str) -> str:
         """
-        社交互动系统模板 (100个场景)
+        清理名称中的特殊字符，确保PlantUML兼容性
+
+        Args:
+            name: 原始名称
+
+        Returns:
+            str: 清理后的名称
         """
-        templates = []
-
-        base_scenarios = [
-            ("User Connection", ["User"], ["Follow User", "Send Request", "Accept Request"], [
-                ("User", "Follow User", "association"),
-                ("Follow User", "Send Request", "include"),
-                ("Send Request", "Accept Request", "extend")
-            ]),
-            ("Post Interaction", ["User"], ["Create Post", "Like Post", "Share Post", "Comment"], [
-                ("User", "Create Post", "association"),
-                ("User", "Like Post", "association"),
-                ("User", "Share Post", "association"),
-                ("User", "Comment", "association")
-            ]),
-            ("Direct Messaging", ["User"], ["Send Message", "Encrypt Message", "Receive Message"], [
-                ("User", "Send Message", "association"),
-                ("Send Message", "Encrypt Message", "include"),
-                ("Send Message", "Receive Message", "include")
-            ]),
-            ("Group Management", ["User", "Admin"], ["Create Group", "Invite Members", "Manage Members"], [
-                ("User", "Create Group", "association"),
-                ("Create Group", "Invite Members", "extend"),
-                ("Admin", "Manage Members", "association")
-            ]),
-            ("Content Sharing", ["User"], ["Share Media", "Tag Friends", "Set Privacy"], [
-                ("User", "Share Media", "association"),
-                ("Share Media", "Tag Friends", "extend"),
-                ("Share Media", "Set Privacy", "include")
-            ])
-        ]
-
-        for i, (name, actors, usecases, rels) in enumerate(base_scenarios):
-            for variant in range(20):
-                variant_name = f"{name}_v{variant + 1}"
-                templates.append((f"social_{i}_{variant}", variant_name, actors, usecases, rels))
-
-        return templates
-
-    def _get_customer_service_templates(self) -> List[Tuple[str, List[str], List[str], List[Tuple]]]:
-        """
-        客服系统模板 (100个场景)
-        """
-        templates = []
-
-        base_scenarios = [
-            ("Ticket Management", ["Customer", "Agent"], ["Submit Ticket", "Assign Agent", "Resolve Issue"], [
-                ("Customer", "Submit Ticket", "association"),
-                ("Submit Ticket", "Assign Agent", "include"),
-                ("Agent", "Resolve Issue", "association")
-            ]),
-            ("Live Chat", ["Customer", "Agent"], ["Start Chat", "Transfer Chat", "End Chat"], [
-                ("Customer", "Start Chat", "association"),
-                ("Agent", "Transfer Chat", "association"),
-                ("Start Chat", "End Chat", "extend")
-            ]),
-            ("Knowledge Base", ["Customer"], ["Search Articles", "View Solution", "Rate Helpfulness"], [
-                ("Customer", "Search Articles", "association"),
-                ("Search Articles", "View Solution", "include"),
-                ("View Solution", "Rate Helpfulness", "extend")
-            ]),
-            ("Feedback Collection", ["Customer"], ["Submit Feedback", "Rate Service", "Provide Suggestions"], [
-                ("Customer", "Submit Feedback", "association"),
-                ("Submit Feedback", "Rate Service", "include"),
-                ("Submit Feedback", "Provide Suggestions", "extend")
-            ]),
-            ("Call Center", ["Customer", "Agent"], ["Make Call", "Route Call", "Record Call"], [
-                ("Customer", "Make Call", "association"),
-                ("Make Call", "Route Call", "include"),
-                ("Agent", "Record Call", "association")
-            ])
-        ]
-
-        for i, (name, actors, usecases, rels) in enumerate(base_scenarios):
-            for variant in range(20):
-                variant_name = f"{name}_v{variant + 1}"
-                templates.append((f"service_{i}_{variant}", variant_name, actors, usecases, rels))
-
-        return templates
-
-    def _get_data_analysis_templates(self) -> List[Tuple[str, List[str], List[str], List[Tuple]]]:
-        """
-        数据分析系统模板 (100个场景)
-        """
-        templates = []
-
-        base_scenarios = [
-            ("Report Generation", ["Analyst"], ["Select Data", "Apply Filters", "Generate Report"], [
-                ("Analyst", "Select Data", "association"),
-                ("Select Data", "Apply Filters", "include"),
-                ("Apply Filters", "Generate Report", "include")
-            ]),
-            ("Data Export", ["User"], ["Export Data", "Choose Format", "Schedule Export"], [
-                ("User", "Export Data", "association"),
-                ("Export Data", "Choose Format", "include"),
-                ("Export Data", "Schedule Export", "extend")
-            ]),
-            ("Dashboard View", ["Manager"], ["View Dashboard", "Customize Widgets", "Refresh Data"], [
-                ("Manager", "View Dashboard", "association"),
-                ("View Dashboard", "Customize Widgets", "extend"),
-                ("View Dashboard", "Refresh Data", "extend")
-            ]),
-            ("Data Visualization", ["Analyst"], ["Create Chart", "Select Metrics", "Share Visualization"], [
-                ("Analyst", "Create Chart", "association"),
-                ("Create Chart", "Select Metrics", "include"),
-                ("Create Chart", "Share Visualization", "extend")
-            ]),
-            ("Trend Analysis", ["Analyst"], ["Analyze Trends", "Compare Periods", "Generate Forecast"], [
-                ("Analyst", "Analyze Trends", "association"),
-                ("Analyze Trends", "Compare Periods", "include"),
-                ("Analyze Trends", "Generate Forecast", "extend")
-            ])
-        ]
-
-        for i, (name, actors, usecases, rels) in enumerate(base_scenarios):
-            for variant in range(20):
-                variant_name = f"{name}_v{variant + 1}"
-                templates.append((f"analytics_{i}_{variant}", variant_name, actors, usecases, rels))
-
-        return templates
-
-    def _get_permission_management_templates(self) -> List[Tuple[str, List[str], List[str], List[Tuple]]]:
-        """
-        权限管理系统模板 (100个场景)
-        """
-        templates = []
-
-        base_scenarios = [
-            ("Role Assignment", ["Admin"], ["Create Role", "Assign Permissions", "Assign to User"], [
-                ("Admin", "Create Role", "association"),
-                ("Create Role", "Assign Permissions", "include"),
-                ("Create Role", "Assign to User", "extend")
-            ]),
-            ("Access Control", ["User", "Admin"], ["Request Access", "Approve Request", "Grant Access"], [
-                ("User", "Request Access", "association"),
-                ("Admin", "Approve Request", "association"),
-                ("Approve Request", "Grant Access", "include")
-            ]),
-            ("Permission Audit", ["Auditor"], ["Review Permissions", "Generate Audit Log", "Flag Issues"], [
-                ("Auditor", "Review Permissions", "association"),
-                ("Review Permissions", "Generate Audit Log", "include"),
-                ("Review Permissions", "Flag Issues", "extend")
-            ]),
-            ("Delegation", ["Manager"], ["Delegate Authority", "Set Duration", "Notify Delegate"], [
-                ("Manager", "Delegate Authority", "association"),
-                ("Delegate Authority", "Set Duration", "include"),
-                ("Delegate Authority", "Notify Delegate", "extend")
-            ]),
-            ("Resource Protection", ["Admin"], ["Set Resource Policy", "Define Rules", "Monitor Access"], [
-                ("Admin", "Set Resource Policy", "association"),
-                ("Set Resource Policy", "Define Rules", "include"),
-                ("Set Resource Policy", "Monitor Access", "extend")
-            ])
-        ]
-
-        for i, (name, actors, usecases, rels) in enumerate(base_scenarios):
-            for variant in range(20):
-                variant_name = f"{name}_v{variant + 1}"
-                templates.append((f"permission_{i}_{variant}", variant_name, actors, usecases, rels))
-
-        return templates
-
-    def _get_notification_system_templates(self) -> List[Tuple[str, List[str], List[str], List[Tuple]]]:
-        """
-        通知系统模板 (100个场景)
-        """
-        templates = []
-
-        base_scenarios = [
-            ("Push Notification", ["System", "User"], ["Send Notification", "Format Message", "Deliver Push"], [
-                ("System", "Send Notification", "association"),
-                ("Send Notification", "Format Message", "include"),
-                ("Format Message", "Deliver Push", "include"),
-                ("User", "Deliver Push", "association")
-            ]),
-            ("Email Notification", ["System"], ["Compose Email", "Add Attachments", "Send Email"], [
-                ("System", "Compose Email", "association"),
-                ("Compose Email", "Add Attachments", "extend"),
-                ("Compose Email", "Send Email", "include")
-            ]),
-            ("SMS Notification", ["System"], ["Send SMS", "Validate Number", "Track Delivery"], [
-                ("System", "Send SMS", "association"),
-                ("Send SMS", "Validate Number", "include"),
-                ("Send SMS", "Track Delivery", "extend")
-            ]),
-            ("Notification Preferences", ["User"], ["Set Preferences", "Choose Channels", "Set Quiet Hours"], [
-                ("User", "Set Preferences", "association"),
-                ("Set Preferences", "Choose Channels", "include"),
-                ("Set Preferences", "Set Quiet Hours", "extend")
-            ]),
-            ("Batch Notifications", ["Admin"], ["Create Campaign", "Select Recipients", "Schedule Send"], [
-                ("Admin", "Create Campaign", "association"),
-                ("Create Campaign", "Select Recipients", "include"),
-                ("Create Campaign", "Schedule Send", "extend")
-            ])
-        ]
-
-        for i, (name, actors, usecases, rels) in enumerate(base_scenarios):
-            for variant in range(20):
-                variant_name = f"{name}_v{variant + 1}"
-                templates.append((f"notification_{i}_{variant}", variant_name, actors, usecases, rels))
-
-        return templates
-
-    def _get_file_management_templates(self) -> List[Tuple[str, List[str], List[str], List[Tuple]]]:
-        """
-        文件管理系统模板 (100个场景)
-        """
-        templates = []
-
-        base_scenarios = [
-            ("File Upload", ["User"], ["Upload File", "Scan Virus", "Store File"], [
-                ("User", "Upload File", "association"),
-                ("Upload File", "Scan Virus", "include"),
-                ("Scan Virus", "Store File", "include")
-            ]),
-            ("File Download", ["User"], ["Download File", "Check Permission", "Log Access"], [
-                ("User", "Download File", "association"),
-                ("Download File", "Check Permission", "include"),
-                ("Download File", "Log Access", "extend")
-            ]),
-            ("File Sharing", ["User"], ["Share File", "Set Permissions", "Generate Link"], [
-                ("User", "Share File", "association"),
-                ("Share File", "Set Permissions", "include"),
-                ("Share File", "Generate Link", "extend")
-            ]),
-            ("Folder Management", ["User"], ["Create Folder", "Move Files", "Set Access"], [
-                ("User", "Create Folder", "association"),
-                ("Create Folder", "Move Files", "extend"),
-                ("Create Folder", "Set Access", "extend")
-            ]),
-            ("Version Control", ["User"], ["Upload New Version", "Compare Versions", "Restore Version"], [
-                ("User", "Upload New Version", "association"),
-                ("Upload New Version", "Compare Versions", "extend"),
-                ("Upload New Version", "Restore Version", "extend")
-            ])
-        ]
-
-        for i, (name, actors, usecases, rels) in enumerate(base_scenarios):
-            for variant in range(20):
-                variant_name = f"{name}_v{variant + 1}"
-                templates.append((f"file_{i}_{variant}", variant_name, actors, usecases, rels))
-
-        return templates
-
-    def _get_booking_system_templates(self) -> List[Tuple[str, List[str], List[str], List[Tuple]]]:
-        """
-        预约系统模板 (100个场景)
-        """
-        templates = []
-
-        base_scenarios = [
-            ("Make Reservation", ["Customer"], ["Check Availability", "Book Slot", "Confirm Booking"], [
-                ("Customer", "Check Availability", "association"),
-                ("Check Availability", "Book Slot", "include"),
-                ("Book Slot", "Confirm Booking", "include")
-            ]),
-            ("Cancellation", ["Customer"], ["Cancel Booking", "Check Policy", "Process Refund"], [
-                ("Customer", "Cancel Booking", "association"),
-                ("Cancel Booking", "Check Policy", "include"),
-                ("Check Policy", "Process Refund", "extend")
-            ]),
-            ("Rescheduling", ["Customer"], ["Request Reschedule", "Find New Slot", "Update Booking"], [
-                ("Customer", "Request Reschedule", "association"),
-                ("Request Reschedule", "Find New Slot", "include"),
-                ("Find New Slot", "Update Booking", "include")
-            ]),
-            ("Reminder System", ["System", "Customer"], ["Send Reminder", "Check Booking", "Notify Customer"], [
-                ("System", "Send Reminder", "association"),
-                ("Send Reminder", "Check Booking", "include"),
-                ("Check Booking", "Notify Customer", "include"),
-                ("Customer", "Notify Customer", "association")
-            ]),
-            ("Resource Management", ["Admin"], ["Manage Slots", "Set Capacity", "Block Dates"], [
-                ("Admin", "Manage Slots", "association"),
-                ("Manage Slots", "Set Capacity", "include"),
-                ("Manage Slots", "Block Dates", "extend")
-            ])
-        ]
-
-        for i, (name, actors, usecases, rels) in enumerate(base_scenarios):
-            for variant in range(20):
-                variant_name = f"{name}_v{variant + 1}"
-                templates.append((f"booking_{i}_{variant}", variant_name, actors, usecases, rels))
-
-        return templates
+        name = name.replace('"', '')
+        name = name.replace("'", '')
+        name = name.replace('\\', '')
+        return name
 
     def generate_plantuml_code(self, scenario_name: str, actors: List[str],
                                use_cases: List[str], relationships: List[Tuple]) -> str:
@@ -484,29 +429,40 @@ class PlantUMLGenerator:
         Returns:
             str: PlantUML代码
         """
+        scenario_name = self._sanitize_name(scenario_name)
+        actors = [self._sanitize_name(a) for a in actors]
+        use_cases = [self._sanitize_name(uc) for uc in use_cases]
+
         code_lines = ["@startuml", "left to right direction"]
 
         for actor in actors:
-            code_lines.append(f"actor {actor}")
+            code_lines.append(f"actor \"{actor}\" as {actor.replace(' ', '_')}")
 
         code_lines.append("")
         code_lines.append(f"rectangle \"{scenario_name}\" {{")
 
         for uc in use_cases:
-            code_lines.append(f"  usecase ({uc})")
+            uc_id = uc.replace(' ', '_').replace('-', '_').replace('/', '_')
+            code_lines.append(f"  usecase \"{uc}\" as UC_{uc_id}")
 
         code_lines.append("}")
         code_lines.append("")
 
         for from_elem, to_elem, rel_type in relationships:
+            from_elem = self._sanitize_name(from_elem)
+            to_elem = self._sanitize_name(to_elem)
+
+            from_id = from_elem.replace(' ', '_').replace('-', '_').replace('/', '_')
+            to_id = to_elem.replace(' ', '_').replace('-', '_').replace('/', '_')
+
             if rel_type == "association":
-                code_lines.append(f"{from_elem} --> ({to_elem})")
+                code_lines.append(f"{from_id} --> UC_{to_id}")
             elif rel_type == "include":
-                code_lines.append(f"({from_elem}) ..> ({to_elem}) : <<include>>")
+                code_lines.append(f"UC_{from_id} ..> UC_{to_id} : <<include>>")
             elif rel_type == "extend":
-                code_lines.append(f"({from_elem}) ..> ({to_elem}) : <<extend>>")
+                code_lines.append(f"UC_{from_id} ..> UC_{to_id} : <<extend>>")
             elif rel_type == "generalization":
-                code_lines.append(f"{from_elem} --|> {to_elem}")
+                code_lines.append(f"{from_id} --|> {to_id}")
 
         code_lines.append("@enduml")
 
@@ -552,7 +508,7 @@ class PlantUMLGenerator:
             print(f"Failed to download PlantUML: {e}")
             return False
 
-    def generate_png(self, puml_file: Path) -> bool:
+    def generate_png(self, puml_file: Path) -> Tuple[bool, str]:
         """
         使用PlantUML生成PNG图像
 
@@ -560,7 +516,7 @@ class PlantUMLGenerator:
             puml_file: PlantUML源文件路径
 
         Returns:
-            bool: True表示生成成功
+            Tuple[bool, str]: (是否成功, 错误信息)
         """
         try:
             result = subprocess.run(
@@ -574,17 +530,24 @@ class PlantUMLGenerator:
                 text=True,
                 timeout=30
             )
-            return result.returncode == 0
-        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            print(f"Failed to generate PNG: {e}")
-            return False
+            if result.returncode == 0:
+                return True, ""
+            else:
+                error_msg = result.stderr if result.stderr else result.stdout
+                return False, error_msg
+        except subprocess.TimeoutExpired:
+            return False, "Timeout (>30s)"
+        except FileNotFoundError as e:
+            return False, f"File not found: {e}"
+        except Exception as e:
+            return False, str(e)
 
-    def generate_all(self, target_count: int = 1000):
+    def generate_all(self, target_count: int = 600):
         """
         批量生成所有用例图
 
         Args:
-            target_count: 目标生成数量
+            target_count: 目标生成数量（默认600张）
         """
         if not self.check_java():
             print("Error: Java is not installed. Please install Java 8+ first.")
@@ -596,46 +559,65 @@ class PlantUMLGenerator:
 
         print(f"\nGenerating {target_count} use case diagrams...")
         print(f"Output directory: {self.output_dir}")
-        print("=" * 60)
+        print(f"Strategy: 10 domains × 60 diagrams each (Simple: 20, Medium: 30, Complex: 10)")
+        print("=" * 80)
 
         generated_count = 0
-        total_templates = sum(len(templates) for templates in self.domains.values())
+        failed_count = 0
+        diagrams_per_domain = target_count // 10
+        first_error_shown = False
 
-        print(f"Total templates available: {total_templates}")
-
-        for domain_name, templates in self.domains.items():
+        for domain_name, pool in self.domains.items():
             domain_dir = self.output_dir / domain_name
             domain_dir.mkdir(exist_ok=True)
 
-            templates_to_use = min(len(templates), target_count // 10)
+            print(f"\n[{domain_name.upper()}] Generating {diagrams_per_domain} diagrams...")
 
-            print(f"\n[{domain_name}] Generating {templates_to_use} diagrams...")
+            domain_generated = 0
 
-            for i, (file_id, scenario_name, actors, use_cases, relationships) in enumerate(templates[:templates_to_use]):
-                puml_code = self.generate_plantuml_code(scenario_name, actors, use_cases, relationships)
+            for complexity, config in self.complexity_config.items():
+                print(f"  Generating {config['count']} {complexity} diagrams...")
 
-                puml_file = domain_dir / f"{file_id}.puml"
-                with open(puml_file, "w", encoding="utf-8") as f:
-                    f.write(puml_code)
+                for i in range(config['count']):
+                    file_id, scenario_name, actors, usecases, relationships = \
+                        self._generate_random_diagram(domain_name, pool, complexity, i)
 
-                if self.generate_png(puml_file):
-                    generated_count += 1
-                    if (i + 1) % 10 == 0:
-                        print(f"  Progress: {i + 1}/{templates_to_use} diagrams")
-                else:
-                    print(f"  Warning: Failed to generate {puml_file.name}")
+                    puml_code = self.generate_plantuml_code(scenario_name, actors, usecases, relationships)
 
-                if generated_count >= target_count:
-                    break
+                    puml_file = domain_dir / f"{file_id}.puml"
+                    with open(puml_file, "w", encoding="utf-8") as f:
+                        f.write(puml_code)
 
-            if generated_count >= target_count:
-                break
+                    success, error_msg = self.generate_png(puml_file)
 
-        print("\n" + "=" * 60)
+                    if success:
+                        puml_file.unlink()
+
+                        domain_generated += 1
+                        generated_count += 1
+
+                        if domain_generated % 10 == 0:
+                            print(f"    Progress: {domain_generated}/{diagrams_per_domain} diagrams")
+                    else:
+                        failed_count += 1
+                        if not first_error_shown:
+                            print(f"\n    ERROR: Failed to generate {puml_file.name}")
+                            print(f"    Error message: {error_msg}")
+                            print(f"    PUML file preserved at: {puml_file}")
+                            print(f"    Please check the file for syntax errors.")
+                            print(f"    (Further errors will be counted but not displayed)\n")
+                            first_error_shown = True
+
+        print("\n" + "=" * 80)
         print(f"Generation complete!")
-        print(f"Total generated: {generated_count} use case diagrams")
+        print(f"Successfully generated: {generated_count} diagrams")
+        print(f"Failed: {failed_count} diagrams")
+        if failed_count > 0:
+            print(f"\nFailed PUML files have been preserved for debugging.")
+            print(f"Check the output directory for files with .puml extension.")
         print(f"Output location: {self.output_dir}")
-        print("=" * 60)
+        print(f"File format: PNG only (PUML source files deleted for successful generations)")
+        print("=" * 80)
 
 
 def main():
@@ -652,7 +634,7 @@ def main():
 
     generator = PlantUMLGenerator(output_dir)
 
-    target_count = 1000
+    target_count = 600
     generator.generate_all(target_count=target_count)
 
 
