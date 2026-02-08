@@ -16,7 +16,8 @@ import torch.nn.functional as F
 from transformers import (
     AutoModelForVision2Seq,
     AutoProcessor,
-    BitsAndBytesConfig
+    BitsAndBytesConfig,
+    TextIteratorStreamer
 )
 from peft import PeftModel, PeftConfig
 import json
@@ -24,6 +25,7 @@ import re
 import gc
 from typing import Dict, Optional, Tuple
 from pathlib import Path
+from threading import Thread
 
 from config.settings import get_path_config, get_device_config, get_vision_model_config
 from models.prompt_templates.image_template import ImageInstructionTemplate
@@ -78,12 +80,23 @@ class VisionModel:
         # 根据GPU型号决定量化策略
         self.use_quantization = device_cfg.should_use_quantization()
 
+        # 获取GPU性能分级和生成配置
+        self.gpu_tier = device_cfg.get_gpu_tier()
+        self.uml_gen_config = device_cfg.get_generation_config('uml')
+        self.image_gen_config = device_cfg.get_generation_config('image')
+
+        # 获取streaming配置
+        self.enable_streaming = device_cfg.enable_streaming
+
         logger.info(f"初始化视觉模型: {self.model_name}")
         logger.info(f"模型版本: {self.version}")
         logger.info(f"模型路径: {self.model_path}")
         logger.info(f"设备: {self.device}")
         logger.info(f"GPU信息: {device_cfg.get_gpu_info()}")
         logger.info(f"量化策略: {'4bit量化' if self.use_quantization else 'FP16（无量化）'}")
+        logger.info(f"GPU配置: {self.gpu_tier.upper()}端GPU模式")
+        logger.info(f"UML生成tokens: {self.uml_gen_config['max_new_tokens']}, 图像生成tokens: {self.image_gen_config['max_new_tokens']}")
+        logger.info(f"流式输出: {'启用' if self.enable_streaming else '禁用'}")
 
         # 清理内存
         gc.collect()
@@ -395,7 +408,8 @@ class VisionModel:
                 "error": str(e)
             }
 
-    def recognize_uml(self, uml_path: str, max_retries: int = 2, prompt: Optional[str] = None) -> Dict:
+    def recognize_uml(self, uml_path: str, max_retries: int = 2, prompt: Optional[str] = None,
+                      streaming: Optional[bool] = None) -> Dict:
         """
         识别UML图（专用于预处理）
 
@@ -403,6 +417,7 @@ class VisionModel:
             uml_path: UML图路径
             max_retries: 最大重试次数
             prompt: 自定义提示词（默认使用统一模板）
+            streaming: 是否使用流式输出（None则使用配置默认值）
 
         Returns:
             dict: UML识别结果
@@ -410,10 +425,15 @@ class VisionModel:
         if prompt is None:
             prompt = UMLInstructionTemplate.get_recognition_prompt()
 
+        # 确定是否使用streaming（参数 > 配置）
+        use_streaming = streaming if streaming is not None else self.enable_streaming
+
         logger.info(f"识别UML图: {Path(uml_path).name}")
+        logger.info(f"使用生成配置: max_tokens={self.uml_gen_config['max_new_tokens']}, temp={self.uml_gen_config['temperature']}")
 
         for attempt in range(max_retries):
             try:
+                logger.info(f"[尝试 {attempt + 1}/{max_retries}] 准备输入消息...")
                 # 使用 Transformers 原生接口
                 messages = [
                     {
@@ -425,6 +445,7 @@ class VisionModel:
                     }
                 ]
 
+                logger.info(f"[尝试 {attempt + 1}/{max_retries}] 应用chat template...")
                 # 使用 processor 的 apply_chat_template
                 inputs = self.processor.apply_chat_template(
                     messages,
@@ -434,46 +455,34 @@ class VisionModel:
                     return_tensors="pt"
                 )
 
+                logger.info(f"[尝试 {attempt + 1}/{max_retries}] 移动输入到GPU...")
                 if torch.cuda.is_available():
                     inputs = inputs.to("cuda")
 
-                # UML需要更多tokens（优化生成参数）
-                with torch.no_grad():
-                    with torch.amp.autocast('cuda'):
-                        generated_ids = self.model.generate(
-                            **inputs,
-                            max_new_tokens=1500,
-                            temperature=0.1,  # 更低的温度提高稳定性
-                            do_sample=True,   # 启用采样但温度很低
-                            top_p=0.85,       # 稍微收紧采样范围
-                            use_cache=True,
-                            num_beams=1,
-                            pad_token_id=self.processor.tokenizer.pad_token_id,
-                            eos_token_id=self.processor.tokenizer.eos_token_id,
-                        )
+                # 根据配置选择生成模式
+                if use_streaming:
+                    logger.info(f"[尝试 {attempt + 1}/{max_retries}] 开始生成（流式输出模式）...")
+                    response = self._generate_streaming(inputs, task_type='uml')
+                else:
+                    logger.info(f"[尝试 {attempt + 1}/{max_retries}] 开始生成（标准模式）...")
+                    response = self._generate_standard(inputs, task_type='uml')
 
-                generated_ids_trimmed = [
-                    out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-                ]
-
-                response = self.processor.batch_decode(
-                    generated_ids_trimmed,
-                    skip_special_tokens=True,
-                    clean_up_tokenization_spaces=False
-                )[0]
-
+                logger.info(f"[尝试 {attempt + 1}/{max_retries}] 生成完成，清理显存...")
                 # 清理
-                del inputs, generated_ids, generated_ids_trimmed
+                del inputs
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
                 gc.collect()
 
+                logger.info(f"[尝试 {attempt + 1}/{max_retries}] 解析响应...")
                 # 解析
                 result = self._parse_uml_response(response, uml_path)
 
                 if result['success'] or attempt == max_retries - 1:
                     if result['success']:
                         logger.info(f"UML识别成功")
+                    else:
+                        logger.warning(f"UML识别失败，但已达到最大重试次数")
                     return result
                 else:
                     logger.warning(f"第{attempt + 1}次尝试失败，重试中...")
@@ -491,17 +500,121 @@ class VisionModel:
                     logger.warning(f"第{attempt + 1}次尝试出错: {e}，重试中...")
                     continue
 
+    def _generate_standard(self, inputs, task_type: str = 'uml') -> str:
+        """
+        标准生成模式（非流式）
+
+        Args:
+            inputs: 模型输入
+            task_type: 任务类型 ('uml' 或 'image')
+
+        Returns:
+            str: 生成的文本
+        """
+        gen_config = self.uml_gen_config if task_type == 'uml' else self.image_gen_config
+
+        with torch.no_grad():
+            with torch.amp.autocast('cuda'):
+                generated_ids = self.model.generate(
+                    **inputs,
+                    max_new_tokens=gen_config['max_new_tokens'],
+                    temperature=gen_config['temperature'],
+                    do_sample=True,
+                    top_p=gen_config['top_p'],
+                    use_cache=gen_config['use_cache'],
+                    num_beams=1,
+                    pad_token_id=self.processor.tokenizer.pad_token_id,
+                    eos_token_id=self.processor.tokenizer.eos_token_id,
+                )
+
+        # 解码
+        generated_ids_trimmed = [
+            out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+        ]
+
+        response = self.processor.batch_decode(
+            generated_ids_trimmed,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False
+        )[0]
+
+        # 清理
+        del generated_ids, generated_ids_trimmed
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        return response
+
+    def _generate_streaming(self, inputs, task_type: str = 'uml') -> str:
+        """
+        流式生成模式（实时输出）
+
+        Args:
+            inputs: 模型输入
+            task_type: 任务类型 ('uml' 或 'image')
+
+        Returns:
+            str: 生成的文本
+        """
+        gen_config = self.uml_gen_config if task_type == 'uml' else self.image_gen_config
+
+        # 创建流式输出器
+        streamer = TextIteratorStreamer(
+            self.processor.tokenizer,
+            skip_prompt=True,
+            skip_special_tokens=True
+        )
+
+        # 准备生成参数
+        generation_kwargs = {
+            **inputs,
+            'max_new_tokens': gen_config['max_new_tokens'],
+            'temperature': gen_config['temperature'],
+            'do_sample': True,
+            'top_p': gen_config['top_p'],
+            'use_cache': gen_config['use_cache'],
+            'num_beams': 1,
+            'pad_token_id': self.processor.tokenizer.pad_token_id,
+            'eos_token_id': self.processor.tokenizer.eos_token_id,
+            'streamer': streamer,
+        }
+
+        # 定义生成函数（在线程中运行，需要正确的torch上下文）
+        def generate_with_context():
+            with torch.no_grad():
+                with torch.amp.autocast('cuda'):
+                    self.model.generate(**generation_kwargs)
+
+        # 在单独的线程中运行生成
+        thread = Thread(target=generate_with_context)
+        thread.start()
+
+        # 实时打印生成的文本
+        print("\n" + "="*80)
+        print("实时生成内容：")
+        print("="*80)
+        generated_text = ""
+        for new_text in streamer:
+            print(new_text, end='', flush=True)
+            generated_text += new_text
+        print("\n" + "="*80)
+
+        # 等待生成完成
+        thread.join()
+
+        return generated_text
+
     def _generate_with_confidence(self, inputs) -> Tuple[str, float]:
-        """生成文本并计算置信度（基于熵，优化参数）"""
+        """生成文本并计算置信度（基于熵，使用动态配置）"""
         with torch.no_grad():
             with torch.cuda.amp.autocast():
                 outputs = self.model.generate(
                     **inputs,
-                    max_new_tokens=512,
-                    temperature=0.2,  # 降低温度提高稳定性
-                    do_sample=True,   # 启用采样但温度很低
-                    top_p=0.85,       # 收紧采样范围
-                    use_cache=True,
+                    max_new_tokens=self.image_gen_config['max_new_tokens'],
+                    temperature=self.image_gen_config['temperature'],
+                    do_sample=True,
+                    top_p=self.image_gen_config['top_p'],
+                    use_cache=self.image_gen_config['use_cache'],
                     num_beams=1,
                     return_dict_in_generate=True,
                     output_scores=True,

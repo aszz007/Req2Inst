@@ -503,7 +503,6 @@ class TrainingConfig4090:
     adam_epsilon = 1e-8
 
 @dataclass
-@dataclass
 class DeviceConfig:
     """设备配置"""
 
@@ -511,6 +510,7 @@ class DeviceConfig:
     gpu_name: Optional[str] = None
     gpu_memory_gb: Optional[float] = None
     is_high_end_gpu: bool = False
+    enable_streaming: bool = False  # 是否启用流式输出（默认关闭）
 
     def __post_init__(self):
         """自动检测设备和GPU型号"""
@@ -597,6 +597,96 @@ class DeviceConfig:
         # 其他GPU使用4bit量化（节省显存）
         return not self.is_high_end_gpu
 
+    def get_gpu_tier(self) -> str:
+        """
+        获取GPU性能分级
+
+        Returns:
+            str: GPU性能级别 ('low' / 'mid' / 'high')
+        """
+        if not torch.cuda.is_available():
+            return 'low'
+
+        # 高端GPU (>16GB 或在高端列表中)
+        if self.is_high_end_gpu:
+            return 'high'
+
+        # 中端GPU (7.5-16GB, 包括8GB显卡如RTX 4060)
+        if self.gpu_memory_gb and 7.5 <= self.gpu_memory_gb <= 16.0:
+            return 'mid'
+
+        # 低端GPU (<7.5GB)
+        return 'low'
+
+    def get_generation_config(self, task_type: str = 'uml') -> dict:
+        """
+        根据GPU性能获取生成配置参数
+
+        Args:
+            task_type: 任务类型 ('uml' 或 'image')
+
+        Returns:
+            dict: 生成配置参数
+        """
+        tier = self.get_gpu_tier()
+
+        # UML识别生成参数配置
+        uml_configs = {
+            'high': {
+                'max_new_tokens': 900,
+                'batch_size': 4,
+                'temperature': 0.3,
+                'top_p': 0.85,
+                'use_cache': True,
+            },
+            'mid': {
+                'max_new_tokens': 320,
+                'batch_size': 2,
+                'temperature': 0.5,
+                'top_p': 0.9,
+                'use_cache': True,
+            },
+            'low': {
+                'max_new_tokens': 256,
+                'batch_size': 1,
+                'temperature': 0.6,
+                'top_p': 0.95,
+                'use_cache': True,
+            }
+        }
+
+        # 图像识别生成参数配置
+        image_configs = {
+            'high': {
+                'max_new_tokens': 512,
+                'batch_size': 4,
+                'temperature': 0.3,
+                'top_p': 0.85,
+                'use_cache': True,
+            },
+            'mid': {
+                'max_new_tokens': 200,
+                'batch_size': 2,
+                'temperature': 0.5,
+                'top_p': 0.9,
+                'use_cache': True,
+            },
+            'low': {
+                'max_new_tokens': 150,
+                'batch_size': 1,
+                'temperature': 0.6,
+                'top_p': 0.95,
+                'use_cache': True,
+            }
+        }
+
+        if task_type == 'uml':
+            return uml_configs.get(tier, uml_configs['mid'])
+        elif task_type == 'image':
+            return image_configs.get(tier, image_configs['mid'])
+        else:
+            return uml_configs.get(tier, uml_configs['mid'])
+
 # ==================== 全局配置实例 ====================
 _path_config = None
 _lora_config = None
@@ -643,6 +733,20 @@ def get_device_config() -> DeviceConfig:
     if _device_config is None:
         _device_config = DeviceConfig()
     return _device_config
+
+
+def set_streaming_mode(enable: bool):
+    """
+    设置流式输出模式
+
+    Args:
+        enable: True启用流式输出，False禁用
+    """
+    global _device_config
+    if _device_config is None:
+        _device_config = DeviceConfig()
+    _device_config.enable_streaming = enable
+    print(f"流式输出模式: {'启用' if enable else '禁用'}")
 
 
 def get_vision_model_config(version: str = None) -> VisionModelConfig:

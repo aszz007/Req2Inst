@@ -56,16 +56,22 @@ def parse_args():
         default=None,
         help='单张图片路径（用于快速测试）'
     )
+    parser.add_argument(
+        '--streaming',
+        action='store_true',
+        help='启用流式输出（实时显示生成内容）'
+    )
     return parser.parse_args()
 
 
-def recognize_single_uml(image_path: str, version: str = 'qwen2.5') -> Dict:
+def recognize_single_uml(image_path: str, version: str = 'qwen2.5', streaming: bool = False) -> Dict:
     """
     识别单张UML用例图
 
     Args:
         image_path: 图片路径
         version: 模型版本
+        streaming: 是否使用流式输出
 
     Returns:
         dict: 识别结果
@@ -80,6 +86,7 @@ def recognize_single_uml(image_path: str, version: str = 'qwen2.5') -> Dict:
     print(f"{'='*80}")
     print(f"模型版本: {version.upper()}")
     print(f"图片路径: {image_path}")
+    print(f"流式输出: {'启用' if streaming else '禁用'}")
     print(f"{'='*80}\n")
 
     # 初始化模型
@@ -91,7 +98,7 @@ def recognize_single_uml(image_path: str, version: str = 'qwen2.5') -> Dict:
 
     # 识别
     print(f"[识别中] 正在处理UML图...")
-    result = model.recognize_uml(str(image_path))
+    result = model.recognize_uml(str(image_path), streaming=streaming)
 
     # 添加元数据
     result['image_path'] = str(image_path)
@@ -130,7 +137,8 @@ def recognize_single_uml(image_path: str, version: str = 'qwen2.5') -> Dict:
 def batch_recognize_uml(
     image_folder: str,
     version: str = 'qwen2.5',
-    output_file: str = None
+    output_file: str = None,
+    streaming: bool = False
 ) -> List[Dict]:
     """
     批量识别文件夹中的所有UML用例图
@@ -139,6 +147,7 @@ def batch_recognize_uml(
         image_folder: 图片文件夹路径
         version: 模型版本（'qwen2.5' 或 'qwen3'）
         output_file: 输出JSON文件路径（None则自动生成）
+        streaming: 是否使用流式输出
 
     Returns:
         list: 所有识别结果的列表
@@ -164,6 +173,7 @@ def batch_recognize_uml(
     print(f"模型版本: {version.upper()}")
     print(f"图片文件夹: {image_folder}")
     print(f"找到图片数量: {total_images}")
+    print(f"流式输出: {'启用' if streaming else '禁用'}")
     print(f"{'='*80}\n")
 
     if total_images == 0:
@@ -188,7 +198,7 @@ def batch_recognize_uml(
 
         try:
             # 直接调用VisionModel的recognize_uml方法
-            result = model.recognize_uml(str(image_path))
+            result = model.recognize_uml(str(image_path), streaming=streaming)
 
             # 添加元数据
             result['image_path'] = str(image_path)
@@ -270,7 +280,7 @@ def main():
     try:
         # 单图识别模式
         if args.single:
-            result = recognize_single_uml(args.single, args.version)
+            result = recognize_single_uml(args.single, args.version, args.streaming)
 
             # 保存结果
             if args.output:
@@ -305,7 +315,8 @@ def main():
             results = batch_recognize_uml(
                 image_folder=image_folder,
                 version=args.version,
-                output_file=args.output
+                output_file=args.output,
+                streaming=args.streaming
             )
 
             # 展示部分结果示例
