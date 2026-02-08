@@ -502,26 +502,99 @@ class TrainingConfig4090:
     adam_epsilon = 1e-8
 
 @dataclass
+@dataclass
 class DeviceConfig:
     """设备配置"""
 
     device: Optional[str] = None
+    gpu_name: Optional[str] = None
+    gpu_memory_gb: Optional[float] = None
+    is_high_end_gpu: bool = False
 
     def __post_init__(self):
-        """自动检测设备"""
+        """自动检测设备和GPU型号"""
         if self.device is None:
             if torch.cuda.is_available():
                 self.device = "cuda"
-                print(f"[设备] 使用GPU: {torch.cuda.get_device_name(0)}")
-                print(f"[设备] 显存: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f}GB")
+                self.gpu_name = torch.cuda.get_device_name(0)
+                self.gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
+
+                # 检测是否为高端GPU（支持高效fp16推理）
+                self.is_high_end_gpu = self._detect_high_end_gpu()
+
+                print(f"[设备] 使用GPU: {self.gpu_name}")
+                print(f"[设备] 显存: {self.gpu_memory_gb:.2f}GB")
+                print(f"[设备] 高端GPU模式: {'是' if self.is_high_end_gpu else '否'}")
             else:
                 self.device = "cpu"
                 print("[设备] 使用CPU")
+
+    def _detect_high_end_gpu(self) -> bool:
+        """
+        检测是否为高端GPU
+
+        高端GPU定义（支持高效fp16，显存>=20GB）：
+        - RTX 4090 (24GB)
+        - RTX 4080 (16GB)
+        - A100 (40GB/80GB)
+        - H100 (80GB)
+        - V100 (16GB/32GB)
+        - A6000 (48GB)
+
+        Returns:
+            bool: 是否为高端GPU
+        """
+        if not self.gpu_name:
+            return False
+
+        gpu_lower = self.gpu_name.lower()
+
+        # 高端GPU列表
+        high_end_keywords = [
+            '4090', '4080',  # RTX 40系高端
+            'a100', 'h100', 'a6000',  # 数据中心GPU
+            'v100',  # 上一代数据中心GPU
+        ]
+
+        # 检查关键词
+        for keyword in high_end_keywords:
+            if keyword in gpu_lower:
+                return True
+
+        # 备用判断：显存>=20GB也视为高端GPU
+        if self.gpu_memory_gb and self.gpu_memory_gb >= 20.0:
+            return True
+
+        return False
 
     def get_device(self) -> str:
         """获取设备名称"""
         return self.device
 
+    def get_gpu_info(self) -> dict:
+        """
+        获取GPU详细信息
+
+        Returns:
+            dict: GPU信息
+        """
+        return {
+            'device': self.device,
+            'gpu_name': self.gpu_name,
+            'gpu_memory_gb': self.gpu_memory_gb,
+            'is_high_end_gpu': self.is_high_end_gpu
+        }
+
+    def should_use_quantization(self) -> bool:
+        """
+        判断是否应该使用量化
+
+        Returns:
+            bool: True表示使用4bit量化，False表示使用fp16
+        """
+        # 高端GPU不使用量化（fp16即可）
+        # 其他GPU使用4bit量化（节省显存）
+        return not self.is_high_end_gpu
 
 # ==================== 全局配置实例 ====================
 _path_config = None

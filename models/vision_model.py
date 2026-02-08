@@ -1,12 +1,14 @@
 """
-Qwen视觉模型封装（多版本支持）
+Qwen视觉模型封装（多版本支持 + GPU性能优化）
 功能：
   - 支持 Qwen2.5-VL-7B 和 Qwen3-VL-8B 两个版本
   - 图像识别和UML图识别（预处理阶段）
   - 支持LoRA动态加载（推理阶段）
   - 通用generate接口
-  - 4bit量化，置信度计算
-版本: 3.0（移除qwen_vl_utils依赖）
+  - 动态精度选择（高端GPU使用FP16，其他GPU使用4bit量化）
+  - 置信度计算，优化的生成参数
+版本: 4.0（GPU性能优化版）
+更新: 2025-02 - 增加动态精度选择，优化GPU利用率
 """
 
 import torch
@@ -67,15 +69,21 @@ class VisionModel:
                 self.model_name = "Qwen2.5-VL-7B-Instruct"
 
         self.device = device_cfg.get_device()
+        self.device_cfg = device_cfg
         self.model = None
         self.processor = None
         self.current_lora_path = None  # 当前加载的LoRA路径
         self.is_lora_loaded = False    # LoRA加载状态
 
+        # 根据GPU型号决定量化策略
+        self.use_quantization = device_cfg.should_use_quantization()
+
         logger.info(f"初始化视觉模型: {self.model_name}")
         logger.info(f"模型版本: {self.version}")
         logger.info(f"模型路径: {self.model_path}")
         logger.info(f"设备: {self.device}")
+        logger.info(f"GPU信息: {device_cfg.get_gpu_info()}")
+        logger.info(f"量化策略: {'4bit量化' if self.use_quantization else 'FP16（无量化）'}")
 
         # 清理内存
         gc.collect()
@@ -102,7 +110,7 @@ class VisionModel:
         }
 
     def _load_base_model(self):
-        """加载基础模型"""
+        """加载基础模型（支持动态精度选择）"""
         try:
             # 加载processor
             logger.info("加载processor...")
@@ -111,29 +119,36 @@ class VisionModel:
                 trust_remote_code=True
             )
 
-            # 4bit量化配置
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-            )
+            # 根据GPU型号选择量化配置
+            if self.use_quantization:
+                # 低端GPU：使用4bit量化节省显存
+                logger.info("使用4bit量化配置（节省显存）...")
+                bnb_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                )
 
-            logger.info("加载模型（4bit量化）...")
-
-            # 加载模型
-            self.model = AutoModelForVision2Seq.from_pretrained(
-                self.model_path,
-                quantization_config=bnb_config,
-                device_map="auto",
-                trust_remote_code=True,
-                max_memory={
-                    0: "6.5GB",
-                    "cpu": "16GB"
-                },
-                offload_folder="offload",
-                low_cpu_mem_usage=True,
-            )
+                logger.info("加载模型（4bit量化）...")
+                self.model = AutoModelForVision2Seq.from_pretrained(
+                    self.model_path,
+                    quantization_config=bnb_config,
+                    device_map="auto",
+                    trust_remote_code=True,
+                    low_cpu_mem_usage=True,
+                )
+            else:
+                # 高端GPU（4090等）：使用FP16，无量化，充分利用显存和计算能力
+                logger.info("使用FP16配置（高端GPU优化）...")
+                logger.info("加载模型（FP16，无量化）...")
+                self.model = AutoModelForVision2Seq.from_pretrained(
+                    self.model_path,
+                    torch_dtype=torch.float16,
+                    device_map="auto",
+                    trust_remote_code=True,
+                    low_cpu_mem_usage=True,
+                )
 
             self.model.eval()
             for param in self.model.parameters():
@@ -143,7 +158,9 @@ class VisionModel:
 
             if torch.cuda.is_available():
                 memory_allocated = torch.cuda.memory_allocated() / 1024**3
+                memory_reserved = torch.cuda.memory_reserved() / 1024**3
                 logger.info(f"已分配显存: {memory_allocated:.2f}GB")
+                logger.info(f"已预留显存: {memory_reserved:.2f}GB")
 
         except Exception as e:
             logger.error(f"模型加载失败: {e}")
@@ -223,8 +240,8 @@ class VisionModel:
             return False
 
     def generate(self, prompt: str, image_path: Optional[str] = None,
-                 max_new_tokens: int = 1024, temperature: float = 0.7,
-                 top_p: float = 0.9, do_sample: bool = True) -> str:
+                 max_new_tokens: int = 1024, temperature: float = 0.3,
+                 top_p: float = 0.8, do_sample: bool = True) -> str:
         """
         通用生成接口（支持自定义prompt）
 
@@ -232,8 +249,8 @@ class VisionModel:
             prompt: 文本提示词
             image_path: 图像路径（可选）
             max_new_tokens: 最大生成token数
-            temperature: 温度参数
-            top_p: nucleus sampling
+            temperature: 温度参数（降低以提高稳定性）
+            top_p: nucleus sampling（降低以提高稳定性）
             do_sample: 是否采样
 
         Returns:
@@ -269,7 +286,7 @@ class VisionModel:
             if torch.cuda.is_available():
                 inputs = inputs.to("cuda")
 
-            # 生成
+            # 生成（优化参数）
             with torch.no_grad():
                 with torch.amp.autocast('cuda'):
                     generated_ids = self.model.generate(
@@ -279,6 +296,7 @@ class VisionModel:
                         top_p=top_p if do_sample else 1.0,
                         do_sample=do_sample,
                         use_cache=True,
+                        num_beams=1,  # 明确设置beam search为1（贪心解码）
                         pad_token_id=self.processor.tokenizer.pad_token_id,
                         eos_token_id=self.processor.tokenizer.eos_token_id,
                     )
@@ -419,13 +437,15 @@ class VisionModel:
                 if torch.cuda.is_available():
                     inputs = inputs.to("cuda")
 
-                # UML需要更多tokens
+                # UML需要更多tokens（优化生成参数）
                 with torch.no_grad():
                     with torch.amp.autocast('cuda'):
                         generated_ids = self.model.generate(
                             **inputs,
                             max_new_tokens=1500,
-                            do_sample=False,
+                            temperature=0.1,  # 更低的温度提高稳定性
+                            do_sample=True,   # 启用采样但温度很低
+                            top_p=0.85,       # 稍微收紧采样范围
                             use_cache=True,
                             num_beams=1,
                             pad_token_id=self.processor.tokenizer.pad_token_id,
@@ -472,14 +492,17 @@ class VisionModel:
                     continue
 
     def _generate_with_confidence(self, inputs) -> Tuple[str, float]:
-        """生成文本并计算置信度（基于熵）"""
+        """生成文本并计算置信度（基于熵，优化参数）"""
         with torch.no_grad():
             with torch.cuda.amp.autocast():
                 outputs = self.model.generate(
                     **inputs,
                     max_new_tokens=512,
-                    do_sample=False,
+                    temperature=0.2,  # 降低温度提高稳定性
+                    do_sample=True,   # 启用采样但温度很低
+                    top_p=0.85,       # 收紧采样范围
                     use_cache=True,
+                    num_beams=1,
                     return_dict_in_generate=True,
                     output_scores=True,
                     pad_token_id=self.processor.tokenizer.pad_token_id,
