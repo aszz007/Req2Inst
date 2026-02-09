@@ -458,10 +458,10 @@ class TrainingConfig:
     image_val_ratio: float = 0.1
     image_test_ratio: float = 0.1
 
-    # UML数据集（90条）- 数据量小，调整比例
-    uml_train_ratio: float = 0.85
-    uml_val_ratio: float = 0.10
-    uml_test_ratio: float = 0.05
+    # UML数据集（1500条）- 优化的复杂度分布（简单50% + 中等40% + 复杂10%）
+    uml_train_ratio: float = 0.8
+    uml_val_ratio: float = 0.1
+    uml_test_ratio: float = 0.1
 
 @dataclass
 class TrainingConfig4090:
@@ -633,21 +633,21 @@ class DeviceConfig:
         # UML识别生成参数配置
         uml_configs = {
             'high': {
-                'max_new_tokens': 900,
+                'max_new_tokens': 2048,
                 'batch_size': 4,
                 'temperature': 0.3,
                 'top_p': 0.85,
                 'use_cache': True,
             },
             'mid': {
-                'max_new_tokens': 320,
+                'max_new_tokens': 1024,
                 'batch_size': 2,
                 'temperature': 0.5,
                 'top_p': 0.9,
                 'use_cache': True,
             },
             'low': {
-                'max_new_tokens': 256,
+                'max_new_tokens': 512,
                 'batch_size': 1,
                 'temperature': 0.6,
                 'top_p': 0.95,

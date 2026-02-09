@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
 PlantUML用例图批量生成工具（随机化版本）
-功能：自动生成600张真正不同的高清用例图用于模型训练
+功能：自动生成1500张真正不同的高清用例图用于模型训练
 输出：PNG格式，150 DPI，保存至data/raw/uml/plantuml_usecase/
 策略：
-- 总数：600张图（10领域 × 60张/领域）
-- 复杂度分布：简单20张 + 中等30张 + 复杂10张
+- 总数：1500张图（10领域 × 150张/领域）
+- 复杂度分布（优化版）：简单75张 + 中等60张 + 复杂15张
+- 分布理由：50%简单样本让模型先学好基础，40%中等覆盖常见场景，10%复杂保证难度
 - 真正的随机化：随机actors、usecases、relationships
 """
 
@@ -35,9 +36,9 @@ class PlantUMLGenerator:
         self.domains = self._init_domain_pools()
 
         self.complexity_config = {
-            'simple': {'min_usecases': 5, 'max_usecases': 8, 'min_actors': 1, 'max_actors': 2, 'count': 20},
-            'medium': {'min_usecases': 10, 'max_usecases': 15, 'min_actors': 2, 'max_actors': 4, 'count': 30},
-            'complex': {'min_usecases': 18, 'max_usecases': 25, 'min_actors': 3, 'max_actors': 6, 'count': 10}
+            'simple': {'min_usecases': 5, 'max_usecases': 8, 'min_actors': 1, 'max_actors': 2, 'count': 75},
+            'medium': {'min_usecases': 10, 'max_usecases': 15, 'min_actors': 2, 'max_actors': 4, 'count': 60},
+            'complex': {'min_usecases': 18, 'max_usecases': 25, 'min_actors': 3, 'max_actors': 6, 'count': 15}
         }
 
     def _init_domain_pools(self) -> dict:
@@ -542,12 +543,12 @@ class PlantUMLGenerator:
         except Exception as e:
             return False, str(e)
 
-    def generate_all(self, target_count: int = 600):
+    def generate_all(self, target_count: int = 1500):
         """
         批量生成所有用例图
 
         Args:
-            target_count: 目标生成数量（默认600张）
+            target_count: 目标生成数量（默认1500张）
         """
         if not self.check_java():
             print("Error: Java is not installed. Please install Java 8+ first.")
@@ -559,7 +560,7 @@ class PlantUMLGenerator:
 
         print(f"\nGenerating {target_count} use case diagrams...")
         print(f"Output directory: {self.output_dir}")
-        print(f"Strategy: 10 domains × 60 diagrams each (Simple: 20, Medium: 30, Complex: 10)")
+        print(f"Strategy: 10 domains × 150 diagrams each (Simple: 75, Medium: 60, Complex: 15)")
         print("=" * 80)
 
         generated_count = 0
@@ -634,7 +635,7 @@ def main():
 
     generator = PlantUMLGenerator(output_dir)
 
-    target_count = 600
+    target_count = 1500
     generator.generate_all(target_count=target_count)
 
 

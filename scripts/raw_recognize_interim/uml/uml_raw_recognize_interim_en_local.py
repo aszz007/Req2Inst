@@ -28,6 +28,45 @@ from models.vision_model import VisionModel
 from config.settings import get_path_config
 
 
+def extract_metadata_from_path(image_path: Path) -> dict:
+    """
+    从图片路径中提取领域和复杂度元数据
+
+    路径格式: .../domain/domain_complexity_index.png
+    例如: .../ecommerce/ecommerce_simple_001.png
+
+    Args:
+        image_path: 图片路径
+
+    Returns:
+        dict: 包含domain和complexity的字典
+    """
+    metadata = {
+        'domain': 'unknown',
+        'complexity': 'unknown'
+    }
+
+    try:
+        # 从父目录名获取领域
+        parent_dir = image_path.parent.name
+        metadata['domain'] = parent_dir
+
+        # 从文件名获取复杂度
+        filename = image_path.stem  # 不含扩展名的文件名
+        parts = filename.split('_')
+
+        # 假设格式为: domain_complexity_index
+        if len(parts) >= 2:
+            complexity = parts[1]
+            if complexity in ['simple', 'medium', 'complex']:
+                metadata['complexity'] = complexity
+    except Exception:
+        # 如果提取失败，保持默认值
+        pass
+
+    return metadata
+
+
 def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(description='批量识别UML用例图')
@@ -102,6 +141,11 @@ def recognize_single_uml(image_path: str, version: str = 'qwen2.5', streaming: b
     result['image_path'] = str(image_path)
     result['image_name'] = image_path.name
     result['model_version'] = version
+
+    # 提取并添加领域和复杂度信息
+    metadata = extract_metadata_from_path(image_path)
+    result['domain'] = metadata['domain']
+    result['complexity'] = metadata['complexity']
 
     # 显示结果
     print(f"\n{'='*80}")
@@ -201,6 +245,11 @@ def batch_recognize_uml(
             result['image_name'] = image_path.name
             result['model_version'] = version
 
+            # 提取并添加领域和复杂度信息
+            metadata = extract_metadata_from_path(image_path)
+            result['domain'] = metadata['domain']
+            result['complexity'] = metadata['complexity']
+
             results.append(result)
 
             if result.get('success', False):
@@ -222,10 +271,16 @@ def batch_recognize_uml(
         except Exception as e:
             fail_count += 1
             print(f"✗ 处理失败: {str(e)}")
+
+            # 提取元数据
+            metadata = extract_metadata_from_path(image_path)
+
             results.append({
                 'image_path': str(image_path),
                 'image_name': image_path.name,
                 'model_version': version,
+                'domain': metadata['domain'],
+                'complexity': metadata['complexity'],
                 'success': False,
                 'error': str(e)
             })
