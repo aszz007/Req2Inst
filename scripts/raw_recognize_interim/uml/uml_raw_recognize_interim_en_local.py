@@ -21,7 +21,7 @@ from typing import List, Dict
 
 # 添加项目根目录到Python路径
 current_dir = Path(__file__).parent
-project_root = current_dir.parent
+project_root = current_dir.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from models.vision_model import VisionModel
@@ -198,12 +198,12 @@ def batch_recognize_uml(
     if not image_folder.exists():
         raise FileNotFoundError(f"文件夹不存在: {image_folder}")
 
-    # 获取所有图片文件（去重）
+    # 获取所有图片文件（递归查找子文件夹，去重）
     image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp']
     image_files = set()
     for ext in image_extensions:
-        image_files.update(image_folder.glob(f"*{ext}"))
-        image_files.update(image_folder.glob(f"*{ext.upper()}"))
+        image_files.update(image_folder.rglob(f"*{ext}"))
+        image_files.update(image_folder.rglob(f"*{ext.upper()}"))
 
     image_files = sorted(list(image_files))
     total_images = len(image_files)
@@ -302,7 +302,55 @@ def batch_recognize_uml(
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
 
-    # 打印统计信息
+    # 生成统计报告
+    print(f"\n{'='*80}")
+    print(f"统计报告")
+    print(f"{'='*80}")
+
+    # 按领域统计
+    domain_stats = {}
+    overall_description_complete = 0
+    overall_description_incomplete = 0
+
+    for result in results:
+        domain = result.get('domain', 'unknown')
+        if domain not in domain_stats:
+            domain_stats[domain] = {'total': 0, 'success': 0, 'failed': 0}
+
+        domain_stats[domain]['total'] += 1
+        if result.get('success', False):
+            domain_stats[domain]['success'] += 1
+
+            # 检查overall_description是否完整（是否被截断）
+            try:
+                desc = json.loads(result['description'])
+                if 'overall_description' in desc and desc['overall_description']:
+                    overall_description_complete += 1
+                else:
+                    overall_description_incomplete += 1
+                    print(f"[警告] {result['image_name']} - overall_description缺失或为空")
+            except:
+                overall_description_incomplete += 1
+        else:
+            domain_stats[domain]['failed'] += 1
+
+    # 打印领域统计
+    print(f"\n按领域统计:")
+    print(f"{'领域':<25} {'总数':>8} {'成功':>8} {'失败':>8} {'成功率':>10}")
+    print("-" * 70)
+    for domain in sorted(domain_stats.keys()):
+        stats = domain_stats[domain]
+        success_rate = stats['success'] / stats['total'] * 100 if stats['total'] > 0 else 0
+        print(f"{domain:<25} {stats['total']:>8} {stats['success']:>8} {stats['failed']:>8} {success_rate:>9.1f}%")
+
+    # 打印overall_description统计
+    print(f"\noverall_description完整性检查:")
+    print(f"  完整: {overall_description_complete}")
+    print(f"  不完整/缺失: {overall_description_incomplete}")
+    if overall_description_incomplete > 0:
+        print(f"  [提示] 如果不完整率较高，可能需要增加max_new_tokens参数")
+
+    # 打印总体统计信息
     print(f"\n{'='*80}")
     print(f"批量识别完成")
     print(f"{'='*80}")
@@ -354,7 +402,7 @@ def main():
             else:
                 # 使用配置中的默认测试目录
                 path_cfg = get_path_config()
-                image_folder = path_cfg.MDPI_UML_DIR
+                image_folder = path_cfg.PLANT_UML_DIR
                 print(f"[提示] 使用默认输入目录: {image_folder}")
                 print(f"[提示] 可使用 --input 参数指定其他目录\n")
 

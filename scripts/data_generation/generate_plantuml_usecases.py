@@ -627,7 +627,7 @@ def main():
         from config.settings import get_path_config
 
         path_config = get_path_config()
-        output_dir = path_config.PLANTUML_USECASE_DIR
+        output_dir = path_config.PLANT_UML_DIR
 
     except ImportError:
         print("Warning: Cannot import config.settings, using default path")
