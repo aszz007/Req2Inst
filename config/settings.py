@@ -633,21 +633,21 @@ class DeviceConfig:
         # UML识别生成参数配置
         uml_configs = {
             'high': {
-                'max_new_tokens': 2048,
+                'max_new_tokens': 4096,
                 'batch_size': 4,
                 'temperature': 0.3,
                 'top_p': 0.85,
                 'use_cache': True,
             },
             'mid': {
-                'max_new_tokens': 1024,
+                'max_new_tokens': 2048,
                 'batch_size': 2,
                 'temperature': 0.5,
                 'top_p': 0.9,
                 'use_cache': True,
             },
             'low': {
-                'max_new_tokens': 512,
+                'max_new_tokens': 1024,
                 'batch_size': 1,
                 'temperature': 0.6,
                 'top_p': 0.95,
