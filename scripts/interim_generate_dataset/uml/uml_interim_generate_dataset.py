@@ -31,71 +31,274 @@ DATASET_PATH = r"dataset/uml"
 GPT_URL = "https://sass-node1.chatshare.biz/"
 
 # ✨ 修改：单个CSV文件
-CSV_FILE = "uml_dataset_qwen3_local.csv"
+CSV_FILE = "uml_dataset_qwen3_v2.csv"
 
 # ✨ 修改：优化批次参数
 BATCH_SIZE = 1  # 每批1条，质量优先
 REFRESH_INTERVAL = 1  # 每1条开启新对话（每批都刷新）
 CHECK_INTERVAL = 100
-TEST_MODE_LIMIT = 15  # 测试模式
+TEST_MODE_LIMIT = 10  # 测试模式：每个领域随机1条，总共10条
 
 # ✨ 新增：响应等待时间配置
 WAIT_NEW_RESPONSE_TIMEOUT = 60  # 等待新回复最多60秒（应对长响应）
 CONTENT_STABLE_CHECKS = 3  # 内容稳定性检查次数
 
-# ✨ 新增：优质样本作为Few-shot示例
-QUALITY_EXAMPLE = """{
-  "actors": [
-    {"name": "Registrar", "position": "top_left"},
-    {"name": "Student", "position": "top_right"},
-    {"name": "International Student", "position": "bottom_right"}
-  ],
+# ==================== 10个领域的优质示例库 ====================
+DOMAIN_EXAMPLES = {
+    "ecommerce": {
+        "json": """{
+  "actors": [{"name": "Customer"}, {"name": "Payment Gateway"}, {"name": "Inventory System"}],
   "use_cases": [
-    {"name": "Enroll in University", "description": "Student enrolls in the university system"},
-    {"name": "Enroll in Seminar", "description": "Student must enroll in required seminar"},
-    {"name": "Perform Security Check", "description": "Security verification for international students"},
-    {"name": "Pay Tuition", "description": "Student pays tuition fees"}
+    {"name": "Place Order", "description": "Customer places an order"},
+    {"name": "Verify Stock", "description": "Check product availability"},
+    {"name": "Process Payment", "description": "Handle payment transaction"},
+    {"name": "Send Confirmation", "description": "Email order confirmation"}
   ],
   "relationships": [
-    {"type": "association", "from": "Registrar", "to": "Enroll in University"},
-    {"type": "association", "from": "Student", "to": "Enroll in University"},
-    {"type": "include", "from": "Enroll in University", "to": "Enroll in Seminar"},
-    {"type": "extend", "from": "Enroll in University", "to": "Perform Security Check"},
-    {"type": "extend", "from": "Enroll in University", "to": "Pay Tuition"}
+    {"type": "association", "from": "Customer", "to": "Place Order"},
+    {"type": "include", "from": "Place Order", "to": "Verify Stock"},
+    {"type": "include", "from": "Place Order", "to": "Process Payment"},
+    {"type": "extend", "from": "Place Order", "to": "Send Confirmation"}
   ],
-  "overall_description": "University enrollment system where students register with assistance from registrar. All students must complete seminar enrollment. International students require additional security checks. Payment is optional at enrollment time."
+  "overall_description": "E-commerce order placement system with mandatory stock verification and payment processing, plus optional email confirmation."
+}""",
+        "instruction": """Definition: In this task, implement the "Place Order" workflow where Customer interacts with the system, ensuring mandatory stock verification and payment processing steps are completed.
+Emphasis & Caution: You MUST execute "Verify Stock" and "Process Payment" as required prerequisites (include relationships) before finalizing the order. "Send Confirmation" is a conditional extension that triggers upon successful order completion.
+Things to Avoid: Do not use actor position metadata to determine business logic or workflow sequence. Do not implement UI layout based on position values."""
+    },
+
+    "authentication": {
+        "json": """{
+  "actors": [{"name": "User"}, {"name": "OAuth Provider"}, {"name": "Email Service"}],
+  "use_cases": [
+    {"name": "Login", "description": "User authentication"},
+    {"name": "Validate Credentials", "description": "Verify username and password"},
+    {"name": "Generate Token", "description": "Create session token"},
+    {"name": "Send Verification Email", "description": "Email verification for new devices"}
+  ],
+  "relationships": [
+    {"type": "association", "from": "User", "to": "Login"},
+    {"type": "include", "from": "Login", "to": "Validate Credentials"},
+    {"type": "include", "from": "Login", "to": "Generate Token"},
+    {"type": "extend", "from": "Login", "to": "Send Verification Email"}
+  ],
+  "overall_description": "User authentication system with mandatory credential validation and token generation, plus optional email verification for new devices."
+}""",
+        "instruction": """Definition: In this task, implement the "Login" authentication workflow where User interacts with the system, ensuring mandatory credential validation and token generation.
+Emphasis & Caution: You MUST enforce "Validate Credentials" and "Generate Token" as required steps (include relationships) that execute automatically during login. "Send Verification Email" is a conditional extension triggered when login occurs from a new device.
+Things to Avoid: Do not use actor position values to determine business logic or workflow sequence. Do not implement UI layout based on position metadata."""
+    },
+
+    "content_management": {
+        "json": """{
+  "actors": [{"name": "Author"}, {"name": "Editor"}, {"name": "Publisher"}],
+  "use_cases": [
+    {"name": "Create Article", "description": "Author creates content"},
+    {"name": "Submit for Review", "description": "Submit to editorial queue"},
+    {"name": "Approve Content", "description": "Editor approves article"},
+    {"name": "Publish", "description": "Make content live"}
+  ],
+  "relationships": [
+    {"type": "association", "from": "Author", "to": "Create Article"},
+    {"type": "include", "from": "Create Article", "to": "Submit for Review"},
+    {"type": "association", "from": "Editor", "to": "Approve Content"},
+    {"type": "extend", "from": "Approve Content", "to": "Publish"}
+  ],
+  "overall_description": "Content management system where authors create articles with mandatory review submission, editors approve, and optional immediate publishing."
+}""",
+        "instruction": """Definition: In this task, implement the "Create Article" workflow where Author creates content with mandatory review submission, and the "Approve Content" process where Editor reviews articles with optional publishing.
+Emphasis & Caution: You MUST enforce "Submit for Review" as a required step (include relationship) that executes automatically after article creation. "Publish" is a conditional extension of approval that triggers when immediate publishing is selected.
+Things to Avoid: Do not use actor position values to determine business logic or workflow sequence. Do not implement UI layout based on position metadata."""
+    },
+
+    "social_interaction": {
+        "json": """{
+  "actors": [{"name": "User"}, {"name": "Follower"}, {"name": "Notification Service"}],
+  "use_cases": [
+    {"name": "Create Post", "description": "User creates a post"},
+    {"name": "Validate Content", "description": "Check for prohibited content"},
+    {"name": "Notify Followers", "description": "Send notifications to followers"},
+    {"name": "Generate Thumbnail", "description": "Create image preview"}
+  ],
+  "relationships": [
+    {"type": "association", "from": "User", "to": "Create Post"},
+    {"type": "include", "from": "Create Post", "to": "Validate Content"},
+    {"type": "extend", "from": "Create Post", "to": "Notify Followers"},
+    {"type": "extend", "from": "Create Post", "to": "Generate Thumbnail"}
+  ],
+  "overall_description": "Social media post creation system with mandatory content validation and optional follower notifications and thumbnail generation."
+}""",
+        "instruction": """Definition: In this task, implement the "Create Post" workflow where User creates social media content with mandatory content validation.
+Emphasis & Caution: You MUST enforce "Validate Content" as a required step (include relationship) that executes before post publication. "Notify Followers" and "Generate Thumbnail" are conditional extensions that trigger based on user preferences or content type.
+Things to Avoid: Do not use actor position values to determine business logic or workflow sequence. Do not implement UI layout based on position metadata."""
+    },
+
+    "customer_service": {
+        "json": """{
+  "actors": [{"name": "Customer"}, {"name": "Support Agent"}, {"name": "Ticketing System"}],
+  "use_cases": [
+    {"name": "Create Ticket", "description": "Customer creates support ticket"},
+    {"name": "Assign Category", "description": "Categorize the issue"},
+    {"name": "Set Priority", "description": "Determine urgency level"},
+    {"name": "Escalate Issue", "description": "Route to senior support"}
+  ],
+  "relationships": [
+    {"type": "association", "from": "Customer", "to": "Create Ticket"},
+    {"type": "include", "from": "Create Ticket", "to": "Assign Category"},
+    {"type": "include", "from": "Create Ticket", "to": "Set Priority"},
+    {"type": "extend", "from": "Create Ticket", "to": "Escalate Issue"}
+  ],
+  "overall_description": "Customer support ticket system with mandatory categorization and priority setting, plus optional escalation for complex issues."
+}""",
+        "instruction": """Definition: In this task, implement the "Create Ticket" workflow where Customer submits support requests with mandatory category assignment and priority setting.
+Emphasis & Caution: You MUST enforce "Assign Category" and "Set Priority" as required steps (include relationships) that execute during ticket creation. "Escalate Issue" is a conditional extension that triggers when the issue meets escalation criteria.
+Things to Avoid: Do not use actor position values to determine business logic or workflow sequence. Do not implement UI layout based on position metadata."""
+    },
+
+    "data_analysis": {
+        "json": """{
+  "actors": [{"name": "Analyst"}, {"name": "Data Warehouse"}, {"name": "Reporting Engine"}],
+  "use_cases": [
+    {"name": "Run Analysis", "description": "Execute data analysis"},
+    {"name": "Fetch Data", "description": "Retrieve data from warehouse"},
+    {"name": "Generate Report", "description": "Create analysis report"},
+    {"name": "Export to CSV", "description": "Export results to CSV"}
+  ],
+  "relationships": [
+    {"type": "association", "from": "Analyst", "to": "Run Analysis"},
+    {"type": "include", "from": "Run Analysis", "to": "Fetch Data"},
+    {"type": "include", "from": "Run Analysis", "to": "Generate Report"},
+    {"type": "extend", "from": "Run Analysis", "to": "Export to CSV"}
+  ],
+  "overall_description": "Data analysis system with mandatory data fetching and report generation, plus optional CSV export functionality."
+}""",
+        "instruction": """Definition: In this task, implement the "Run Analysis" workflow where Analyst executes data analysis with mandatory data fetching and report generation.
+Emphasis & Caution: You MUST enforce "Fetch Data" and "Generate Report" as required steps (include relationships) that execute during analysis. "Export to CSV" is a conditional extension that triggers when the analyst requests data export.
+Things to Avoid: Do not use actor position values to determine business logic or workflow sequence. Do not implement UI layout based on position metadata."""
+    },
+
+    "permission_management": {
+        "json": """{
+  "actors": [{"name": "Admin"}, {"name": "User"}, {"name": "Audit System"}],
+  "use_cases": [
+    {"name": "Assign Role", "description": "Assign role to user"},
+    {"name": "Validate Permissions", "description": "Check role validity"},
+    {"name": "Update Access Rights", "description": "Modify user permissions"},
+    {"name": "Log Changes", "description": "Record permission changes"}
+  ],
+  "relationships": [
+    {"type": "association", "from": "Admin", "to": "Assign Role"},
+    {"type": "include", "from": "Assign Role", "to": "Validate Permissions"},
+    {"type": "include", "from": "Assign Role", "to": "Update Access Rights"},
+    {"type": "extend", "from": "Assign Role", "to": "Log Changes"}
+  ],
+  "overall_description": "Permission management system with mandatory permission validation and access rights updates, plus optional audit logging."
+}""",
+        "instruction": """Definition: In this task, implement the "Assign Role" workflow where Admin assigns roles to users with mandatory permission validation and access rights updates.
+Emphasis & Caution: You MUST enforce "Validate Permissions" and "Update Access Rights" as required steps (include relationships) that execute during role assignment. "Log Changes" is a conditional extension that triggers when audit logging is enabled.
+Things to Avoid: Do not use actor position values to determine business logic or workflow sequence. Do not implement UI layout based on position metadata."""
+    },
+
+    "notification_system": {
+        "json": """{
+  "actors": [{"name": "System"}, {"name": "User"}, {"name": "Email Service"}, {"name": "SMS Gateway"}],
+  "use_cases": [
+    {"name": "Send Notification", "description": "Trigger notification"},
+    {"name": "Check Preferences", "description": "Verify user notification settings"},
+    {"name": "Send Email", "description": "Send email notification"},
+    {"name": "Send SMS", "description": "Send SMS notification"}
+  ],
+  "relationships": [
+    {"type": "association", "from": "System", "to": "Send Notification"},
+    {"type": "include", "from": "Send Notification", "to": "Check Preferences"},
+    {"type": "extend", "from": "Send Notification", "to": "Send Email"},
+    {"type": "extend", "from": "Send Notification", "to": "Send SMS"}
+  ],
+  "overall_description": "Notification system with mandatory preference checking and optional email or SMS delivery based on user settings."
+}""",
+        "instruction": """Definition: In this task, implement the "Send Notification" workflow where System triggers notifications with mandatory preference checking.
+Emphasis & Caution: You MUST enforce "Check Preferences" as a required step (include relationship) that executes before sending notifications. "Send Email" and "Send SMS" are conditional extensions that trigger based on user notification preferences.
+Things to Avoid: Do not use actor position values to determine business logic or workflow sequence. Do not implement UI layout based on position metadata."""
+    },
+
+    "file_management": {
+        "json": """{
+  "actors": [{"name": "User"}, {"name": "Storage System"}, {"name": "Virus Scanner"}],
+  "use_cases": [
+    {"name": "Upload File", "description": "User uploads a file"},
+    {"name": "Scan for Viruses", "description": "Check file for malware"},
+    {"name": "Store File", "description": "Save file to storage"},
+    {"name": "Generate Preview", "description": "Create file thumbnail"}
+  ],
+  "relationships": [
+    {"type": "association", "from": "User", "to": "Upload File"},
+    {"type": "include", "from": "Upload File", "to": "Scan for Viruses"},
+    {"type": "include", "from": "Upload File", "to": "Store File"},
+    {"type": "extend", "from": "Upload File", "to": "Generate Preview"}
+  ],
+  "overall_description": "File upload system with mandatory virus scanning and storage, plus optional preview generation for supported file types."
+}""",
+        "instruction": """Definition: In this task, implement the "Upload File" workflow where User uploads files with mandatory virus scanning and storage operations.
+Emphasis & Caution: You MUST enforce "Scan for Viruses" and "Store File" as required steps (include relationships) that execute during file upload. "Generate Preview" is a conditional extension that triggers for supported file types (images, documents).
+Things to Avoid: Do not use actor position values to determine business logic or workflow sequence. Do not implement UI layout based on position metadata."""
+    },
+
+    "booking_system": {
+        "json": """{
+  "actors": [{"name": "Customer"}, {"name": "Calendar System"}, {"name": "Payment Gateway"}],
+  "use_cases": [
+    {"name": "Book Appointment", "description": "Customer books a time slot"},
+    {"name": "Check Availability", "description": "Verify slot availability"},
+    {"name": "Process Payment", "description": "Handle booking payment"},
+    {"name": "Send Reminder", "description": "Send appointment reminder"}
+  ],
+  "relationships": [
+    {"type": "association", "from": "Customer", "to": "Book Appointment"},
+    {"type": "include", "from": "Book Appointment", "to": "Check Availability"},
+    {"type": "include", "from": "Book Appointment", "to": "Process Payment"},
+    {"type": "extend", "from": "Book Appointment", "to": "Send Reminder"}
+  ],
+  "overall_description": "Appointment booking system with mandatory availability checking and payment processing, plus optional reminder notifications."
+}""",
+        "instruction": """Definition: In this task, implement the "Book Appointment" workflow where Customer books time slots with mandatory availability checking and payment processing.
+Emphasis & Caution: You MUST enforce "Check Availability" and "Process Payment" as required steps (include relationships) that execute during booking. "Send Reminder" is a conditional extension that triggers when reminder notifications are enabled.
+Things to Avoid: Do not use actor position values to determine business logic or workflow sequence. Do not implement UI layout based on position metadata."""
+    }
 }
 
-Output Instruction:
-Definition: In this task, implement the "Enroll in University" core workflow that handles enrollment requests from both Registrar and Student actors, ensuring mandatory seminar enrollment and supporting optional security checks and payment processing.
-Emphasis & Caution: You MUST enforce "Enroll in Seminar" as a required step that executes automatically during enrollment (include relationship). Additionally, implement "Perform Security Check" and "Pay Tuition" as conditional extensions that trigger only when specific criteria are met (e.g., international student status, payment selection).
-Things to Avoid: Do not use actor position values (top_left, bottom_right, etc.) to determine business logic or workflow sequence. Do not implement UI layout based on position metadata.
-"""
+# ✨ System Prompt (统一使用英文版本，参考uml_template.py)
+SYSTEM_PROMPT = """You are a software architecture and crowdsourcing task design expert. Based on the input UML Use Case Diagram structured data (JSON format), write an English task instruction for crowdsourcing workers.
 
-# ✨ 修改：新的提示词模板（针对UML业务逻辑实现）
-SYSTEM_PROMPT = """你是一个软件架构与众包任务设计专家。请根据以下输入的UML用例图结构化数据（JSON格式），编写一个适合众包工人使用的英文业务逻辑实现指令。
+Core Principles:
+1. Data-Driven: Actor names and Use Case names in the instruction must strictly reference the original names from JSON source data. Do not omit, abbreviate, or rewrite.
+2. Logic Priority, Visuals Secondary: Completely ignore visual layout information like position (e.g., top_left) in input data. Focus on parsing business logic in relationships.
+3. Relationship Semantics Translation:
+   - include -> Translate to "Mandatory step" or "Required prerequisite"
+   - extend -> Translate to "Conditional flow" or "Optional"
+   - association -> Translate to "Interaction" or "Access"
+4. Structured Format: Strictly follow the three-part format defined below.
 
-核心原则：
-1. 数据驱动：指令中的角色名（Actors）和用例名（Use Cases）必须严格引用JSON源数据中的英文原名，不得遗漏、缩写或改写。
-2. 逻辑优先，视觉为辅：输入数据中包含position（如top_left）等视觉布局信息，请在生成业务逻辑指令时完全忽略它们。重点解析relationships中的业务逻辑关系。
-3. 关系语义转译：
-   - include → 必须转化为"Mandatory step"（必须步骤）或"Required prerequisite"（必需前置条件）
-   - extend → 必须转化为"Conditional extension"（条件扩展）或"Optional flow"（可选流程）
-   - association → 必须转化为"Actor interaction"（角色交互）或"Triggers"（触发关系）
-4. 众包任务导向：明确这是给开发人员的实现指令，重点说明要实现什么功能、如何处理不同的业务流程分支。
-5. 结构规范：严格按照下方定义的格式输出。
-   - Definition: 使用简明扼要的祈使句描述核心系统目标和主要参与角色。必须以"In this task,"开头。
-   - Emphasis & Caution: 重点指出必须包含的流程（include关系）和条件扩展流程（extend关系），说明触发条件。如无特别强调，填"-"。
-   - Things to Avoid: 列出禁止的操作（如关注position、实现UI样式等）。如无特殊禁止事项，填"-"。
+Output Format Requirements:
+- Definition: Use a clear imperative sentence to describe the core system objective. Must start with "In this task,".
+- Emphasis & Caution: Highlight mandatory flows (include) and conditional extension flows (extend). Use "-" if none.
+- Things to Avoid: List prohibited operations (e.g., focusing on node positions, implementing UI styles). Use "-" if nothing specific.
 
-参考示例：
+CRITICAL RULES:
+- Each section must be on a separate line
+- Each line must start with the section label (Definition: / Emphasis & Caution: / Things to Avoid:)
+- Definition must start with "In this task," and explicitly list actors and use cases from JSON data
+- Translate relationship types (include/extend/association) to business logic terms
+- Keep all sections concise
+- Output ONLY these three lines, nothing else
+
+Reference Example:
 {example}
 
-请为以下{count}条UML用例图数据分别生成指令，严格按照以下格式输出：
+Please generate instructions for the following {count} UML use case diagram(s). Strictly follow the format below and do not add extra explanations:
 
 {uml_data}
 
-请严格按照以下格式输出每条指令，不要添加额外说明：
+Output format (3 lines only):
 
 Definition: ...
 Emphasis & Caution: ...
@@ -164,6 +367,57 @@ class GPTAutomator:
         except Exception as e:
             print(f"\n✗ 浏览器初始化失败: {e}")
             raise
+
+    def extract_domain_from_header(self, header: str) -> str:
+        """
+        从Header列提取领域名称
+
+        Args:
+            header: 图片名（去掉文件扩展名）
+
+        Returns:
+            str: 领域名称，如果无法识别则返回"unknown"
+
+        Examples:
+            "ecommerce_simple_001" -> "ecommerce"
+            "authentication_medium_045" -> "authentication"
+            "social_interaction_complex_120" -> "social_interaction"
+        """
+        header = header.lower()
+
+        # 已知的10个领域列表
+        known_domains = [
+            "ecommerce", "authentication", "content_management",
+            "social_interaction", "customer_service", "data_analysis",
+            "permission_management", "notification_system",
+            "file_management", "booking_system"
+        ]
+
+        # 优先匹配多单词领域（避免误匹配）
+        for domain in sorted(known_domains, key=len, reverse=True):
+            if domain in header:
+                return domain
+
+        return "unknown"
+
+    def get_example_for_domain(self, domain: str) -> str:
+        """
+        根据领域获取对应的Few-shot示例
+
+        Args:
+            domain: 领域名称
+
+        Returns:
+            str: 格式化的示例文本
+        """
+        if domain not in DOMAIN_EXAMPLES:
+            # 如果领域未知，使用authentication作为默认示例
+            domain = "authentication"
+
+        example_data = DOMAIN_EXAMPLES[domain]
+        example_text = f"{example_data['json']}\n\nOutput Instruction:\n{example_data['instruction']}"
+
+        return example_text
 
     def clean_json_data(self, json_str):
         """
@@ -696,13 +950,22 @@ class GPTAutomator:
 
     def process_batch(self, uml_data_batch, start_idx):
         """
-        ✨ 修改：处理一批UML数据(1条)
+        ✨ 优化：处理一批UML数据(1条)
+        【核心改进】根据Header识别领域，动态选择Few-shot示例
         检测生成错误并自动重试
         【新增】返回是否发生重试的标志
         """
         print(f"\n{'=' * 60}")
         print(f"处理第 {start_idx + 1}-{start_idx + len(uml_data_batch)} 条UML数据")
         print(f"{'=' * 60}")
+
+        # ✨ 核心改进：识别领域并选择示例
+        first_header = uml_data_batch[0][0] if uml_data_batch else ""
+        domain = self.extract_domain_from_header(first_header)
+        example_text = self.get_example_for_domain(domain)
+
+        print(f"  🏷️ 识别领域: {domain}")
+        print(f"  📝 使用示例: {domain} 领域\n")
 
         # ✨ 构建UML数据文本（清洗后）
         data_text = ""
@@ -712,7 +975,7 @@ class GPTAutomator:
             data_text += f"{i}. [UML Diagram: {header}]\n{cleaned_json}\n\n"
 
         prompt = SYSTEM_PROMPT.format(
-            example=QUALITY_EXAMPLE,
+            example=example_text,  # ✨ 使用领域匹配的示例
             count=len(uml_data_batch),
             uml_data=data_text
         )
@@ -720,19 +983,18 @@ class GPTAutomator:
         # ✨ 最大重试次数
         max_retries = 3
         response = None
-        retry_happened = False  # 【新增】标记是否发生重试
+        retry_happened = False
 
         for retry_count in range(max_retries):
-            # 如果是重试,打印重试信息
             if retry_count > 0:
-                retry_happened = True  # 【新增】标记重试
+                retry_happened = True
                 print(f"\n🔄 检测到生成错误,正在重试 ({retry_count}/{max_retries - 1})...")
-                time.sleep(3)  # 等待3秒后重试
+                time.sleep(3)
 
             # 发送提示词
             if not self.send_prompt(prompt):
                 if retry_count < max_retries - 1:
-                    continue  # 重试
+                    continue
                 else:
                     self.error_log.append({
                         'range': f"{start_idx + 1}-{start_idx + len(uml_data_batch)}",
@@ -743,7 +1005,7 @@ class GPTAutomator:
             # 等待响应完成
             if not self.wait_for_response_complete():
                 if retry_count < max_retries - 1:
-                    continue  # 重试
+                    continue
                 else:
                     self.error_log.append({
                         'range': f"{start_idx + 1}-{start_idx + len(uml_data_batch)}",
@@ -773,7 +1035,7 @@ class GPTAutomator:
                 print(f"  ⚠️ 检测到生成错误: {response[:100]}")
                 if retry_count < max_retries - 1:
                     print(f"  ↻ 将在3秒后重新发送...")
-                    continue  # 继续下一次重试
+                    continue
                 else:
                     print(f"  ✗ 已达到最大重试次数({max_retries}),放弃本批次")
                     self.error_log.append({
@@ -782,7 +1044,6 @@ class GPTAutomator:
                     })
                     return [None] * len(uml_data_batch), retry_happened
             else:
-                # ✅ 响应正常,跳出重试循环
                 print(f"  ✓ 响应正常,准备解析")
                 break
 
@@ -795,7 +1056,7 @@ class GPTAutomator:
                 instructions.append(None)
             instructions = instructions[:len(uml_data_batch)]
 
-        return instructions, retry_happened  # 【修改】返回重试标志
+        return instructions, retry_happened
 
     def start_new_chat(self):
         """
@@ -884,10 +1145,39 @@ class GPTAutomator:
         total_rows = len(df)
 
         if self.test_mode:
-            limit = min(TEST_MODE_LIMIT, total_rows)
-            print(f"*** 测试模式: 仅处理前 {limit} 条 ***\n")
-            df = df.head(limit)
-            total_rows = limit
+            # ✨✨ 新策略：每个领域随机选择1条，总共10条
+            print(f"*** 测试模式: 每个领域随机选择1条数据 ***\n")
+
+            # 为每条数据标记领域
+            df['domain'] = df['Header'].apply(lambda h: self.extract_domain_from_header(h))
+
+            # 统计每个领域的数量
+            domain_counts = df['domain'].value_counts()
+            print("领域分布：")
+            for domain, count in domain_counts.items():
+                print(f"  {domain}: {count} 条")
+
+            # 从每个领域随机选择1条
+            selected_indices = []
+            for domain in domain_counts.index:
+                domain_df = df[df['domain'] == domain]
+                if len(domain_df) > 0:
+                    sampled = domain_df.sample(n=1, random_state=None)
+                    selected_indices.extend(sampled.index.tolist())
+
+            # 按索引排序（保持原始顺序）
+            selected_indices.sort()
+
+            print(f"\n已选择 {len(selected_indices)} 条数据进行测试：")
+            for idx in selected_indices:
+                header = df.loc[idx, 'Header']
+                domain = df.loc[idx, 'domain']
+                print(f"  - {header} (领域: {domain})")
+            print()
+
+            # 创建测试子集
+            df = df.loc[selected_indices].reset_index(drop=True)
+            total_rows = len(df)
 
         print(f"总计需处理: {total_rows} 条UML数据\n")
         print(f"刷新策略: 每{REFRESH_INTERVAL}条数据（{REFRESH_INTERVAL//BATCH_SIZE}批）或发生重试后刷新对话\n")
@@ -945,7 +1235,7 @@ class GPTAutomator:
         print(f"{'批量UML业务逻辑指令生成系统':^60}")
         print(f"{'=' * 60}")
         print(f"开始时间: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"模式: {'测试模式 (15条)' if self.test_mode else '完整模式'}")
+        print(f"模式: {'测试模式 (每领域1条,共10条)' if self.test_mode else '完整模式'}")
         print(f"批次大小: {BATCH_SIZE} 条/批")
         print(f"刷新间隔: {REFRESH_INTERVAL} 条 ({REFRESH_INTERVAL//BATCH_SIZE} 批)")
         print(f"响应超时: {WAIT_NEW_RESPONSE_TIMEOUT} 秒")
@@ -996,7 +1286,7 @@ class GPTAutomator:
 if __name__ == "__main__":
     print("\n" + "="*60)
     print("请选择运行模式:")
-    print(f"  1. 测试模式 (仅处理前{TEST_MODE_LIMIT}条)")
+    print(f"  1. 测试模式 (每个领域随机1条,总共10条)")
     print("  2. 完整模式 (处理所有数据)")
     print("="*60)
 

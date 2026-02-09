@@ -353,13 +353,13 @@ def main():
     # 请根据实际情况修改以下路径
 
     # 图片文件夹路径（与uml_web_recognizer.py中的IMAGE_FOLDER相同）
-    IMAGE_FOLDER = r"D:\MyPyProject\crowdsourcing_instruction_generator\data\raw\uml\plant_uml"
+    IMAGE_FOLDER = r"D:\MyPyProject\crowdsourcing_instruction_generator\data\raw\uml\plant_uml_all"
 
     # JSON识别结果文件（由 uml_web_recognizer.py 生成）
-    JSON_FILE = r"D:\MyPyProject\crowdsourcing_instruction_generator\outputs\recognition_results\uml\uml_recognition_qwen3_20260209_045521_fixed.json"
+    JSON_FILE = r"D:\MyPyProject\crowdsourcing_instruction_generator\outputs\recognition_results\uml\uml_recognition_qwen3_20260210_052354_fixed.json"
 
     # 输出CSV文件路径
-    OUTPUT_CSV = r"D:\MyPyProject\crowdsourcing_instruction_generator\outputs\recognition_results\uml\uml_interim_plant.csv"
+    OUTPUT_CSV = r"D:\MyPyProject\crowdsourcing_instruction_generator\outputs\recognition_results\uml\uml_interim_plant_v2.csv"
 
     # 错误日志文件路径（可选）
     ERROR_LOG = "uml_dataset_errors.json"
