@@ -31,7 +31,7 @@ DATASET_PATH = r"dataset/uml"
 GPT_URL = "https://sass-node1.chatshare.biz/"
 
 # ✨ 修改：单个CSV文件
-CSV_FILE = "uml_dataset_qwen3_v2.csv"
+CSV_FILE = "uml_dataset_qwen3_v3.csv"
 
 # ✨ 修改：优化批次参数
 BATCH_SIZE = 1  # 每批1条，质量优先
