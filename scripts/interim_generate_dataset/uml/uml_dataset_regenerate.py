@@ -27,8 +27,7 @@ from datetime import datetime
 import chardet
 import json
 
-# 导入UML模板
-from uml_template import UMLInstructionTemplate
+
 
 # ==================== 配置参数 ====================
 CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
@@ -264,6 +263,41 @@ Emphasis & Caution: You MUST enforce "Verify Identity" and "Check Permissions" a
 Things to Avoid: Do not use actor position values to determine business logic or workflow sequence. Do not implement UI layout based on position metadata."""
     }
 }
+
+
+# ==================== System Prompt (统一使用英文版本) ====================
+SYSTEM_PROMPT = """You are a software architecture and crowdsourcing task design expert. Based on the input UML Use Case Diagram structured data (JSON format), write an English task instruction for crowdsourcing workers.
+
+Core Principles:
+1. Data-Driven: Actor names and Use Case names in the instruction must strictly reference the original names from JSON source data. Do not omit, abbreviate, or rewrite.
+2. Logic Priority, Visuals Secondary: Completely ignore visual layout information like position (e.g., top_left) in input data. Focus on parsing business logic in relationships.
+3. Relationship Semantics Translation:
+   - include -> Translate to "Mandatory step" or "Required prerequisite"
+   - extend -> Translate to "Conditional flow" or "Optional"
+   - association -> Translate to "Interaction" or "Access"
+4. Structured Format: Strictly follow the three-part format defined below.
+
+Output Format Requirements:
+- Definition: Use a clear imperative sentence to describe the core system objective. Must start with "In this task,".
+- Emphasis & Caution: Highlight mandatory flows (include) and conditional extension flows (extend). Use "-" if none.
+- Things to Avoid: List prohibited operations (e.g., focusing on node positions, implementing UI styles). Use "-" if nothing specific.
+
+CRITICAL RULES:
+- Each section must be on a separate line
+- Each line must start with the section label (Definition: / Emphasis & Caution: / Things to Avoid:)
+- Definition must start with "In this task," and explicitly list actors and use cases from JSON data
+- Translate relationship types (include/extend/association) to business logic terms
+- Keep all sections concise
+- Output ONLY these three lines, nothing else
+
+Reference Example:
+{example}
+
+Please generate instructions for the following {count} UML use case diagram(s). Strictly follow the format below and do not add extra explanations:
+
+{uml_data}
+
+"""
 
 
 # ==================== 修复工具类 ====================
@@ -574,8 +608,23 @@ class UMLBatchRepairer:
     def parse_uml_instruction(self, response_text):
         """
         解析UML指令 - 三段式格式
+        适配【图像N】格式和普通格式
         返回: instruction字符串 或 None
         """
+        # 尝试匹配【图像1】格式
+        pattern = r'【图像\d+】\s*\n(.*?)(?=【图像\d+】|$)'
+        matches = re.findall(pattern, response_text, re.DOTALL)
+
+        if len(matches) == 1:
+            return matches[0].strip()
+
+        # 备用解析方法：按 Definition: 分割
+        parts = response_text.split('Definition:')
+        for part in parts[1:]:
+            if 'Emphasis & Caution:' in part and 'Things to Avoid:' in part:
+                return 'Definition:' + part.strip()
+
+        # 最后尝试：直接提取三段式
         lines = [line.strip() for line in response_text.strip().split('\n') if line.strip()]
 
         definition = None
@@ -595,27 +644,78 @@ class UMLBatchRepairer:
         else:
             return None
 
-    def extract_domain_from_header(self, header):
-        """从Header提取领域名称"""
-        domain_keywords = {
-            'ecommerce': 'ecommerce',
-            'authentication': 'auth',
-            'content': 'content',
-            'social': 'social',
-            'customer': 'customer',
-            'data': 'data',
-            'booking': 'booking',
-            'file': 'file',
-            'notification': 'notification',
-            'access': 'access'
-        }
+    def extract_domain_from_header(self, header: str) -> str:
+        """
+        从Header列提取领域名称
 
-        header_lower = header.lower()
-        for domain, keyword in domain_keywords.items():
-            if keyword in header_lower:
+        Args:
+            header: 图片名（去掉文件扩展名）
+
+        Returns:
+            str: 领域名称，如果无法识别则返回"unknown"
+
+        Examples:
+            "ecommerce_simple_001" -> "ecommerce"
+            "authentication_medium_045" -> "authentication"
+            "social_interaction_complex_120" -> "social_interaction"
+        """
+        header = header.lower()
+
+        # 已知的10个领域列表
+        known_domains = [
+            "ecommerce", "authentication", "content_management",
+            "social_interaction", "customer_service", "data_analysis",
+            "permission_management", "notification_system",
+            "file_management", "booking_system"
+        ]
+
+        # 优先匹配多单词领域（避免误匹配）
+        for domain in sorted(known_domains, key=len, reverse=True):
+            if domain in header:
                 return domain
 
-        return 'general'
+        return "unknown"
+
+    def get_example_for_domain(self, domain: str) -> str:
+        """
+        根据领域获取对应的Few-shot示例
+
+        Args:
+            domain: 领域名称
+
+        Returns:
+            str: 格式化的示例文本
+        """
+        if domain not in DOMAIN_EXAMPLES:
+            # 如果领域未知，使用authentication作为默认示例
+            domain = "authentication"
+
+        example_data = DOMAIN_EXAMPLES[domain]
+        example_text = f"{example_data['json']}\n\nOutput Instruction:\n{example_data['instruction']}"
+
+        return example_text
+
+    def clean_json_data(self, json_str):
+        """
+        UML专用：移除position等无关视觉字段
+        保留所有业务逻辑相关字段
+        """
+        try:
+            data = json.loads(json_str)
+
+            # 移除actors中的position字段
+            if 'actors' in data and isinstance(data['actors'], list):
+                for actor in data['actors']:
+                    if 'position' in actor:
+                        del actor['position']
+
+            # 保留所有其他字段：use_cases, relationships, system_boundary, overall_description
+            # 这些都是业务逻辑相关的有效信息
+
+            return json.dumps(data, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"  ⚠ JSON清洗失败: {e}")
+            return json_str  # 返回原始数据
 
     def validate_instruction_format(self, instruction):
         """
@@ -764,48 +864,26 @@ class UMLBatchRepairer:
         print(f"批次 #{batch_num} | 数据范围: {start_idx + 1}-{start_idx + len(batch_data)}")
         print(f"{'='*60}")
 
-        # 提取领域
-        header = batch_data[0][0]
-        domain = self.extract_domain_from_header(header)
+        # 提取领域并选择示例
+        first_header = batch_data[0][0] if batch_data else ""
+        domain = self.extract_domain_from_header(first_header)
+        example_text = self.get_example_for_domain(domain)
 
-        # 构建Few-shot示例
-        if domain in DOMAIN_EXAMPLES:
-            example = DOMAIN_EXAMPLES[domain]
-            few_shot_example = f"""Example (for reference):
+        print(f"  🏷️ 识别领域: {domain}")
+        print(f"  📝 使用示例: {domain} 领域\n")
 
-Input JSON:
-{example['json']}
+        # 构建UML数据文本（清洗后）
+        data_text = ""
+        for i, (header, description) in enumerate(batch_data, 1):
+            # 清洗JSON数据（移除position等无关字段）
+            cleaned_json = self.clean_json_data(description)
+            data_text += f"{i}. [UML Diagram: {header}]\n{cleaned_json}\n\n"
 
-Output Instruction:
-{example['instruction']}
-
----
-
-Now, please generate instruction for the following UML data:
-"""
-        else:
-            few_shot_example = "Please generate instruction for the following UML data:\n"
-
-        # 获取当前数据的Description(JSON)
-        description = batch_data[0][1]
-
-        # 使用UMLInstructionTemplate.build_prompt()
-        try:
-            # 解析description为dict
-            if isinstance(description, str):
-                uml_data = json.loads(description)
-            else:
-                uml_data = description
-
-            # 构建prompt
-            base_prompt = UMLInstructionTemplate.build_prompt(uml_data)
-
-            # 添加Few-shot示例
-            full_prompt = f"{few_shot_example}\n{base_prompt}"
-
-        except Exception as e:
-            print(f"  ✗ 构建Prompt失败: {e}")
-            return [None] * len(batch_data)
+        prompt = SYSTEM_PROMPT.format(
+            example=example_text,
+            count=len(batch_data),
+            uml_data=data_text
+        )
 
         # 重试循环
         for retry_count in range(max_retries):
@@ -813,7 +891,7 @@ Now, please generate instruction for the following UML data:
                 print(f"\n🔄 检测到生成错误,正在重试 ({retry_count}/{max_retries - 1})...")
                 time.sleep(3)
 
-            if not self.send_prompt(full_prompt):
+            if not self.send_prompt(prompt):
                 if retry_count < max_retries - 1:
                     continue
                 else:
