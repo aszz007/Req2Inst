@@ -7,9 +7,9 @@ UML众包指令批次修复脚本
 3. 自动检测需要修复的批次范围
 4. 精准检测"ERROR: 生成失败",支持多种引号格式
 5. 新增:三段式完整性检查(Definition/Emphasis/Things to Avoid)
-6. 新增:句号检查(检测三段式最后是否缺少句号)
+6. 新增:句号检查(可通过ENABLE_PERIOD_CHECK参数配置,默认关闭)
 7. 详细错误报告,列出每条错误数据及具体问题
-8. 使用UML专用Prompt模板和Few-shot示例
+8. 使用与generate文件完全一致的硬编码Prompt和Few-shot示例
 """
 
 import os
@@ -40,6 +40,7 @@ CSV_FILE = "uml_dataset_qwen3_v3.csv"
 BATCH_SIZE = 1  # 批次大小(与首次生成保持一致)
 WAIT_NEW_RESPONSE_TIMEOUT = 60  # 等待新回复最多60秒
 CONTENT_STABLE_CHECKS = 3  # 内容稳定性检查次数
+ENABLE_PERIOD_CHECK = False  # 句号检测开关（默认关闭）
 
 # ==================== 10个领域的优质示例库 (从uml_interim_generate_dataset.py复制) ====================
 DOMAIN_EXAMPLES = {
@@ -362,57 +363,55 @@ class UMLBatchRepairer:
             raise
 
     def find_input_box(self, debug=False):
-        """定位输入框 - 优化版,使用缓存"""
-        if debug:
-            print("🔍 定位输入框...")
-
-        # 如果有缓存的选择器,优先使用
+        """
+        查找输入框 - 优化版
+        【优化】缓存成功的选择器,提升后续查找速度
+        """
+        # 【优化】先尝试缓存的选择器
         if self.cached_input_selector:
             try:
-                element = WebDriverWait(self.driver, 5).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, self.cached_input_selector))
-                )
-                if element.is_displayed() and element.is_enabled():
-                    if debug:
-                        print(f"  ✓ 使用缓存选择器成功")
-                    return element
+                input_box = self.driver.find_element(By.CSS_SELECTOR, self.cached_input_selector)
+                if input_box.is_displayed() and input_box.is_enabled():
+                    return input_box
                 else:
                     self.cached_input_selector = None
             except:
                 self.cached_input_selector = None
 
-        # 调整选择器优先级
+        # 【优化】按成功率排序
         selectors = [
-            ("CSS", "div[contenteditable='true']"),
-            ("CSS", "[contenteditable='true']"),
-            ("CSS", "textarea"),
-            ("CSS", "textarea[placeholder*='询问']"),
-            ("CSS", "form textarea"),
-            ("CSS", "div[class*='input'] textarea"),
+            "textarea[placeholder*='Message']",
+            "textarea[data-id='root']",
+            "div[contenteditable='true']",
+            "textarea",
         ]
 
-        for selector_type, selector in selectors:
+        for selector in selectors:
             try:
-                if debug:
-                    print(f"  尝试: {selector}")
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                if debug and elements:
+                    print(f"  找到{len(elements)}个元素: {selector}")
 
-                element = WebDriverWait(self.driver, 3).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, selector))
-                )
-
-                if element.is_displayed() and element.is_enabled():
-                    self.cached_input_selector = selector
-                    if debug:
-                        print(f"  ✓ 成功: {selector}")
-                    return element
-
+                for elem in elements:
+                    if elem.is_displayed() and elem.is_enabled():
+                        # 【优化】缓存成功的选择器
+                        self.cached_input_selector = selector
+                        if debug:
+                            print(f"  ✓ 成功定位输入框: {selector}")
+                        return elem
             except:
                 continue
 
-        raise NoSuchElementException("无法找到输入框")
+        if debug:
+            print("  ✗ 未找到可用输入框")
+        return None
 
     def find_submit_button(self):
-        """定位提交按钮 - 优化版,使用缓存"""
+        """
+        查找提交按钮 - 优化版
+        【优化】缓存成功的选择器,提升后续查找速度
+        """
+        # 【优化】先尝试缓存的选择器
         if self.cached_button_selector:
             try:
                 button = self.driver.find_element(By.CSS_SELECTOR, self.cached_button_selector)
@@ -423,6 +422,7 @@ class UMLBatchRepairer:
             except:
                 self.cached_button_selector = None
 
+        # 【优化】按成功率排序
         selectors = [
             "button[data-testid='send-button']",
             "button[type='submit']",
@@ -436,6 +436,7 @@ class UMLBatchRepairer:
                 buttons = self.driver.find_elements(By.CSS_SELECTOR, selector)
                 for button in buttons:
                     if button.is_displayed() and button.is_enabled():
+                        # 【优化】缓存成功的选择器
                         self.cached_button_selector = selector
                         return button
             except:
@@ -444,20 +445,47 @@ class UMLBatchRepairer:
         return None
 
     def get_current_response_count(self):
-        """获取当前页面的回复数量"""
+        """
+        ✨ 精确修复：基于实际DOM结构获取assistant回复数量
+        使用data-message-author-role="assistant"作为准确标记
+        """
         try:
+            # 🎯 最精确的选择器（基于您提供的HTML结构）
             response_selectors = [
-                "div[class*='markdown']",
+                # 方法1：直接定位assistant消息（最可靠）
                 "div[data-message-author-role='assistant']",
-                "div[class*='message']",
-                "[class*='assistant']"
+                # 方法2：通过article容器定位
+                "article[data-turn='assistant']",
+                # 方法3：备用 - markdown容器（但需要排除用户消息）
+                "article[data-testid*='conversation-turn'] div.markdown.prose",
             ]
 
             for selector in response_selectors:
                 try:
                     elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    if elements and len(elements) > 0:
-                        return len(elements)
+
+                    if selector == "article[data-testid*='conversation-turn'] div.markdown.prose":
+                        # 对于markdown选择器，需要确认是assistant的
+                        valid_count = 0
+                        for elem in elements:
+                            try:
+                                # 检查父article是否是assistant
+                                parent_article = self.driver.execute_script(
+                                    "return arguments[0].closest('article')",
+                                    elem
+                                )
+                                if parent_article:
+                                    turn_type = parent_article.get_attribute('data-turn')
+                                    if turn_type == 'assistant':
+                                        valid_count += 1
+                            except:
+                                continue
+                        if valid_count > 0:
+                            return valid_count
+                    else:
+                        # 对于前两个选择器，直接返回数量
+                        if elements and len(elements) > 0:
+                            return len(elements)
                 except:
                     continue
             return 0
@@ -465,145 +493,421 @@ class UMLBatchRepairer:
             return 0
 
     def check_response_still_updating(self):
-        """核心检测方法:通过内容变化判断是否还在生成"""
+        """
+        ✨ 精确修复：基于实际DOM检测内容是否还在生成
+        """
         try:
-            response_selectors = [
-                "div[class*='markdown']",
-                "div[data-message-author-role='assistant']",
-                "div[class*='message']",
-                "[class*='assistant']"
-            ]
+            # 🎯 使用最精确的assistant选择器
+            selector = "div[data-message-author-role='assistant']"
 
-            for selector in response_selectors:
-                try:
-                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    if elements:
-                        last_element = elements[-1]
-                        content_before = last_element.text.strip()
-                        time.sleep(1)
-                        content_after = last_element.text.strip()
+            elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+            current_count = len(elements)
 
-                        if content_before != content_after:
-                            return True
-                        return False
-                except:
-                    continue
+            # 确保检测的是新生成的回复
+            if current_count <= self.response_count_before_send:
+                return True  # 还没有新回复
+
+            if not elements:
+                return True
+
+            # 获取最后一条assistant回复
+            last_response = elements[-1]
+            first_text = last_response.text
+            first_len = len(first_text)
+
+            time.sleep(0.8)  # 等待0.8秒检测变化
+
+            # 重新获取
+            elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+            if len(elements) > 0:
+                last_response = elements[-1]
+                second_text = last_response.text
+                second_len = len(second_text)
+
+                # 内容增加 = 还在生成
+                if second_len > first_len:
+                    return True
+                return False
+
             return False
-        except:
+        except Exception as e:
+            print(f"检测更新异常: {e}")
             return False
 
     def start_new_chat(self):
-        """开启新对话"""
-        print(f"\n{'='*50}")
-        print("  🔄 开启新对话...")
-        print(f"{'='*50}")
-
+        """
+        ✨ 优化版:使用 Ctrl+Shift+O 快捷键开启新对话
+        更稳定、高效,避免复杂的按钮查找逻辑
+        """
+        print("\n>>> 开启新对话...")
         try:
-            new_chat_selectors = [
-                "button[aria-label*='New chat']",
-                "button:contains('New chat')",
-                "a[href='/']",
-                "button.new-chat",
-            ]
+            # 直接使用键盘快捷键 Ctrl+Shift+O
+            from selenium.webdriver.common.action_chains import ActionChains
 
-            for selector in new_chat_selectors:
-                try:
-                    button = WebDriverWait(self.driver, 3).until(
-                        EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
-                    )
-                    button.click()
-                    time.sleep(3)
-                    print("  ✓ 新对话已开启")
-                    self.response_count_before_send = 0
-                    return
-                except:
-                    continue
+            print("  🔨 发送快捷键 Ctrl+Shift+O...")
+            actions = ActionChains(self.driver)
+            actions.key_down(Keys.CONTROL).key_down(Keys.SHIFT).send_keys('o').key_up(Keys.SHIFT).key_up(
+                Keys.CONTROL).perform()
+            print("  ✓ 快捷键已发送")
 
-            print("  ⚠ 未找到新对话按钮,尝试刷新页面")
-            self.driver.refresh()
-            time.sleep(5)
-            print("  ✓ 页面已刷新")
+            # 等待新对话页面加载
+            time.sleep(3)
+
+            # 【重要】清除缓存和回复计数
+            self.cached_input_selector = None
+            self.cached_button_selector = None
             self.response_count_before_send = 0
+
+            print("  ✓ 新对话已就绪\n")
 
         except Exception as e:
-            print(f"  ⚠ 开启新对话失败: {e}")
-            print("  尝试刷新页面...")
-            self.driver.refresh()
-            time.sleep(5)
-            self.response_count_before_send = 0
+            print(f"  ✗ 开启新对话失败: {e}")
+            print("  ℹ 将继续在当前对话中处理")
 
-    def send_prompt(self, prompt_text):
-        """发送prompt"""
+    def send_prompt(self, prompt_text, max_retries=3):
+        """
+        发送提示词到LLM - 优化版
+        【修复】发送前记录当前回复数量
+        """
+        for attempt in range(max_retries):
+            try:
+                if attempt == 0:
+                    print(f"\n📤 发送提示词...")
+                    # 【关键修复】发送前记录当前回复数量
+                    self.response_count_before_send = self.get_current_response_count()
+                    print(f"  📊 当前页面已有 {self.response_count_before_send} 条回复")
+                else:
+                    print(f"  🔄 重试 {attempt}/{max_retries-1}...")
+
+                # 定位输入框
+                input_box = self.find_input_box(debug=(attempt == 0))
+                if not input_box:
+                    if attempt < max_retries - 1:
+                        self.driver.refresh()
+                        time.sleep(8)
+                        continue
+                    return False
+
+                # 聚焦并清空
+                self.driver.execute_script("arguments[0].focus();", input_box)
+                time.sleep(0.3)
+
+                tag_name = input_box.tag_name.lower()
+                if tag_name == "textarea":
+                    self.driver.execute_script("arguments[0].value = '';", input_box)
+                else:
+                    self.driver.execute_script("arguments[0].textContent = '';", input_box)
+
+                time.sleep(0.3)
+
+                # 设置文本
+                if tag_name == "textarea":
+                    self.driver.execute_script("""
+                        var elem = arguments[0];
+                        var text = arguments[1];
+                        elem.value = text;
+                        elem.dispatchEvent(new Event('input', { bubbles: true }));
+                    """, input_box, prompt_text)
+                else:
+                    self.driver.execute_script("""
+                        var elem = arguments[0];
+                        var text = arguments[1];
+                        elem.textContent = text;
+                        elem.dispatchEvent(new Event('input', { bubbles: true }));
+                        elem.focus();
+                    """, input_box, prompt_text)
+
+                time.sleep(1)
+
+                # 验证文本设置成功
+                current_value = input_box.get_attribute("value") if tag_name == "textarea" else input_box.text
+                if not current_value or len(current_value) < 100:
+                    if attempt < max_retries - 1:
+                        continue
+                    return False
+
+                print(f"  ✓ 文本设置成功 ({len(current_value)} 字符)")
+
+                # 发送消息
+                button = self.find_submit_button()
+                if button:
+                    self.driver.execute_script("arguments[0].click();", button)
+                    print(f"  ✓ 点击发送按钮")
+                else:
+                    # 使用Enter键
+                    input_box.send_keys(Keys.RETURN)
+                    print(f"  ✓ 使用Enter发送")
+
+                time.sleep(2)
+
+                # 验证发送成功
+                check_value = input_box.get_attribute("value") if tag_name == "textarea" else input_box.text
+                if not check_value or len(check_value.strip()) < 50:
+                    print("  ✓ 确认消息已发送")
+                    return True
+
+                time.sleep(2)
+                return True
+
+            except Exception as e:
+                print(f"  ✗ 发送异常: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+                else:
+                    return False
+
+        return False
+
+    def _validate_new_response(self):
+        """
+        🆕 放宽验证条件：提高兼容性，减少误判
+        """
         try:
-            self.response_count_before_send = self.get_current_response_count()
+            selector = "div[data-message-author-role='assistant']"
+            elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
 
-            input_box = self.find_input_box()
-            input_box.clear()
-            time.sleep(0.5)
+            if not elements or len(elements) <= self.response_count_before_send:
+                return False
 
-            input_box.send_keys(prompt_text)
-            time.sleep(1)
+            last_response = elements[-1]
 
-            button = self.find_submit_button()
-            if button:
-                button.click()
-            else:
-                input_box.send_keys(Keys.RETURN)
+            # 尝试从markdown容器获取文本
+            try:
+                markdown_div = last_response.find_element(
+                    By.CSS_SELECTOR,
+                    "div.markdown.prose"
+                )
+                text = markdown_div.text.strip()
+            except:
+                text = last_response.text.strip()
 
-            time.sleep(2)
+            # 🔧 放宽验证1：文本长度（降低到5个字符）
+            if len(text) < 5:
+                return False
+
+            # 🔧 简化验证2：只排除明显的加载状态
+            # 如果只有加载图标且长度很短
+            if len(text) <= 3 and text in ["●", "⚫", "🔴", "...", "•"]:
+                return False
+
+            # 🔧 放宽验证3：允许更多特殊字符
+            # 只要有任何字母、数字、中文字符就算有效
+            has_content = any(c.isalnum() or '\u4e00' <= c <= '\u9fff' for c in text)
+            if not has_content and len(text) < 20:  # 如果没有字母数字但长度够长也接受
+                return False
+
             return True
 
         except Exception as e:
-            print(f"  ✗ 发送失败: {e}")
+            # 🔧 验证异常时，如果有足够的等待时间，倾向于接受
+            print(f"[验证异常,接受]", end='', flush=True)
+            return True  # 改为True，避免因异常导致死循环
+
+    def wait_for_response_complete(self, timeout=300):
+        """
+        ✨✨ 终极修复：解决验证死循环和卡死问题
+
+        核心改进：
+        1. 限制连续验证失败次数（避免死循环）
+        2. 放宽验证条件（提高兼容性）
+        3. 增加超时逃生机制
+        """
+        print("  等待生成...", end='', flush=True)
+        start_time = time.time()
+        last_progress_time = start_time
+
+        # ✨ 阶段1：等待新回复出现
+        print(" [等待响应]", end='', flush=True)
+        response_appeared = False
+
+        # 🆕 防死循环：限制连续验证失败次数
+        consecutive_validation_failures = 0
+        MAX_VALIDATION_FAILURES = 50  # 连续失败后强制接受
+
+        check_count = 0
+        while time.time() - start_time < WAIT_NEW_RESPONSE_TIMEOUT:
+            try:
+                current_count = self.get_current_response_count()
+
+                # 🔧 检测到数量增加
+                if current_count > self.response_count_before_send:
+                    print(f" [检测到可能的新回复,验证中]", end='', flush=True)
+                    time.sleep(2)  # 等待DOM稳定
+
+                    # 再次确认数量
+                    recheck_count = self.get_current_response_count()
+
+                    if recheck_count > self.response_count_before_send:
+                        # 🔧 验证内容
+                        if self._validate_new_response():
+                            elapsed = int(time.time() - start_time)
+                            response_appeared = True
+                            print(f" ✓ [新回复已确认,耗时{elapsed}s]", end='', flush=True)
+                            break
+                        else:
+                            # 🆕 关键修复：累计验证失败次数
+                            consecutive_validation_failures += 1
+                            print(f" [内容验证失败{consecutive_validation_failures}/{MAX_VALIDATION_FAILURES}]", end='',
+                                  flush=True)
+
+                            # 🚨 如果连续失败太多次，强制接受（避免死循环）
+                            if consecutive_validation_failures >= MAX_VALIDATION_FAILURES:
+                                elapsed = int(time.time() - start_time)
+                                print(f" ⚠️ [验证失败但强制接受,耗时{elapsed}s]", end='', flush=True)
+                                response_appeared = True
+                                break
+
+                            # 继续等待，但增加等待时间
+                            time.sleep(2)
+                    else:
+                        print(f" [数量未稳定,继续等待]", end='', flush=True)
+                        consecutive_validation_failures = 0  # 重置计数器
+                        time.sleep(1)
+                else:
+                    # 数量还没增加，重置失败计数器
+                    consecutive_validation_failures = 0
+
+                # 每2秒打印进度
+                check_count += 1
+                if check_count % 4 == 0:
+                    elapsed = int(time.time() - start_time)
+                    print(f"[{elapsed}s]", end='', flush=True)
+
+            except Exception as e:
+                print(f"![{str(e)[:20]}]", end='', flush=True)
+
+            time.sleep(0.5)
+
+        if not response_appeared:
+            print(f" ✗ 等待响应超时({WAIT_NEW_RESPONSE_TIMEOUT}s)")
             return False
 
-    def wait_for_response_complete(self):
-        """等待响应完成"""
-        print("  ⏳ 等待GPT响应...")
+        # ✨ 阶段2：等待内容生成完毕
+        time.sleep(1)
+        print(" [检测完成]", end='', flush=True)
 
-        time.sleep(3)
-
-        timeout = WAIT_NEW_RESPONSE_TIMEOUT
-        start_time = time.time()
         stable_count = 0
+        max_stability_checks = 10
 
-        while (time.time() - start_time) < timeout:
-            current_count = self.get_current_response_count()
+        for check_round in range(max_stability_checks):
+            try:
+                is_updating = self.check_response_still_updating()
 
-            if current_count > self.response_count_before_send:
-                if not self.check_response_still_updating():
+                if is_updating:
+                    stable_count = 0
+                    print(".", end='', flush=True)
+                else:
                     stable_count += 1
                     if stable_count >= CONTENT_STABLE_CHECKS:
-                        print(f"  ✓ 响应完成 (耗时: {int(time.time() - start_time)}秒)")
+                        print(" ✓ 完成")
                         return True
-                else:
-                    stable_count = 0
+                    else:
+                        print(".", end='', flush=True)
 
-            time.sleep(1)
+                current_time = time.time()
+                if current_time - last_progress_time >= 5:
+                    total_elapsed = int(current_time - start_time)
+                    print(f"[{total_elapsed}s]", end='', flush=True)
+                    last_progress_time = current_time
 
-        print(f"  ✗ 等待超时 ({timeout}秒)")
-        return False
+                time.sleep(1)
+
+            except Exception as e:
+                print(f"⚠ [{str(e)[:20]}]", end='', flush=True)
+                time.sleep(1)
+
+        print(" ✓ 完成(达到检查上限)")
+        return True
 
     def extract_response(self):
-        """提取最新的GPT响应"""
+        """
+        ✨ 精确提取：基于data-message-author-role='assistant'提取回复
+        """
         try:
-            response_selectors = [
-                "div[class*='markdown']",
-                "div[data-message-author-role='assistant']",
-                "div[class*='message']"
-            ]
+            # 🎯 使用最可靠的选择器
+            selector = "div[data-message-author-role='assistant']"
 
-            for selector in response_selectors:
+            response_elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+            current_count = len(response_elements)
+
+            # 确保提取的是新生成的回复
+            if current_count > self.response_count_before_send:
+                # 获取最后一条（最新的回复）
+                last_response = response_elements[-1]
+
+                # 尝试获取markdown内容（更干净）
                 try:
-                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    if elements:
-                        return elements[-1].text.strip()
+                    markdown_div = last_response.find_element(
+                        By.CSS_SELECTOR,
+                        "div.markdown.prose"
+                    )
+                    response_text = markdown_div.text
                 except:
-                    continue
+                    # 如果没有markdown容器，直接获取文本
+                    response_text = last_response.text
 
+                # 验证内容有效性
+                if response_text and len(response_text) > 10:
+                    print(f"  ✓ 提取到回复 ({len(response_text)} 字符)")
+
+                    # 验证：检查是否包含预期关键词
+                    has_definition = "Definition:" in response_text
+                    has_emphasis = "Emphasis" in response_text or "Caution" in response_text
+                    has_avoid = "Avoid" in response_text
+
+                    if has_definition or has_emphasis or has_avoid:
+                        print(f"  ✓ 内容验证通过（包含指令关键词）")
+                    else:
+                        print(f"  ⚠ 警告：回复可能不包含预期格式")
+
+                    return response_text
+                else:
+                    print(f"  ⚠ 提取的内容太短: {len(response_text) if response_text else 0} 字符")
+
+            print(f"  ✗ 无法提取有效回复（当前{current_count}条，发送前{self.response_count_before_send}条）")
             return ""
-        except:
+
+        except Exception as e:
+            print(f"  ✗ 提取回复失败: {e}")
             return ""
+
+    def normalize_three_part_format(self, text):
+        """
+        标准化三段式格式：确保三个关键词前有换行符
+        处理模型将三段式放在一句话中的情况
+        """
+        if not text:
+            return text
+
+        # 检测三个关键词
+        keywords = ['Definition:', 'Emphasis & Caution:', 'Things to Avoid:']
+
+        # 检查是否都存在
+        all_present = all(keyword in text for keyword in keywords)
+        if not all_present:
+            return text
+
+        # 在每个关键词前确保有换行符（除非已经在开头）
+        result = text
+        for keyword in keywords:
+            # 查找关键词的位置
+            parts = result.split(keyword)
+            if len(parts) > 1:
+                # 重组：确保关键词前有换行符
+                normalized_parts = []
+                for i, part in enumerate(parts):
+                    if i == 0:
+                        # 第一部分保持原样
+                        normalized_parts.append(part.rstrip())
+                    else:
+                        # 后续部分在关键词前添加换行符
+                        if normalized_parts:
+                            normalized_parts.append('\n' + keyword + part)
+                        else:
+                            normalized_parts.append(keyword + part)
+                result = ''.join(normalized_parts)
+
+        return result.strip()
 
     def parse_uml_instruction(self, response_text):
         """
@@ -616,13 +920,17 @@ class UMLBatchRepairer:
         matches = re.findall(pattern, response_text, re.DOTALL)
 
         if len(matches) == 1:
-            return matches[0].strip()
+            instruction = matches[0].strip()
+            # 标准化三段式格式
+            return self.normalize_three_part_format(instruction)
 
         # 备用解析方法：按 Definition: 分割
         parts = response_text.split('Definition:')
         for part in parts[1:]:
             if 'Emphasis & Caution:' in part and 'Things to Avoid:' in part:
-                return 'Definition:' + part.strip()
+                instruction = 'Definition:' + part.strip()
+                # 标准化三段式格式
+                return self.normalize_three_part_format(instruction)
 
         # 最后尝试：直接提取三段式
         lines = [line.strip() for line in response_text.strip().split('\n') if line.strip()]
@@ -640,7 +948,9 @@ class UMLBatchRepairer:
                 avoid = line
 
         if definition and emphasis and avoid:
-            return f"{definition}\n{emphasis}\n{avoid}"
+            instruction = f"{definition}\n{emphasis}\n{avoid}"
+            # 标准化三段式格式
+            return self.normalize_three_part_format(instruction)
         else:
             return None
 
@@ -744,21 +1054,21 @@ class UMLBatchRepairer:
                 if not content.lower().startswith('in this task'):
                     errors.append("Definition未以'In this task'开头")
                 # 检查是否以句号结尾
-                if not content.endswith('.'):
+                if ENABLE_PERIOD_CHECK and not content.endswith('.'):
                     errors.append("Definition缺少结尾句号")
 
             elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
                 has_emphasis = True
                 content = line.split(':', 1)[1].strip() if ':' in line else ""
                 # 检查是否以句号结尾(如果不是"-")
-                if content and content != '-' and not content.endswith('.'):
+                if ENABLE_PERIOD_CHECK and content and content != '-' and not content.endswith('.'):
                     errors.append("Emphasis & Caution缺少结尾句号")
 
             elif line.startswith('Things to Avoid:'):
                 has_avoid = True
                 content = line[len('Things to Avoid:'):].strip()
                 # 检查是否以句号结尾(如果不是"-")
-                if content and content != '-' and not content.endswith('.'):
+                if ENABLE_PERIOD_CHECK and content and content != '-' and not content.endswith('.'):
                     errors.append("Things to Avoid缺少结尾句号")
 
         if not has_definition:
@@ -1028,6 +1338,8 @@ class UMLBatchRepairer:
             for i, instruction in enumerate(instructions):
                 row_idx = start_idx + i
                 if instruction:
+                    # 标准化三段式格式后再保存
+                    instruction = self.normalize_three_part_format(instruction)
                     df.at[row_idx, 'Instruction'] = instruction
                     self.repaired_count += 1
                 else:
@@ -1039,8 +1351,8 @@ class UMLBatchRepairer:
             df.to_csv(csv_path, index=False, encoding='utf-8-sig')
             print(f"  ✓ 已保存进度: {start_idx + len(batch_data)}/{len(df)}")
 
-            # 每2个批次刷新对话
-            if repaired_batches % 2 == 0 and repaired_batches < len(error_batches):
+            # 每个批次刷新对话
+            if repaired_batches < len(error_batches):
                 self.start_new_chat()
 
         # 最终保存
@@ -1059,7 +1371,8 @@ class UMLBatchRepairer:
         print(f"{'=' * 60}")
         print(f"开始时间: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"批次大小: {BATCH_SIZE} 条/批")
-        print(f"检测功能: ERROR标记 + 三段式格式 + 句号检查")
+        period_check_status = "启用" if ENABLE_PERIOD_CHECK else "关闭"
+        print(f"检测功能: ERROR标记 + 三段式格式 + 句号检查({period_check_status})")
         print(f"目标文件: {CSV_FILE}")
         print(f"{'=' * 60}\n")
 

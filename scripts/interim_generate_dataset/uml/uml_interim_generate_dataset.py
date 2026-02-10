@@ -419,6 +419,44 @@ class GPTAutomator:
 
         return example_text
 
+    def normalize_three_part_format(self, text):
+        """
+        标准化三段式格式：确保三个关键词前有换行符
+        处理模型将三段式放在一句话中的情况
+        """
+        if not text:
+            return text
+
+        # 检测三个关键词
+        keywords = ['Definition:', 'Emphasis & Caution:', 'Things to Avoid:']
+
+        # 检查是否都存在
+        all_present = all(keyword in text for keyword in keywords)
+        if not all_present:
+            return text
+
+        # 在每个关键词前确保有换行符（除非已经在开头）
+        result = text
+        for keyword in keywords:
+            # 查找关键词的位置
+            parts = result.split(keyword)
+            if len(parts) > 1:
+                # 重组：确保关键词前有换行符
+                normalized_parts = []
+                for i, part in enumerate(parts):
+                    if i == 0:
+                        # 第一部分保持原样
+                        normalized_parts.append(part.rstrip())
+                    else:
+                        # 后续部分在关键词前添加换行符
+                        if normalized_parts:
+                            normalized_parts.append('\n' + keyword + part)
+                        else:
+                            normalized_parts.append(keyword + part)
+                result = ''.join(normalized_parts)
+
+        return result.strip()
+
     def clean_json_data(self, json_str):
         """
         ✨ UML专用：移除position等无关视觉字段
@@ -844,13 +882,19 @@ class GPTAutomator:
 
         if len(matches) == expected_count:
             for match in matches:
-                instructions.append(match.strip())
+                instruction = match.strip()
+                # 标准化三段式格式
+                instruction = self.normalize_three_part_format(instruction)
+                instructions.append(instruction)
         else:
             # 备用解析方法：按 Definition: 分割
             parts = response_text.split('Definition:')
             for part in parts[1:]:
                 if 'Emphasis & Caution:' in part and 'Things to Avoid:' in part:
-                    instructions.append('Definition:' + part.strip())
+                    instruction = 'Definition:' + part.strip()
+                    # 标准化三段式格式
+                    instruction = self.normalize_three_part_format(instruction)
+                    instructions.append(instruction)
 
         return instructions
 
@@ -1185,13 +1229,6 @@ class GPTAutomator:
         for i in range(0, total_rows, BATCH_SIZE):
             batch_end = min(i + BATCH_SIZE, total_rows)
 
-            # ✨✨✨ 【核心修复】在批次开始前检查是否需要刷新
-            # 这样可以在资源累积过多之前就刷新对话
-            if i > 0 and self.batches_since_refresh >= (REFRESH_INTERVAL // BATCH_SIZE):
-                print(f"\n  🔄 预防性刷新 - 已处理{self.batches_since_refresh}批({self.batches_since_refresh * BATCH_SIZE}条数据)")
-                print(f"  ℹ️ 当前进度: {i}/{total_rows}")
-                self.start_new_chat()
-
             # ✨ 修改：提取 Header 和 Description
             batch_data = []
             for idx in range(i, batch_end):
@@ -1204,16 +1241,18 @@ class GPTAutomator:
 
             for j, instruction in enumerate(instructions):
                 if instruction:
+                    # 标准化三段式格式后再保存
+                    instruction = self.normalize_three_part_format(instruction)
                     df.at[i + j, 'Instruction'] = instruction
                 else:
                     df.at[i + j, 'Instruction'] = "ERROR: 生成失败"
 
             self.processed_count += len(instructions)
-            self.batches_since_refresh += 1  # 【修复】每批都计数
+            self.batches_since_refresh += 1
 
-            # ✨✨ 【补充】发生重试后也立即刷新
-            if retry_happened and (i + BATCH_SIZE) < total_rows:
-                print(f"\n  🔄 检测到重试 - 立即刷新对话避免上下文混乱")
+            # ✨ 修改：每批次处理完成后立即刷新对话（除非是最后一批）
+            if (i + BATCH_SIZE) < total_rows:
+                print(f"\n  🔄 批次完成刷新 - 已处理{self.batches_since_refresh}批({self.batches_since_refresh * BATCH_SIZE}条数据)")
                 print(f"  ℹ️ 当前进度: {i + BATCH_SIZE}/{total_rows}")
                 self.start_new_chat()
 
