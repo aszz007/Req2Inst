@@ -225,6 +225,73 @@ class BaseExpert(ABC):
             logger.error(f"生成失败: {e}")
             return ""
 
+    def _generate_batch_with_model(self,
+                                   prompts: list,
+                                   max_new_tokens: int = 2048,
+                                   temperature: float = 0.7,
+                                   top_p: float = 0.9,
+                                   top_k: int = 50,
+                                   repetition_penalty: float = 1.1,
+                                   batch_size: int = None) -> list:
+        """
+        批量生成文本（通用方法，提高GPU利用率）
+
+        Args:
+            prompts: prompt列表
+            max_new_tokens: 最大生成token数
+            temperature: 温度参数
+            top_p: nucleus sampling
+            top_k: top-k sampling
+            repetition_penalty: 重复惩罚
+            batch_size: 批处理大小（None则自动选择）
+
+        Returns:
+            list: 生成的文本列表
+        """
+        if not self.is_model_loaded:
+            logger.error("模型未加载,无法生成")
+            return [""] * len(prompts)
+
+        try:
+            # 使用LanguageModel的批量生成方法
+            if hasattr(self.model, 'generate_batch'):
+                results = self.model.generate_batch(
+                    prompts=prompts,
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    top_k=top_k,
+                    repetition_penalty=repetition_penalty,
+                    batch_size=batch_size
+                )
+
+                # 对每个结果提取三段式指令
+                extracted_results = []
+                for text in results:
+                    extracted_text = self._extract_three_part_instruction(text)
+                    extracted_results.append(extracted_text)
+
+                return extracted_results
+            else:
+                # 降级到逐个生成（兼容旧版本）
+                logger.warning("模型不支持批量生成，降级到逐个生成")
+                results = []
+                for prompt in prompts:
+                    result = self._generate_with_model(
+                        prompt=prompt,
+                        max_new_tokens=max_new_tokens,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=top_k,
+                        repetition_penalty=repetition_penalty
+                    )
+                    results.append(result)
+                return results
+
+        except Exception as e:
+            logger.error(f"批量生成失败: {e}")
+            return [""] * len(prompts)
+
     def _extract_three_part_instruction(self, text: str) -> str:
         """
         提取三段式指令，移除多余内容

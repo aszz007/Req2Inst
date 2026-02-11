@@ -59,7 +59,12 @@ class LanguageModel:
 
         self.model_path = model_path or str(path_cfg.QWEN_7B_CHAT_PATH)
         self.device = device_cfg.get_device()
-        self.use_4bit = use_4bit
+        self.device_cfg = device_cfg
+
+        # GPU性能检测和量化策略
+        self.use_4bit = device_cfg.should_use_quantization() if self.device == "cuda" else False
+        self.gpu_tier = device_cfg.get_gpu_tier()
+        self.is_high_end_gpu = device_cfg.is_high_end_gpu
 
         self.model = None
         self.tokenizer = None
@@ -69,7 +74,9 @@ class LanguageModel:
         logger.info(f"初始化语言模型")
         logger.info(f"模型路径: {self.model_path}")
         logger.info(f"设备: {self.device}")
-        logger.info(f"4bit量化: {self.use_4bit}")
+        logger.info(f"GPU信息: {device_cfg.get_gpu_info()}")
+        logger.info(f"量化策略: {'4bit量化' if self.use_4bit else 'FP16（无量化）'}")
+        logger.info(f"GPU配置: {self.gpu_tier.upper()}端GPU模式")
 
         self._load_base_model()
 
@@ -278,7 +285,7 @@ class LanguageModel:
                  temperature: float = 0.7, top_p: float = 0.9, top_k: int = 50,
                  repetition_penalty: float = 1.1) -> str:
         """
-        生成文本
+        生成文本（支持GPU性能优化）
 
         Args:
             prompt: 输入提示词
@@ -314,7 +321,7 @@ class LanguageModel:
 
             stop_tokens = list(set(stop_tokens))
 
-            # 生成配置（参考vision_model.py，只依靠eos_token_id自然停止）
+            # 生成配置（启用use_cache优化）
             generation_config = {
                 "max_new_tokens": max_new_tokens,
                 "temperature": temperature,
@@ -323,12 +330,19 @@ class LanguageModel:
                 "repetition_penalty": repetition_penalty,
                 "do_sample": True if temperature > 0 else False,
                 "pad_token_id": self.tokenizer.pad_token_id,
-                "eos_token_id": stop_tokens
+                "eos_token_id": stop_tokens,
+                "use_cache": True  # 启用KV cache加速
             }
 
-            # 生成文本
+            # GPU性能优化：高端GPU使用混合精度推理
             with torch.no_grad():
-                outputs = self.model.generate(**inputs, **generation_config)
+                if self.use_4bit:
+                    # 4bit量化：不使用autocast避免精度冲突
+                    outputs = self.model.generate(**inputs, **generation_config)
+                else:
+                    # FP16（高端GPU）：使用autocast加速
+                    with torch.cuda.amp.autocast():
+                        outputs = self.model.generate(**inputs, **generation_config)
 
             # 解码输出
             generated_ids = outputs[0][input_length:]
@@ -345,6 +359,105 @@ class LanguageModel:
         except Exception as e:
             logger.error(f"生成失败: {e}")
             return ""
+
+    def generate_batch(self, prompts: list, max_new_tokens: int = 2048,
+                      temperature: float = 0.7, top_p: float = 0.9, top_k: int = 50,
+                      repetition_penalty: float = 1.1, batch_size: int = None) -> list:
+        """
+        批量生成文本（GPU性能优化）
+
+        Args:
+            prompts: prompt列表
+            max_new_tokens: 最大生成token数
+            temperature: 温度参数
+            top_p: nucleus sampling
+            top_k: top-k sampling
+            repetition_penalty: 重复惩罚
+            batch_size: 批处理大小（None则根据GPU性能自动选择）
+
+        Returns:
+            list: 生成的文本列表
+        """
+        if not prompts:
+            return []
+
+        # 自动选择batch_size
+        if batch_size is None:
+            if self.gpu_tier == 'high':
+                batch_size = 4
+            elif self.gpu_tier == 'mid':
+                batch_size = 2
+            else:
+                batch_size = 1
+
+        logger.info(f"批量推理: {len(prompts)}条样本, batch_size={batch_size}")
+
+        results = []
+        for i in range(0, len(prompts), batch_size):
+            batch_prompts = prompts[i:i+batch_size]
+
+            try:
+                # Tokenize批量输入
+                inputs = self.tokenizer(
+                    batch_prompts,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
+                    max_length=8192
+                )
+                input_lengths = inputs['input_ids'].shape[1]
+                inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+
+                # 准备停止tokens
+                stop_tokens = []
+                if self.tokenizer.eos_token_id is not None:
+                    stop_tokens.append(self.tokenizer.eos_token_id)
+
+                im_end_id = self.tokenizer.convert_tokens_to_ids('<|im_end|>')
+                if im_end_id is not None and im_end_id != self.tokenizer.unk_token_id:
+                    stop_tokens.append(im_end_id)
+
+                endoftext_id = self.tokenizer.convert_tokens_to_ids('<|endoftext|>')
+                if endoftext_id is not None and endoftext_id != self.tokenizer.unk_token_id:
+                    stop_tokens.append(endoftext_id)
+
+                stop_tokens = list(set(stop_tokens))
+
+                # 生成配置
+                generation_config = {
+                    "max_new_tokens": max_new_tokens,
+                    "temperature": temperature,
+                    "top_p": top_p,
+                    "top_k": top_k,
+                    "repetition_penalty": repetition_penalty,
+                    "do_sample": True if temperature > 0 else False,
+                    "pad_token_id": self.tokenizer.pad_token_id,
+                    "eos_token_id": stop_tokens,
+                    "use_cache": True
+                }
+
+                # 批量生成
+                with torch.no_grad():
+                    if self.use_4bit:
+                        outputs = self.model.generate(**inputs, **generation_config)
+                    else:
+                        with torch.cuda.amp.autocast():
+                            outputs = self.model.generate(**inputs, **generation_config)
+
+                # 解码批量输出
+                for j, output in enumerate(outputs):
+                    generated_ids = output[input_lengths:]
+                    generated_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+                    generated_text = self._clean_generated_text(generated_text)
+                    generated_text = self._truncate_after_three_parts(generated_text)
+                    results.append(generated_text)
+
+            except Exception as e:
+                logger.error(f"批量生成失败 (batch {i//batch_size}): {e}")
+                # 失败时返回空字符串
+                results.extend([""] * len(batch_prompts))
+
+        return results
 
     def _clean_generated_text(self, text: str) -> str:
         """
@@ -534,6 +647,35 @@ class InstructionGenerator:
     def get_expert_status(self) -> dict:
         """获取当前专家状态"""
         return self.language_model.get_lora_status()
+
+    def generate_batch(self, prompts: list, max_new_tokens: int = 2048,
+                      temperature: float = 0.7, top_p: float = 0.9,
+                      top_k: int = 50, repetition_penalty: float = 1.1,
+                      batch_size: int = None) -> list:
+        """
+        批量生成众包指令
+
+        Args:
+            prompts: prompt列表
+            max_new_tokens: 最大生成token数
+            temperature: 温度参数
+            top_p: nucleus sampling
+            top_k: top-k sampling
+            repetition_penalty: 重复惩罚
+            batch_size: 批处理大小（None则自动选择）
+
+        Returns:
+            list: 生成的指令列表
+        """
+        return self.language_model.generate_batch(
+            prompts=prompts,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            repetition_penalty=repetition_penalty,
+            batch_size=batch_size
+        )
 
 
 # ==================== 测试代码 ====================
