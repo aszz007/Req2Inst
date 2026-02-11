@@ -9,15 +9,9 @@
 模型: Qwen-7B-Chat
 训练数据: dataset/ (text + image + uml混合)
 
-专家变体(3个):
-  - general_expert_dataset_qwen25: 使用Qwen2.5数据集混合训练
-  - general_expert_dataset_qwen3: 使用Qwen3数据集混合训练
-  - general_expert_dataset_qwen235B: 使用Qwen235B数据集混合训练(默认)
-
 说明:
-  - 所有变体都基于Qwen-7B-Chat训练
-  - dataset_version指的是混合的UML数据集版本
-  - 混合数据: text(全部) + image(全部) + UML(不同版本)
+  - 基于Qwen-7B-Chat训练
+  - 混合数据: text(全部) + image(全部) + UML(全部)
 
 作者: Expert System
 日期: 2025-02-03
@@ -41,25 +35,19 @@ class GeneralExpert(BaseExpert):
     """通用专家 - 混合多模态数据训练的兜底专家"""
 
     def __init__(self,
-                 dataset_version: str = 'qwen235B',
                  lora_path: Optional[str] = None,
                  use_4bit: bool = True):
         """
         初始化通用专家
 
         Args:
-            dataset_version: 数据集构建版本('qwen2.5', 'qwen3', 'qwen235B'),默认'qwen235B'
             lora_path: LoRA权重路径(None则使用默认配置)
             use_4bit: 是否使用4bit量化
         """
-        if dataset_version not in ['qwen2.5', 'qwen3', 'qwen235B']:
-            raise ValueError(f"不支持的数据集版本: {dataset_version}")
-
         path_cfg = get_path_config()
 
-        # 构建专家名称: general_expert_dataset_{version}
-        dataset_suffix = dataset_version.replace(".", "")
-        expert_name = f'general_expert_dataset_{dataset_suffix}'
+        # 通用专家固定名称
+        expert_name = 'general_expert'
 
         # 如果没有提供lora_path,使用配置中的路径
         if lora_path is None:
@@ -83,13 +71,10 @@ class GeneralExpert(BaseExpert):
             expert_name=expert_name,
             base_model_path=str(path_cfg.QWEN_7B_CHAT_PATH),
             lora_path=lora_path,
-            use_4bit=use_4bit,
-            version=dataset_version
+            use_4bit=use_4bit
         )
 
-        self.dataset_version = dataset_version
-
-        logger.info(f"通用专家初始化完成 - 数据集版本: {dataset_version}")
+        logger.info("通用专家初始化完成")
 
     def generate_instruction(self, input_data: Union[str, dict]) -> str:
         """
@@ -258,16 +243,6 @@ Things to Avoid: Do not skip error handling or edge case validation."""
 
         return fallback_instruction
 
-    def get_expert_info(self) -> dict:
-        """
-        获取专家信息(重写以包含dataset_version)
-
-        Returns:
-            dict: 专家信息
-        """
-        info = super().get_expert_info()
-        info['dataset_version'] = self.dataset_version
-        return info
 
 
 if __name__ == "__main__":
@@ -275,12 +250,11 @@ if __name__ == "__main__":
     print("通用专家测试")
     print("=" * 60)
 
-    print("\n测试1: 默认配置(Qwen235B数据集)")
+    print("\n测试1: 默认配置")
     print("-" * 60)
     expert = GeneralExpert()
     info = expert.get_expert_info()
     print(f"专家名称: {info['expert_name']}")
-    print(f"数据集版本: {info['dataset_version']}")
 
     print("\n测试2: 输入类型检测")
     print("-" * 60)

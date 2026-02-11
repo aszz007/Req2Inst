@@ -1,8 +1,9 @@
 """
 通用专家训练脚本
-功能：训练General Expert，作为兜底专家处理各类需求
+功能：训练General Expert，作为兜底专家处理各类需求（text + image + uml）
 环境：qwen_text（transformers==4.32.0）
 基础模型：Qwen-7B-Chat
+数据集：text_dataset + image_dataset + uml_dataset_qwen3_v3
 输出：lora_weights/experts/general_expert/
 
 使用方法：
@@ -14,7 +15,7 @@
   python scripts/training/train_general_expert.py
 
 作者：Training System
-日期：2025-01-30
+日期：2025-02-11
 """
 
 import sys
@@ -32,10 +33,10 @@ from src.utils.logger import get_logger
 logger = get_logger('training.train_general_expert')
 
 
-def print_header(dataset_version: str):
+def print_header():
     """打印训练开始的标题"""
     print("=" * 80)
-    print(" " * 12 + f"通用专家训练 (General Expert Training - Dataset: {dataset_version.upper()})")
+    print(" " * 20 + "通用专家训练 (General Expert Training)")
     print("=" * 80)
     print()
 
@@ -50,23 +51,23 @@ def detect_rtx4090() -> bool:
         pass
     return False
 
-def print_config(dataset_version: str, use_4bit: bool, use_rtx4090_opt: bool):
+def print_config(use_4bit: bool, use_rtx4090_opt: bool):
     """打印训练配置"""
     path_cfg = get_path_config()
     train_cfg = get_training_config()
     lora_cfg = get_lora_config('conservative')
 
-    # 根据数据集版本生成输出路径
-    output_dir = path_cfg.LORA_WEIGHTS_DIR / 'experts' / f'general_expert_dataset_{dataset_version}'
+    # 生成输出路径
+    output_dir = path_cfg.LORA_WEIGHTS_DIR / 'experts' / 'general_expert'
 
     print("训练配置信息:")
     print("-" * 80)
     print(f"专家类型: General Expert (兜底专家)")
-    print(f"数据集版本: {dataset_version}")
+    print(f"数据集: text + image + uml_dataset_qwen3_v3")
     print(f"基础模型: {path_cfg.QWEN_7B_CHAT_PATH}")
     print(f"输出目录: {output_dir}")
     print()
-    print(f"数据来源: 文本(全部) + 图像(全部) + UML({dataset_version})")
+    print(f"数据来源: 文本(全部) + 图像(全部) + UML(1500条)")
     print()
     print(f"LoRA配置:")
     print(f"  - Rank: {lora_cfg.rank}")
@@ -152,26 +153,15 @@ def validate_environment():
 def main():
     """主训练流程"""
     # 解析命令行参数
-    parser = argparse.ArgumentParser(description='训练通用专家（支持多数据集版本）')
-    parser.add_argument(
-        '--dataset',
-        type=str,
-        required=True,
-        choices=['qwen2.5', 'qwen3', 'qwen235B'],
-        help='数据集版本（必需）: qwen2.5/qwen3/qwen235B对应不同的UML数据集'
-    )
+    parser = argparse.ArgumentParser(description='训练通用专家')
     parser.add_argument('--use_4bit', action='store_true', default=True,
                         help='使用4bit量化训练（默认：True）')
     parser.add_argument('--no_4bit', dest='use_4bit', action='store_false',
                         help='不使用4bit量化')
     args = parser.parse_args()
 
-    # 获取数据集版本
-    dataset_version = args.dataset
-    logger.info(f"使用数据集版本: {dataset_version}")
-
     # 打印标题
-    print_header(dataset_version)
+    print_header()
 
     # 验证环境
     if not validate_environment():
@@ -186,12 +176,11 @@ def main():
         logger.info("检测到RTX 4090，启用优化配置")
 
     # 创建训练器（会自动打印实际配置）
-    logger.info(f"创建通用专家训练器（数据集:{dataset_version}）...")
+    logger.info(f"创建通用专家训练器...")
     try:
         trainer = ExpertTrainer(
             expert_type='general',
             use_4bit=args.use_4bit,
-            dataset_version=dataset_version,
             use_rtx4090_optimization=use_rtx4090_opt
         )
     except Exception as e:
@@ -209,9 +198,9 @@ def main():
     print(f"数据统计:")
     print(f"  - 训练样本: {status['train_samples']}")
     print(f"  - 验证样本: {status['val_samples']}")
-    print(f"  - 数据集版本: {dataset_version}")
+    print(f"  - 数据来源: text + image + uml")
     print()
-    print(f"注意：通用专家使用文本(全部) + 图像(全部) + UML({dataset_version})")
+    print(f"注意：通用专家使用文本(全部) + 图像(全部) + UML(1500条)")
     print()
 
     # 设置模型
@@ -237,13 +226,13 @@ def main():
         print()
 
         path_cfg = get_path_config()
-        output_path = path_cfg.LORA_WEIGHTS_DIR / 'experts' / f'general_expert_dataset_{dataset_version}'
+        output_path = path_cfg.LORA_WEIGHTS_DIR / 'experts' / 'general_expert'
         print(f"LoRA权重已保存至: {output_path}")
-        print(f"检查点目录: {path_cfg.get_checkpoint_path(f'general_expert_dataset_{dataset_version}')}")
+        print(f"检查点目录: {path_cfg.get_checkpoint_path('general_expert')}")
         print()
         print("下一步:")
         print("  1. 可以使用该权重进行推理测试")
-        print(f"  2. 继续训练其他数据集版本的General Expert")
+        print("  2. 所有专家训练完成，可以开始使用Expert系统")
         print()
 
         return 0
@@ -262,11 +251,6 @@ if __name__ == "__main__":
 
 
 # 使用示例：
-# 方法1：通过环境管理脚本运行（推荐）
 # python scripts/run_with_env.py --env text --script scripts/training/train_general_expert.py
 #
-# 方法2：直接在qwen_text环境中运行
-# conda activate qwen_text
-# python scripts/training/train_general_expert.py
-#
-# 注意：通用专家使用Qwen-7B-Chat模型，无需指定版本
+# 注意：通用专家使用Qwen-7B-Chat模型，结合text + image + uml数据集训练

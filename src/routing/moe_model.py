@@ -135,50 +135,28 @@ class MoEModel:
             专家实例
 
         Note:
-            根据框架文档：
+            根据简化的框架：
             - Text Expert: 1个，无需额外参数
             - Image Expert: 1个，无需额外参数
-            - UML Expert: 3个变体，需要dataset_version参数
-            - General Expert: 3个变体，需要dataset_version参数
+            - UML Expert: 1个，无需额外参数
+            - General Expert: 1个，无需额外参数
         """
         from src.experts import TextExpert, ImageExpert, UMLExpert, GeneralExpert
 
         expert_type = routing_result.expert_type
         expert_path = routing_result.expert_path
-        expert_name = routing_result.expert_name
 
         if expert_type == 'text':
             return TextExpert(lora_path=expert_path)
 
         elif expert_type == 'image':
-            # Image Expert只有1个，无需version参数
             return ImageExpert(lora_path=expert_path)
 
         elif expert_type == 'uml':
-            # UML Expert有3个变体，从名称中提取dataset_version
-            # 例如: uml_expert_dataset_qwen25 -> dataset_version='qwen25'
-            if 'dataset_qwen235B' in expert_name:
-                dataset_version = 'qwen235B'
-            elif 'dataset_qwen3' in expert_name:
-                dataset_version = 'qwen3'
-            elif 'dataset_qwen25' in expert_name:
-                dataset_version = 'qwen25'
-            else:
-                dataset_version = 'qwen235B'  # 默认
-            return UMLExpert(lora_path=expert_path, dataset_version=dataset_version)
+            return UMLExpert(lora_path=expert_path)
 
         elif expert_type == 'general':
-            # General Expert有3个变体，从名称中提取dataset_version
-            # 例如: general_expert_dataset_qwen25 -> dataset_version='qwen25'
-            if 'dataset_qwen235B' in expert_name:
-                dataset_version = 'qwen235B'
-            elif 'dataset_qwen3' in expert_name:
-                dataset_version = 'qwen3'
-            elif 'dataset_qwen25' in expert_name:
-                dataset_version = 'qwen25'
-            else:
-                dataset_version = 'qwen235B'  # 默认
-            return GeneralExpert(lora_path=expert_path, dataset_version=dataset_version)
+            return GeneralExpert(lora_path=expert_path)
 
         else:
             raise ValueError(f"Unknown expert type: {expert_type}")

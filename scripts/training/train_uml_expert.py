@@ -1,23 +1,21 @@
 """
-UML专家训练脚本 - 支持多数据集版本
-功能:训练UML Expert,支持选择不同识别源的数据集
+UML专家训练脚本
+功能:训练UML Expert,将UML用例图描述转换为业务逻辑实现指令
 环境:qwen_text(transformers==4.32.0)
 基础模型:Qwen-7B-Chat
-数据集:qwen2.5 / qwen3 / qwen235B 识别的UML数据
-输出:lora_weights/experts/uml_expert_dataset_{data_version}/
+数据集:uml_dataset_qwen3_v3.csv (1500条数据)
+输出:lora_weights/experts/uml_expert/
 
 使用方法:
   # 方法1: 通过环境管理脚本运行(推荐)
-  python scripts/run_with_env.py --env text --script scripts/training/train_uml_expert.py --dataset qwen2.5
-  python scripts/run_with_env.py --env text --script scripts/training/train_uml_expert.py --dataset qwen3
-  python scripts/run_with_env.py --env text --script scripts/training/train_uml_expert.py --dataset qwen235B
+  python scripts/run_with_env.py --env text --script scripts/training/train_uml_expert.py
 
   # 方法2: 直接在qwen_text环境中运行
   conda activate qwen_text
-  python scripts/training/train_uml_expert.py --dataset qwen2.5
+  python scripts/training/train_uml_expert.py
 
 作者:Training System
-日期:2025-02-07(修正版 - 所有Expert统一使用qwen_text环境)
+日期:2025-02-11
 """
 
 import sys
@@ -36,27 +34,27 @@ from src.utils.logger import get_logger
 logger = get_logger('training.train_uml_expert')
 
 
-def print_header(dataset_version: str):
+def print_header():
     """打印训练开始的标题"""
     print("=" * 80)
-    print(" " * 18 + f"UML专家训练 (Dataset: {dataset_version.upper()})")
+    print(" " * 30 + "UML专家训练 (UML Expert Training)")
     print("=" * 80)
     print()
 
 
-def print_config(dataset_version: str, use_4bit: bool, use_rtx4090: bool):
+def print_config(use_4bit: bool, use_rtx4090: bool):
     """打印训练配置"""
     path_cfg = get_path_config()
     train_cfg = get_training_config()
     lora_cfg = get_lora_config('conservative')
 
     # 生成输出路径
-    output_dir = path_cfg.LORA_WEIGHTS_DIR / 'experts' / f'uml_expert_dataset_{dataset_version}'
+    output_dir = path_cfg.LORA_WEIGHTS_DIR / 'experts' / 'uml_expert'
 
     print("训练配置信息:")
     print("-" * 80)
     print(f"专家类型: UML Expert")
-    print(f"数据集版本: {dataset_version}")
+    print(f"数据集: uml_dataset_qwen3_v3.csv (1500条数据)")
     print(f"基础模型: {path_cfg.QWEN_7B_CHAT_PATH}")
     print(f"输出目录: {output_dir}")
     print()
@@ -165,14 +163,7 @@ def detect_rtx4090() -> bool:
 def main():
     """主训练流程"""
     # 解析命令行参数
-    parser = argparse.ArgumentParser(description='训练UML专家(支持多数据集版本)')
-    parser.add_argument(
-        '--dataset',
-        type=str,
-        required=True,
-        choices=['qwen2.5', 'qwen3', 'qwen235B'],
-        help='数据集版本(必需): qwen2.5=本地Qwen2.5识别, qwen3=本地Qwen3识别, qwen235B=云端Qwen235B识别'
-    )
+    parser = argparse.ArgumentParser(description='训练UML专家')
     parser.add_argument('--use_4bit', action='store_true', default=True,
                         help='使用4bit量化训练(默认:True)')
     parser.add_argument('--no_4bit', dest='use_4bit', action='store_false',
@@ -180,10 +171,6 @@ def main():
     parser.add_argument('--no_rtx4090_opt', action='store_true',
                         help='禁用RTX 4090优化(默认:自动检测)')
     args = parser.parse_args()
-
-    # 获取数据集版本
-    dataset_version = args.dataset
-    logger.info(f"使用数据集版本: {dataset_version}")
 
     # 检测是否为RTX 4090
     is_rtx4090 = detect_rtx4090()
@@ -196,7 +183,7 @@ def main():
             logger.info("检测到RTX 4090,但优化已禁用")
 
     # 打印标题
-    print_header(dataset_version)
+    print_header()
 
     # 验证环境
     if not validate_environment():
@@ -204,12 +191,11 @@ def main():
         return 1
 
     # 创建训练器（会自动打印实际配置）
-    logger.info(f"创建UML专家训练器(数据集:{dataset_version})...")
+    logger.info(f"创建UML专家训练器...")
     try:
         trainer = ExpertTrainer(
             expert_type='uml',
             use_4bit=args.use_4bit,
-            dataset_version=dataset_version,
             use_rtx4090_optimization=use_rtx4090_opt
         )
     except Exception as e:
@@ -229,9 +215,9 @@ def main():
     print(f"数据统计:")
     print(f"  - 训练样本: {status['train_samples']}")
     print(f"  - 验证样本: {status['val_samples']}")
-    print(f"  - 数据集来源: {dataset_version}")
+    print(f"  - 数据集: uml_dataset_qwen3_v3.csv (1500条)")
     print()
-    print("注意:UML数据集较小,使用特殊的数据集划分策略")
+    print("注意:1500条数据使用标准80:10:10划分策略")
     print()
 
     # 设置模型
@@ -257,13 +243,13 @@ def main():
         print()
 
         path_cfg = get_path_config()
-        output_path = path_cfg.LORA_WEIGHTS_DIR / 'experts' / f'uml_expert_dataset_{dataset_version}'
+        output_path = path_cfg.LORA_WEIGHTS_DIR / 'experts' / 'uml_expert'
         print(f"LoRA权重已保存至: {output_path}")
-        print(f"检查点目录: {path_cfg.get_checkpoint_path(f'uml_expert_dataset_{dataset_version}')}")
+        print(f"检查点目录: {path_cfg.get_checkpoint_path('uml_expert')}")
         print()
         print("下一步:")
         print("  1. 可以使用该权重进行推理测试")
-        print(f"  2. 继续训练其他数据集版本的UML Expert")
+        print("  2. 继续训练General Expert")
         print()
 
         return 0
@@ -281,14 +267,11 @@ if __name__ == "__main__":
     sys.exit(main())
 
 
-# ===== 使用示例 =====
-# 训练三个数据集版本的UML Expert:
-# python scripts/run_with_env.py --env text --script scripts/training/train_uml_expert.py --dataset qwen2.5
-# python scripts/run_with_env.py --env text --script scripts/training/train_uml_expert.py --dataset qwen3
-# python scripts/run_with_env.py --env text --script scripts/training/train_uml_expert.py --dataset qwen235B
+# 使用示例:
+# python scripts/run_with_env.py --env text --script scripts/training/train_uml_expert.py
 #
 # 注意:
 # - UML Expert使用Qwen-7B-Chat文本模型训练
 # - 输入是UML描述的JSON文本,不是UML图本身
-# - 不同数据集版本对应不同视觉模型识别的训练数据
-# - 权重保存到: lora_weights/experts/uml_expert_dataset_{version}/
+# - 数据集: uml_dataset_qwen3_v3.csv (1500条数据)
+# - 权重保存到: lora_weights/experts/uml_expert/

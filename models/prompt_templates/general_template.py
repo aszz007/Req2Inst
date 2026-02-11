@@ -113,12 +113,44 @@ CRITICAL RULES:
 
         # 处理输入数据格式
         if isinstance(input_data, dict):
+            # 如果是UML类型，过滤actor中的position字段
+            if input_type == 'uml' and 'actors' in input_data:
+                import copy
+                input_data_copy = copy.deepcopy(input_data)
+                if isinstance(input_data_copy['actors'], list):
+                    filtered_actors = []
+                    for actor in input_data_copy['actors']:
+                        if isinstance(actor, dict):
+                            # 移除position字段
+                            filtered_actor = {k: v for k, v in actor.items() if k != 'position'}
+                            filtered_actors.append(filtered_actor)
+                        else:
+                            filtered_actors.append(actor)
+                    input_data_copy['actors'] = filtered_actors
+                input_data = input_data_copy
+
             # 转为压缩JSON字符串（无空格、无换行）
             input_str = json.dumps(input_data, ensure_ascii=False, separators=(',', ':'))
         elif isinstance(input_data, str):
             try:
                 # 尝试解析并转为压缩JSON（无空格、无换行）
                 parsed = json.loads(input_data)
+                # 如果是UML类型，过滤actor中的position字段
+                if input_type == 'uml' and 'actors' in parsed:
+                    import copy
+                    parsed_copy = copy.deepcopy(parsed)
+                    if isinstance(parsed_copy['actors'], list):
+                        filtered_actors = []
+                        for actor in parsed_copy['actors']:
+                            if isinstance(actor, dict):
+                                # 移除position字段
+                                filtered_actor = {k: v for k, v in actor.items() if k != 'position'}
+                                filtered_actors.append(filtered_actor)
+                            else:
+                                filtered_actors.append(actor)
+                        parsed_copy['actors'] = filtered_actors
+                    parsed = parsed_copy
+
                 input_str = json.dumps(parsed, ensure_ascii=False, separators=(',', ':'))
             except json.JSONDecodeError:
                 # 纯文本

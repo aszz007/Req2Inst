@@ -1,35 +1,31 @@
 #!/usr/bin/env python
 """
-批量训练所有专家脚本
+批量训练UML和General专家脚本
 
-功能:自动执行所有8个Expert的训练
+功能:自动执行UML Expert和General Expert的训练
 环境:qwen_text(transformers==4.32.0)
 基础模型:Qwen-7B-Chat
 
-Expert清单(共8个):
-1. Text Expert (1个)
-2. Image Expert (1个)
-3. UML Expert (3个变体: qwen2.5/qwen3/qwen235B数据集)
-4. General Expert (3个变体: qwen2.5/qwen3/qwen235B数据集)
+Expert清单(共2个):
+1. UML Expert (uml_dataset_qwen3_v3.csv - 1500条数据)
+2. General Expert (text + image + uml数据集)
 
 使用方法:
   # 测试模式(快速验证流程,每个Expert仅训练1个epoch)
   python scripts/training/batch_train_all_experts.py --test
 
-  # 完整训练模式(全部8个Expert)
+  # 完整训练模式(训练UML和General Expert)
   python scripts/training/batch_train_all_experts.py --all
 
   # 训练特定Expert
-  python scripts/training/batch_train_all_experts.py --expert text
-  python scripts/training/batch_train_all_experts.py --expert image
   python scripts/training/batch_train_all_experts.py --expert uml
   python scripts/training/batch_train_all_experts.py --expert general
 
-  # 从某个任务继续(例如从任务3开始)
-  python scripts/training/batch_train_all_experts.py --all --resume-from 3
+  # 从某个任务继续(例如从任务2开始)
+  python scripts/training/batch_train_all_experts.py --all --resume-from 2
 
 作者:Training System
-日期:2025-02-07
+日期:2025-02-11
 """
 
 import subprocess
@@ -81,10 +77,9 @@ def print_warning(message: str):
 class TrainingTask:
     """单个训练任务配置"""
 
-    def __init__(self, task_id: int, expert_type: str, dataset_version: str = None, description: str = ""):
+    def __init__(self, task_id: int, expert_type: str, description: str = ""):
         self.task_id = task_id
-        self.expert_type = expert_type  # 'text', 'image', 'uml', 'general'
-        self.dataset_version = dataset_version  # 仅uml/general需要
+        self.expert_type = expert_type  # 'uml', 'general'
         self.description = description
         self.script_path = PROJECT_ROOT / 'scripts' / 'training' / f'train_{expert_type}_expert.py'
 
@@ -94,10 +89,6 @@ class TrainingTask:
             sys.executable,
             str(self.script_path)
         ]
-
-        # UML和General Expert需要指定数据集版本
-        if self.expert_type in ['uml', 'general']:
-            cmd.extend(['--dataset', self.dataset_version])
 
         # 默认使用4bit量化以节省显存，无需额外标志
 
@@ -113,52 +104,29 @@ class TrainingTask:
         return env_vars
 
     def __str__(self):
-        if self.dataset_version:
-            return f"Task {self.task_id}: {self.expert_type.upper()} Expert (dataset: {self.dataset_version})"
-        else:
-            return f"Task {self.task_id}: {self.expert_type.upper()} Expert"
+        return f"Task {self.task_id}: {self.expert_type.upper()} Expert"
 
 
 def create_all_tasks() -> List[TrainingTask]:
-    """创建所有8个训练任务"""
+    """创建训练任务（UML和General专家）"""
     tasks = []
     task_id = 1
 
-    # 任务1: Text Expert
+    # 任务1: UML Expert
     tasks.append(TrainingTask(
         task_id=task_id,
-        expert_type='text',
-        description="文本需求转换专家"
+        expert_type='uml',
+        description="UML描述转换专家(1500条数据)"
     ))
     task_id += 1
 
-    # 任务2: Image Expert
+    # 任务2: General Expert
     tasks.append(TrainingTask(
         task_id=task_id,
-        expert_type='image',
-        description="图像描述转换专家"
+        expert_type='general',
+        description="通用兜底专家(text + image + uml数据)"
     ))
     task_id += 1
-
-    # 任务3-5: UML Expert (3个数据集变体)
-    for dataset_ver in ['qwen2.5', 'qwen3', 'qwen235B']:
-        tasks.append(TrainingTask(
-            task_id=task_id,
-            expert_type='uml',
-            dataset_version=dataset_ver,
-            description=f"UML描述转换专家({dataset_ver}数据集)"
-        ))
-        task_id += 1
-
-    # 任务6-8: General Expert (3个数据集变体)
-    for dataset_ver in ['qwen2.5', 'qwen3', 'qwen235B']:
-        tasks.append(TrainingTask(
-            task_id=task_id,
-            expert_type='general',
-            dataset_version=dataset_ver,
-            description=f"通用兜底专家({dataset_ver}数据集)"
-        ))
-        task_id += 1
 
     return tasks
 
@@ -265,20 +233,20 @@ def print_summary(results: List[Dict]):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='批量训练所有Expert')
+    parser = argparse.ArgumentParser(description='批量训练UML和General Expert')
 
     # 训练模式
     mode_group = parser.add_mutually_exclusive_group(required=True)
     mode_group.add_argument('--test', action='store_true',
                             help='测试模式:每个Expert仅训练1个epoch,快速验证流程')
     mode_group.add_argument('--all', action='store_true',
-                            help='完整训练模式:训练所有8个Expert')
-    mode_group.add_argument('--expert', type=str, choices=['text', 'image', 'uml', 'general'],
+                            help='完整训练模式:训练UML和General Expert')
+    mode_group.add_argument('--expert', type=str, choices=['uml', 'general'],
                             help='仅训练指定类型的Expert')
 
     # 其他选项
     parser.add_argument('--resume-from', type=int, metavar='N',
-                        help='从第N个任务继续训练(1-8)')
+                        help='从第N个任务继续训练(1-2)')
 
     args = parser.parse_args()
 
@@ -328,7 +296,6 @@ def main():
         results.append({
             'task_id': task.task_id,
             'expert_type': task.expert_type,
-            'dataset_version': task.dataset_version,
             'description': task.description,
             'success': success
         })

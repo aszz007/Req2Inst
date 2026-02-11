@@ -238,6 +238,39 @@ def normalize_json_string(json_str: str) -> str:
         return json_str
 
 
+def filter_uml_json_positions(uml_data: dict) -> dict:
+    """
+    过滤UML JSON中actor的position字段
+
+    Args:
+        uml_data: UML JSON数据
+
+    Returns:
+        过滤后的UML JSON（移除了actor中的position字段）
+    """
+    if not isinstance(uml_data, dict):
+        return uml_data
+
+    # 深拷贝以避免修改原数据
+    import copy
+    filtered_data = copy.deepcopy(uml_data)
+
+    # 过滤actors中的position字段
+    if 'actors' in filtered_data and isinstance(filtered_data['actors'], list):
+        filtered_actors = []
+        for actor in filtered_data['actors']:
+            if isinstance(actor, dict):
+                # 创建新的actor字典，只保留name等字段，移除position
+                filtered_actor = {k: v for k, v in actor.items() if k != 'position'}
+                filtered_actors.append(filtered_actor)
+            else:
+                # 如果不是字典，直接保留
+                filtered_actors.append(actor)
+        filtered_data['actors'] = filtered_actors
+
+    return filtered_data
+
+
 class TextDatasetLoader:
     """文本数据集加载器 - 优化版"""
 
@@ -409,39 +442,19 @@ class ImageDatasetLoader:
 
 class UMLDatasetLoader:
     """
-    UML数据集加载器 - 支持多数据集版本
+    UML数据集加载器
 
-    支持三种数据集：
-    - 'qwen2.5': 本地Qwen2.5-VL识别的数据集
-    - 'qwen3': 本地Qwen3-VL识别的数据集
-    - 'qwen235B': 云端Qwen235B识别的数据集
+    使用单一数据集：uml_dataset_qwen3_v3.csv（1500条数据）
     """
 
-    def __init__(self, dataset_version: str = 'qwen2.5'):
+    def __init__(self):
         """
         初始化UML数据加载器
-
-        Args:
-            dataset_version: 数据集版本 ('qwen2.5', 'qwen3', 'qwen235B')
         """
         self.path_cfg = get_path_config()
-        self.dataset_version = dataset_version
+        self.dataset_csv = self.path_cfg.UML_DATASET_CSV
 
-        # 数据集文件映射
-        self.dataset_files = {
-            'qwen2.5': 'uml_dataset_qwen25_local.csv',
-            'qwen3': 'uml_dataset_qwen3_local.csv',
-            'qwen235B': 'uml_dataset_qwen235B_cloud.csv'
-        }
-
-        # 验证版本有效性
-        if dataset_version not in self.dataset_files:
-            raise ValueError(
-                f"不支持的数据集版本: {dataset_version}, "
-                f"支持的版本: {list(self.dataset_files.keys())}"
-            )
-
-        logger.info(f"初始化UML数据加载器 - 数据集版本: {dataset_version}")
+        logger.info(f"初始化UML数据加载器 - 数据集: {self.dataset_csv}")
 
     def load_csv_file(self) -> List[Dict]:
         """
@@ -450,15 +463,12 @@ class UMLDatasetLoader:
         Returns:
             数据列表，每项包含input和output
         """
-        # 获取对应版本的文件名
-        csv_filename = self.dataset_files[self.dataset_version]
-        csv_path = self.path_cfg.UML_DATASET_DIR / csv_filename
+        csv_path = self.dataset_csv
 
         logger.info(f"加载UML数据集: {csv_path}")
 
         if not csv_path.exists():
             logger.error(f"UML数据集文件不存在: {csv_path}")
-            logger.error(f"请确保数据集文件名为: {csv_filename}")
             return []
 
         try:
@@ -512,17 +522,20 @@ class UMLDatasetLoader:
                     if pd.isna(description) or pd.isna(instruction):
                         continue
 
-                    # 如果description是JSON字符串，验证并统一格式
+                    # 如果description是JSON字符串，验证、过滤position并统一格式
                     if isinstance(description, str) and description.strip().startswith('{'):
                         try:
                             desc_json = json.loads(description)
                             # 验证是否包含必要字段（actors或use_cases）
                             if 'actors' in desc_json or 'use_cases' in desc_json:
+                                # 过滤actor中的position字段
+                                filtered_json = filter_uml_json_positions(desc_json)
                                 # 统一为压缩JSON格式（无空格、无换行）
-                                description = normalize_json_string(description)
+                                description = normalize_json_string(json.dumps(filtered_json, ensure_ascii=False))
                             elif 'description' in desc_json:
-                                # 如果只有description字段，也统一格式
-                                description = normalize_json_string(description)
+                                # 如果只有description字段，也过滤并统一格式
+                                filtered_json = filter_uml_json_positions(desc_json)
+                                description = normalize_json_string(json.dumps(filtered_json, ensure_ascii=False))
                             else:
                                 # JSON格式不符合预期，记录警告
                                 logger.warning(f"行{idx}: UML JSON格式不符合预期，跳过")
@@ -538,14 +551,14 @@ class UMLDatasetLoader:
                         'input': str(description),
                         'input_with_prompt': prompt,
                         'output': str(instruction),
-                        'source': f'uml_dataset_{self.dataset_version}'
+                        'source': 'uml_dataset'
                     })
 
                 except Exception as e:
                     logger.warning(f"处理第{idx}行时出错: {e}")
                     continue
 
-            logger.info(f"成功加载UML数据 ({self.dataset_version}): {len(data_list)}条")
+            logger.info(f"成功加载UML数据: {len(data_list)}条")
             return data_list
 
         except Exception as e:
@@ -565,15 +578,11 @@ class GeneralDatasetLoader:
     - 确保训练推理一致性
     """
 
-    def __init__(self, dataset_version: str = 'qwen2.5'):
+    def __init__(self):
         """
         初始化通用数据加载器
-
-        Args:
-            dataset_version: UML数据集版本 ('qwen2.5', 'qwen3', 'qwen235B')
         """
-        self.dataset_version = dataset_version
-        logger.info(f"初始化GeneralDatasetLoader - UML数据集版本: {dataset_version}")
+        logger.info(f"初始化GeneralDatasetLoader - 将加载text + image + uml数据")
 
     def load_all_data(self) -> List[Dict]:
         """
@@ -629,8 +638,8 @@ class GeneralDatasetLoader:
         logger.info(f"图像数据: {len(image_raw)}条")
 
         # 3. 加载UML数据
-        logger.info(f"加载UML数据 (版本: {self.dataset_version})...")
-        uml_loader = UMLDatasetLoader(dataset_version=self.dataset_version)
+        logger.info(f"加载UML数据...")
+        uml_loader = UMLDatasetLoader()
         uml_raw = uml_loader.load_csv_file()
 
         # 重新构建prompt - 使用GeneralInstructionTemplate
@@ -638,6 +647,8 @@ class GeneralDatasetLoader:
             # 尝试解析为JSON，如果不是JSON则构建简单格式
             try:
                 uml_json = json.loads(item['input']) if isinstance(item['input'], str) else item['input']
+                # 过滤position字段
+                uml_json = filter_uml_json_positions(uml_json)
             except (json.JSONDecodeError, TypeError):
                 uml_json = {
                     "description": item['input'],
@@ -718,7 +729,7 @@ def split_dataset_for_expert(
 
     Args:
         data: 原始数据
-        expert_type: 'text', 'image', 'uml'
+        expert_type: 'text', 'image', 'uml', 'general'
         seed: 随机种子
 
     Returns:
@@ -727,16 +738,12 @@ def split_dataset_for_expert(
     data_size = len(data)
 
     # 根据数据量选择划分策略
-    if expert_type == 'uml' and data_size < 100:
-        # UML数据较少(90条)，使用85:10:5划分
-        train_ratio, val_ratio, test_ratio = 0.85, 0.10, 0.05
-        logger.info(f"UML数据集较小({data_size}条)，使用85:10:5划分策略")
-    elif data_size < 500:
-        # 中等数据量，使用80:15:5划分
+    if data_size < 500:
+        # 小数据量，使用80:15:5划分
         train_ratio, val_ratio, test_ratio = 0.80, 0.15, 0.05
-        logger.info(f"中等数据集({data_size}条)，使用80:15:5划分策略")
+        logger.info(f"小数据集({data_size}条)，使用80:15:5划分策略")
     else:
-        # 大数据量，使用标准80:10:10划分
+        # 大数据量（包括1500条UML数据），使用标准80:10:10划分
         train_ratio, val_ratio, test_ratio = 0.80, 0.10, 0.10
         logger.info(f"大数据集({data_size}条)，使用80:10:10划分策略")
 

@@ -417,47 +417,41 @@ class UMLDatasetValidator:
         emphasis_match = re.search(r'Emphasis & Caution:\s*(.+?)(?=\nThings to Avoid:|$)', instruction, re.DOTALL)
         avoid_match = re.search(r'Things to Avoid:\s*(.+?)$', instruction, re.DOTALL)
 
-        # 定义合理长度范围（字符数）
-        length_ranges = {
-            'Definition': (50, 500),
-            'Emphasis & Caution': (10, 600),  # 允许"-"所以最小为10
-            'Things to Avoid': (10, 400)      # 允许"-"所以最小为10
+        # 定义最小长度（字符数）
+        min_lengths = {
+            'Definition': 50,
+            'Emphasis & Caution': 10,  # 允许"-"所以最小为10
+            'Things to Avoid': 10      # 允许"-"所以最小为10
         }
 
         # 检查Definition长度
         if definition_match:
             definition_content = definition_match.group(1).strip()
             def_len = len(definition_content)
-            min_len, max_len = length_ranges['Definition']
+            min_len = min_lengths['Definition']
 
             if def_len < min_len:
                 warnings.append(f"Definition过短({def_len}字符)，可能不完整")
-            elif def_len > max_len:
-                warnings.append(f"Definition过长({def_len}字符)，建议精简")
 
         # 检查Emphasis & Caution长度
         if emphasis_match:
             emphasis_content = emphasis_match.group(1).strip()
             if emphasis_content != '-':  # 不检查"-"的情况
                 emp_len = len(emphasis_content)
-                min_len, max_len = length_ranges['Emphasis & Caution']
+                min_len = min_lengths['Emphasis & Caution']
 
                 if emp_len < min_len:
                     warnings.append(f"Emphasis & Caution过短({emp_len}字符)，可能不完整")
-                elif emp_len > max_len:
-                    warnings.append(f"Emphasis & Caution过长({emp_len}字符)，建议精简")
 
         # 检查Things to Avoid长度
         if avoid_match:
             avoid_content = avoid_match.group(1).strip()
             if avoid_content != '-':  # 不检查"-"的情况
                 avoid_len = len(avoid_content)
-                min_len, max_len = length_ranges['Things to Avoid']
+                min_len = min_lengths['Things to Avoid']
 
                 if avoid_len < min_len:
                     warnings.append(f"Things to Avoid过短({avoid_len}字符)，可能不完整")
-                elif avoid_len > max_len:
-                    warnings.append(f"Things to Avoid过长({avoid_len}字符)，建议精简")
 
         return len(warnings) == 0, warnings
 

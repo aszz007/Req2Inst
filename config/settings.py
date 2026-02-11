@@ -111,23 +111,11 @@ class PathConfig:
         # 具体数据集文件
         self.IMAGE_DATASET_CSV = self.IMAGE_DATASET_DIR / "image_dataset.csv"
 
-        # UML数据集版本映射（3个版本）
-        self.UML_DATASET_FILES = {
-            'qwen2.5': self.UML_DATASET_DIR / "uml_dataset_qwen25_local.csv",
-            'qwen3': self.UML_DATASET_DIR / "uml_dataset_qwen3_local.csv",
-            'qwen235B': self.UML_DATASET_DIR / "uml_dataset_qwen235B_cloud.csv"
-        }
-        # 默认UML数据集（向后兼容）
-        self.UML_DATASET_CSV = self.UML_DATASET_FILES['qwen235B']
+        # UML数据集（单一版本 - 1500条数据）
+        self.UML_DATASET_CSV = self.UML_DATASET_DIR / "uml_dataset_qwen3_v3.csv"
 
-        # General数据集版本映射（3个版本，因为包含UML数据集的3个版本）
-        self.GENERAL_DATASET_FILES = {
-            'qwen25': self.GENERAL_DATASET_DIR / "general_dataset_qwen25.csv",
-            'qwen3': self.GENERAL_DATASET_DIR / "general_dataset_qwen3.csv",
-            'qwen235B': self.GENERAL_DATASET_DIR / "general_dataset_qwen235B.csv"
-        }
-        # 默认General数据集（向后兼容）
-        self.GENERAL_DATASET_CSV = self.GENERAL_DATASET_FILES['qwen235B']
+        # General数据集（不需要单独文件，动态加载text+image+uml）
+        # self.GENERAL_DATASET_CSV - 已移除，General专家直接从三个数据源加载
 
         # 文本数据集（多个文件）
         self.TEXT_DATASET_FILES = {
@@ -155,17 +143,11 @@ class PathConfig:
         # Image Expert只有1个版本（数据集只有1个版本）
         self.IMAGE_EXPERT_WEIGHTS = self.EXPERTS_DIR / "image_expert"
 
-        # UML Expert有3个版本（对应3个不同识别数据集）
-        self.UML_EXPERT_WEIGHTS_DATASET_QWEN25 = self.EXPERTS_DIR / "uml_expert_dataset_qwen25"
-        self.UML_EXPERT_WEIGHTS_DATASET_QWEN3 = self.EXPERTS_DIR / "uml_expert_dataset_qwen3"
-        self.UML_EXPERT_WEIGHTS_DATASET_QWEN235B = self.EXPERTS_DIR / "uml_expert_dataset_qwen235B"
+        # UML Expert（单一版本，使用qwen3_v3数据集）
+        self.UML_EXPERT_WEIGHTS = self.EXPERTS_DIR / "uml_expert"
 
-        # General Expert多版本权重路径（使用不同UML数据集训练）
-        self.GENERAL_EXPERT_WEIGHTS_QWEN2_5 = self.EXPERTS_DIR / "general_expert_dataset_qwen25"
-        self.GENERAL_EXPERT_WEIGHTS_QWEN3 = self.EXPERTS_DIR / "general_expert_dataset_qwen3"
-        self.GENERAL_EXPERT_WEIGHTS_QWEN235B = self.EXPERTS_DIR / "general_expert_dataset_qwen235B"
-        # 默认General Expert路径（向后兼容）
-        self.GENERAL_EXPERT_WEIGHTS = self.GENERAL_EXPERT_WEIGHTS_QWEN235B
+        # General Expert（单一版本）
+        self.GENERAL_EXPERT_WEIGHTS = self.EXPERTS_DIR / "general_expert"
 
         # 专家LoRA权重映射（集中配置）
         self.EXPERT_LORA_PATHS = {
@@ -173,29 +155,15 @@ class PathConfig:
             'text': self.TEXT_EXPERT_WEIGHTS,
             'text_expert': self.TEXT_EXPERT_WEIGHTS,
 
-            # Image Expert（1个版本，数据集只有1个版本）
+            # Image Expert（1个版本）
             'image': self.IMAGE_EXPERT_WEIGHTS,
             'image_expert': self.IMAGE_EXPERT_WEIGHTS,
 
-            # UML Expert（3个版本，对应3个识别数据集）
-            'uml_dataset_qwen25': self.UML_EXPERT_WEIGHTS_DATASET_QWEN25,
-            'uml_dataset_qwen3': self.UML_EXPERT_WEIGHTS_DATASET_QWEN3,
-            'uml_dataset_qwen235B': self.UML_EXPERT_WEIGHTS_DATASET_QWEN235B,
-            'uml_expert_dataset_qwen25': self.UML_EXPERT_WEIGHTS_DATASET_QWEN25,
-            'uml_expert_dataset_qwen3': self.UML_EXPERT_WEIGHTS_DATASET_QWEN3,
-            'uml_expert_dataset_qwen235B': self.UML_EXPERT_WEIGHTS_DATASET_QWEN235B,
-            # 默认UML Expert（指向qwen235B版本）
-            'uml': self.UML_EXPERT_WEIGHTS_DATASET_QWEN235B,
-            'uml_expert': self.UML_EXPERT_WEIGHTS_DATASET_QWEN235B,
+            # UML Expert（1个版本）
+            'uml': self.UML_EXPERT_WEIGHTS,
+            'uml_expert': self.UML_EXPERT_WEIGHTS,
 
-            # General Expert（3个版本，因为包含UML数据集的3个版本）
-            'general_dataset_qwen25': self.GENERAL_EXPERT_WEIGHTS_QWEN2_5,
-            'general_dataset_qwen3': self.GENERAL_EXPERT_WEIGHTS_QWEN3,
-            'general_dataset_qwen235B': self.GENERAL_EXPERT_WEIGHTS_QWEN235B,
-            'general_expert_dataset_qwen25': self.GENERAL_EXPERT_WEIGHTS_QWEN2_5,
-            'general_expert_dataset_qwen3': self.GENERAL_EXPERT_WEIGHTS_QWEN3,
-            'general_expert_dataset_qwen235B': self.GENERAL_EXPERT_WEIGHTS_QWEN235B,
-            # 默认General Expert（指向qwen235B版本）
+            # General Expert（1个版本）
             'general': self.GENERAL_EXPERT_WEIGHTS,
             'general_expert': self.GENERAL_EXPERT_WEIGHTS,
         }
@@ -245,38 +213,19 @@ class PathConfig:
 
         return self.VISION_MODEL_PATHS[version]
 
-    def get_expert_weight_path(self, expert_name: str, dataset_version: str = None) -> Path:
+    def get_expert_weight_path(self, expert_name: str) -> Path:
         """
-        获取专家LoRA权重路径（增强版）
+        获取专家LoRA权重路径
 
         Args:
             expert_name: 专家名称（'text', 'image', 'uml', 'general'）
-            dataset_version: 数据集版本（仅对uml/general有效，可选值：'qwen25', 'qwen3', 'qwen235B'）
 
         Returns:
             Path: LoRA权重路径
-
-        说明：
-            - Text Expert: 只有1个版本
-            - Image Expert: 只有1个版本（数据集只有1个版本）
-            - UML Expert: 有3个版本（对应3个识别数据集）
-            - General Expert: 有3个版本（因为包含UML数据集的3个版本）
         """
         # 移除可能的_expert后缀，统一处理
         base_name = expert_name.replace('_expert', '')
-
-        # Text Expert和Image Expert只有1个版本
-        if base_name in ['text', 'image']:
-            expert_key = base_name
-        # UML Expert和General Expert有3个版本
-        elif base_name in ['uml', 'general']:
-            if dataset_version is None:
-                # 默认使用qwen235B版本
-                dataset_version = 'qwen235B'
-            expert_key = f"{base_name}_dataset_{dataset_version}"
-        else:
-            # 直接使用原名称
-            expert_key = expert_name
+        expert_key = base_name
 
         if expert_key in self.EXPERT_LORA_PATHS:
             return self.EXPERT_LORA_PATHS[expert_key]
@@ -287,40 +236,6 @@ class PathConfig:
     def get_checkpoint_path(self, expert_name: str) -> Path:
         """获取专家训练检查点路径"""
         return self.CHECKPOINTS_DIR / f"{expert_name}_training"
-
-    def get_uml_dataset_path(self, version: str = 'qwen235B') -> Path:
-        """
-        获取UML数据集路径
-
-        Args:
-            version: 数据集版本（'qwen25', 'qwen3', 'qwen235B'）
-
-        Returns:
-            Path: UML数据集CSV文件路径
-        """
-        if version not in self.UML_DATASET_FILES:
-            raise ValueError(
-                f"不支持的UML数据集版本: {version}，"
-                f"支持的版本: {list(self.UML_DATASET_FILES.keys())}"
-            )
-        return self.UML_DATASET_FILES[version]
-
-    def get_general_dataset_path(self, version: str = 'qwen235B') -> Path:
-        """
-        获取General数据集路径
-
-        Args:
-            version: 数据集版本（'qwen25', 'qwen3', 'qwen235B'）
-
-        Returns:
-            Path: General数据集CSV文件路径
-        """
-        if version not in self.GENERAL_DATASET_FILES:
-            raise ValueError(
-                f"不支持的General数据集版本: {version}，"
-                f"支持的版本: {list(self.GENERAL_DATASET_FILES.keys())}"
-            )
-        return self.GENERAL_DATASET_FILES[version]
 
     def create_directories(self):
         """创建所有必要的目录"""
@@ -458,7 +373,7 @@ class TrainingConfig:
     image_val_ratio: float = 0.1
     image_test_ratio: float = 0.1
 
-    # UML数据集（1500条）- 优化的复杂度分布（简单50% + 中等40% + 复杂10%）
+    # UML数据集（1500条）- 使用标准80:10:10划分
     uml_train_ratio: float = 0.8
     uml_val_ratio: float = 0.1
     uml_test_ratio: float = 0.1

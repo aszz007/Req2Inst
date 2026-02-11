@@ -113,22 +113,46 @@ CRITICAL RULES:
         """
         # 处理输入格式
         if isinstance(uml_json, dict):
-            # 过滤元数据字段（confidence、recognition_status、processing_time等）
+            # 过滤元数据字段和actor中的position字段
             filtered_data = {
                 k: v for k, v in uml_json.items()
                 if k not in ['confidence', 'recognition_status', 'processing_time']
             }
+            # 过滤actor中的position字段
+            if 'actors' in filtered_data and isinstance(filtered_data['actors'], list):
+                filtered_actors = []
+                for actor in filtered_data['actors']:
+                    if isinstance(actor, dict):
+                        # 移除position字段
+                        filtered_actor = {k: v for k, v in actor.items() if k != 'position'}
+                        filtered_actors.append(filtered_actor)
+                    else:
+                        filtered_actors.append(actor)
+                filtered_data['actors'] = filtered_actors
+
             # 转为压缩JSON字符串（无空格、无换行）
             json_str = json.dumps(filtered_data, ensure_ascii=False, separators=(',', ':'))
         elif isinstance(uml_json, str):
             # 尝试解析为JSON以验证格式
             try:
                 parsed = json.loads(uml_json)
-                # 过滤元数据字段
+                # 过滤元数据字段和actor中的position字段
                 filtered_data = {
                     k: v for k, v in parsed.items()
                     if k not in ['confidence', 'recognition_status', 'processing_time']
                 }
+                # 过滤actor中的position字段
+                if 'actors' in filtered_data and isinstance(filtered_data['actors'], list):
+                    filtered_actors = []
+                    for actor in filtered_data['actors']:
+                        if isinstance(actor, dict):
+                            # 移除position字段
+                            filtered_actor = {k: v for k, v in actor.items() if k != 'position'}
+                            filtered_actors.append(filtered_actor)
+                        else:
+                            filtered_actors.append(actor)
+                    filtered_data['actors'] = filtered_actors
+
                 # 转为压缩JSON字符串（无空格、无换行）
                 json_str = json.dumps(filtered_data, ensure_ascii=False, separators=(',', ':'))
             except json.JSONDecodeError:

@@ -256,7 +256,157 @@ class ExpertEvaluator:
 
     def evaluate_uml_expert(
             self,
-            dataset_version: str = 'qwen235B',
+            num_samples: Optional[int] = None
+    ) -> Dict:
+        """
+        评估UML专家
+
+        Args:
+            num_samples: 使用的样本数
+
+        Returns:
+            dict: 评估结果
+        """
+        logger.info("=" * 80)
+        logger.info("评估UML专家")
+        logger.info("=" * 80)
+
+        # 加载数据集
+        loader = UMLDatasetLoader()
+        data = loader.load_csv_file()
+        _, _, test_data = split_dataset_for_expert(data, 'uml')
+
+        if num_samples:
+            test_data = test_data[:num_samples]
+
+        logger.info(f"测试样本数: {len(test_data)}")
+
+        # 显示样本数据
+        self._display_samples(test_data, "UML Expert")
+
+        # 加载专家
+        expert = UMLExpert()
+        if not expert.load_model():
+            logger.error("UML专家加载失败")
+            return {}
+
+        # 生成预测
+        predictions = []
+        references = []
+
+        for i, item in enumerate(test_data, 1):
+            logger.info(f"生成 {i}/{len(test_data)}")
+
+            try:
+                pred = expert.generate_instruction(item['input'])
+                predictions.append(pred)
+                references.append(item['output'])
+            except Exception as e:
+                logger.error(f"生成失败: {e}")
+                predictions.append("")
+                references.append(item['output'])
+
+        # 卸载模型
+        expert.unload_model()
+
+        # 强制清理GPU显存
+        del expert
+        self._force_cleanup_gpu()
+
+        # 评估
+        results = self._evaluate_predictions(
+            predictions=predictions,
+            references=references,
+            expert_name='uml_expert'
+        )
+
+        return results
+
+    def evaluate_general_expert(
+            self,
+            num_samples: Optional[int] = None
+    ) -> Dict:
+        """
+        评估通用专家
+
+        Args:
+            num_samples: 使用的样本数
+
+        Returns:
+            dict: 评估结果
+        """
+        logger.info("=" * 80)
+        logger.info("评估通用专家")
+        logger.info("=" * 80)
+
+        # 加载混合数据集(从text、image、uml各取一部分)
+        text_loader = TextDatasetLoader()
+        image_loader = ImageDatasetLoader()
+        uml_loader = UMLDatasetLoader()
+
+        text_data = text_loader.load_csv_files()
+        image_data = image_loader.load_csv_file()
+        uml_data = uml_loader.load_csv_file()
+
+        # 从每个数据集取测试集
+        _, _, text_test = split_dataset_for_expert(text_data, 'text')
+        _, _, image_test = split_dataset_for_expert(image_data, 'image')
+        _, _, uml_test = split_dataset_for_expert(uml_data, 'uml')
+
+        # 混合测试数据(每种类型取相同数量)
+        min_samples = min(len(text_test), len(image_test), len(uml_test))
+        if num_samples:
+            samples_per_type = num_samples // 3
+            min_samples = min(min_samples, samples_per_type)
+
+        test_data = (
+                text_test[:min_samples] +
+                image_test[:min_samples] +
+                uml_test[:min_samples]
+        )
+
+        logger.info(f"测试样本数: {len(test_data)} (text: {min_samples}, image: {min_samples}, uml: {min_samples})")
+
+        # 显示样本数据
+        self._display_samples(test_data, "General Expert")
+
+        # 加载专家
+        expert = GeneralExpert()
+        if not expert.load_model():
+            logger.error("通用专家加载失败")
+            return {}
+
+        # 生成预测
+        predictions = []
+        references = []
+
+        for i, item in enumerate(test_data, 1):
+            logger.info(f"生成 {i}/{len(test_data)}")
+
+            try:
+                pred = expert.generate_instruction(item['input'])
+                predictions.append(pred)
+                references.append(item['output'])
+            except Exception as e:
+                logger.error(f"生成失败: {e}")
+                predictions.append("")
+                references.append(item['output'])
+
+        # 卸载模型
+        expert.unload_model()
+
+        # 强制清理GPU显存
+        del expert
+        self._force_cleanup_gpu()
+
+        # 评估
+        results = self._evaluate_predictions(
+            predictions=predictions,
+            references=references,
+            expert_name='general_expert'
+        )
+
+        return results
             num_samples: Optional[int] = None
     ) -> Dict:
         """
@@ -521,17 +671,17 @@ class ExpertEvaluator:
             # 即使失败也要清理GPU显存
             self._force_cleanup_gpu()
 
-        # UML专家(默认版本)
+        # UML专家
         try:
-            all_results['uml_expert'] = self.evaluate_uml_expert('qwen235B', num_samples)
+            all_results['uml_expert'] = self.evaluate_uml_expert(num_samples)
         except Exception as e:
             logger.error(f"UML专家评估失败: {e}")
             # 即使失败也要清理GPU显存
             self._force_cleanup_gpu()
 
-        # 通用专家(默认版本)
+        # 通用专家
         try:
-            all_results['general_expert'] = self.evaluate_general_expert('qwen235B', num_samples)
+            all_results['general_expert'] = self.evaluate_general_expert(num_samples)
         except Exception as e:
             logger.error(f"通用专家评估失败: {e}")
             # 即使失败也要清理GPU显存
@@ -616,9 +766,6 @@ def main():
     parser = argparse.ArgumentParser(description='评估专家性能')
     parser.add_argument('--expert', type=str, choices=['text', 'image', 'uml', 'general', 'all'],
                         default='all', help='要评估的专家')
-    parser.add_argument('--dataset-version', type=str, default='qwen235B',
-                        choices=['qwen2.5', 'qwen3', 'qwen235B'],
-                        help='数据集版本(用于UML/General专家)')
     parser.add_argument('--num-samples', type=int, default=None,
                         help='使用的样本数(None表示全部)')
     parser.add_argument('--test-mode', action='store_true',
@@ -673,19 +820,13 @@ def main():
         if args.save_dir:
             evaluator._save_all_results({'image_expert': results}, args.save_dir)
     elif args.expert == 'uml':
-        results = evaluator.evaluate_uml_expert(
-            dataset_version=args.dataset_version,
-            num_samples=args.num_samples
-        )
+        results = evaluator.evaluate_uml_expert(num_samples=args.num_samples)
         if args.save_dir:
-            evaluator._save_all_results({f'uml_expert_{args.dataset_version}': results}, args.save_dir)
+            evaluator._save_all_results({'uml_expert': results}, args.save_dir)
     elif args.expert == 'general':
-        results = evaluator.evaluate_general_expert(
-            dataset_version=args.dataset_version,
-            num_samples=args.num_samples
-        )
+        results = evaluator.evaluate_general_expert(num_samples=args.num_samples)
         if args.save_dir:
-            evaluator._save_all_results({f'general_expert_{args.dataset_version}': results}, args.save_dir)
+            evaluator._save_all_results({'general_expert': results}, args.save_dir)
 
     logger.info("评估完成!")
 
@@ -700,4 +841,4 @@ if __name__ == "__main__":
 # python scripts/evaluation/evaluate_experts.py --test-mode --expert text
 
 # 查看General专家的样本数据
-# python scripts/evaluation/evaluate_experts.py --show-samples --expert general --dataset-version qwen235B --num-samples 20
+# python scripts/evaluation/evaluate_experts.py --show-samples --expert general --num-samples 20

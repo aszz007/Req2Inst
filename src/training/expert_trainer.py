@@ -107,8 +107,7 @@ class ExpertTrainer:
                  base_model_path: Optional[str] = None,
                  output_dir: Optional[str] = None,
                  use_4bit: bool = True,
-                 dataset_version: Optional[str] = None,  # 新增参数
-                 use_rtx4090_optimization: bool = True):  # 新增参数
+                 use_rtx4090_optimization: bool = True):
         """
         初始化训练器
 
@@ -117,7 +116,6 @@ class ExpertTrainer:
             base_model_path: 基础模型路径（None则从配置获取）
             output_dir: 输出目录（None则从配置获取）
             use_4bit: 是否使用4bit量化训练
-            dataset_version: 数据集版本（仅用于UML，如'qwen2.5', 'qwen3', 'qwen235B'）
             use_rtx4090_optimization: 是否启用RTX 4090优化
         """
         # 验证专家类型
@@ -127,13 +125,7 @@ class ExpertTrainer:
 
         self.expert_type = expert_type
         self.use_4bit = use_4bit
-        self.dataset_version = dataset_version
         self.use_rtx4090_optimization = use_rtx4090_optimization
-
-        # 如果是UML或General且未指定数据集版本，默认使用qwen2.5
-        if expert_type in ['uml', 'general'] and dataset_version is None:
-            self.dataset_version = 'qwen2.5'
-            logger.warning(f"{expert_type}专家未指定数据集版本，默认使用: qwen2.5")
 
         # 获取配置
         self.path_cfg = get_path_config()
@@ -162,31 +154,14 @@ class ExpertTrainer:
             # 视觉模型仅用于数据准备阶段（raw → interim）
             self.base_model_path = str(self.path_cfg.QWEN_7B_CHAT_PATH)
 
-        # 设置输出目录（考虑数据集版本）
+        # 设置输出目录
         if output_dir:
             self.output_dir = Path(output_dir)
         else:
-            if expert_type == 'uml' and dataset_version:
-                # UML专家根据模型版本和数据集版本生成输出路径
-                vision_cfg = get_vision_model_config()
-                vision_version = vision_cfg.version
-                output_name = f"uml_expert_{vision_version}_dataset_{dataset_version}"
-                self.output_dir = self.path_cfg.LORA_WEIGHTS_DIR / 'experts' / output_name
-            elif expert_type == 'general' and dataset_version:
-                # General专家根据数据集版本生成输出路径
-                output_name = f"general_expert_dataset_{dataset_version}"
-                self.output_dir = self.path_cfg.LORA_WEIGHTS_DIR / 'experts' / output_name
-            else:
-                self.output_dir = self.path_cfg.get_expert_weight_path(f"{expert_type}_expert")
+            self.output_dir = self.path_cfg.get_expert_weight_path(f"{expert_type}_expert")
 
         # 设置检查点目录
         checkpoint_name = f"{expert_type}_expert"
-        if expert_type == 'uml' and dataset_version:
-            vision_cfg = get_vision_model_config()
-            vision_version = vision_cfg.version
-            checkpoint_name = f"{expert_type}_expert_{vision_version}_dataset_{dataset_version}"
-        elif expert_type == 'general' and dataset_version:
-            checkpoint_name = f"{expert_type}_expert_dataset_{dataset_version}"
         self.checkpoint_dir = self.path_cfg.get_checkpoint_path(checkpoint_name)
 
         # 初始化模型和数据相关属性
@@ -201,8 +176,6 @@ class ExpertTrainer:
         logger.info(f"基础模型: {self.base_model_path}")
         logger.info(f"输出目录: {self.output_dir}")
         logger.info(f"4bit量化: {use_4bit}")
-        if expert_type in ['uml', 'general']:
-            logger.info(f"数据集版本: {self.dataset_version}")
         logger.info(f"RTX 4090优化: {use_rtx4090_optimization}")
 
         # 打印实际训练配置
@@ -214,8 +187,6 @@ class ExpertTrainer:
         print("训练配置信息:")
         print("-" * 80)
         print(f"专家类型: {self.expert_type.upper()} Expert")
-        if self.expert_type in ['uml', 'general']:
-            print(f"数据集版本: {self.dataset_version}")
         print(f"基础模型: {self.base_model_path}")
         print(f"输出目录: {self.output_dir}")
         print()
@@ -269,13 +240,13 @@ class ExpertTrainer:
                 loader = ImageDatasetLoader()
                 raw_data = loader.load_csv_file()
             elif self.expert_type == 'uml':
-                # UML使用dataset_version参数
-                loader = UMLDatasetLoader(dataset_version=self.dataset_version)
+                # UML使用单一数据集
+                loader = UMLDatasetLoader()
                 raw_data = loader.load_csv_file()
             elif self.expert_type == 'general':
                 # General专家使用统一的GeneralDatasetLoader
                 # 确保训练推理一致：都使用GeneralInstructionTemplate
-                loader = GeneralDatasetLoader(dataset_version=self.dataset_version)
+                loader = GeneralDatasetLoader()
                 raw_data = loader.load_all_data()
             else:
                 raise ValueError(f"未知的专家类型: {self.expert_type}")
