@@ -11,9 +11,7 @@ import torch
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    BitsAndBytesConfig,
-    StoppingCriteria,
-    StoppingCriteriaList
+    BitsAndBytesConfig
 )
 
 # 尝试导入流式生成支持（仅qwen_text环境需要）
@@ -41,86 +39,7 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-class ThreePartInstructionStoppingCriteria(StoppingCriteria):
-    """
-    自定义停止条件：检测完整的三段式指令生成
 
-    当检测到以下模式时停止生成：
-    1. Definition: ...
-    2. Emphasis & Caution: ...
-    3. Things to Avoid: ...
-
-    这可以防止模型继续生成训练数据中的其他示例（训练数据泄露）
-
-    关键修复：只检测生成的部分，不包括prompt中的示例
-    """
-
-    def __init__(self, tokenizer, input_length):
-        """
-        初始化停止条件
-
-        Args:
-            tokenizer: 用于解码的tokenizer
-            input_length: 输入prompt的长度(token数)
-        """
-        self.tokenizer = tokenizer
-        self.input_length = input_length
-        # 需要检测的关键标签
-        self.labels = [
-            "Definition:",
-            "Emphasis & Caution:",
-            "Emphasis and Caution:",  # 兼容变体
-            "Things to Avoid:"
-        ]
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
-        """
-        检查是否应该停止生成
-
-        Args:
-            input_ids: 当前生成的token序列(包含prompt+生成)
-            scores: 当前的分数
-
-        Returns:
-            bool: True表示停止，False表示继续
-        """
-        # 只解码生成的部分，跳过prompt
-        generated_ids = input_ids[0][self.input_length:]
-        generated_text = self.tokenizer.decode(generated_ids, skip_special_tokens=False)
-
-        # 检查生成部分是否包含所有三个标签
-        has_definition = "Definition:" in generated_text
-        has_emphasis = "Emphasis & Caution:" in generated_text or "Emphasis and Caution:" in generated_text
-        has_avoid = "Things to Avoid:" in generated_text
-
-        # 如果找到完整的三段式结构
-        if has_definition and has_emphasis and has_avoid:
-            # 检查Things to Avoid后是否有完整的句子
-            avoid_idx = generated_text.rfind("Things to Avoid:")
-
-            if avoid_idx != -1:
-                after_avoid = generated_text[avoid_idx + len("Things to Avoid:"):].strip()
-
-                # 检查是否为显式的"-"标记（表示无内容）
-                if after_avoid.startswith('-'):
-                    # 检查"-"后是否有换行或其他内容
-                    if '\n' in after_avoid or len(after_avoid) > 10:
-                        logger.debug("[StoppingCriteria] 检测到完整三段式指令（Things to Avoid为-），停止生成")
-                        return True
-                else:
-                    # 不是"-"，需要检查是否有完整的句子结尾
-                    # 必须以句号、问号或感叹号结尾
-                    if any(after_avoid.endswith(punct) for punct in ['.', '!', '?']):
-                        # 额外检查：确保句子有一定长度，避免误判
-                        if len(after_avoid.strip()) >= 5:
-                            logger.debug("[StoppingCriteria] 检测到完整三段式指令（Things to Avoid有完整句子），停止生成")
-                            return True
-                    # 或者检测到换行符（表示下一段开始）
-                    elif '\n' in after_avoid and len(after_avoid.strip()) >= 5:
-                        logger.debug("[StoppingCriteria] 检测到完整三段式指令（Things to Avoid后有换行），停止生成")
-                        return True
-
-        return False
 
 
 class LanguageModel:
@@ -395,12 +314,7 @@ class LanguageModel:
 
             stop_tokens = list(set(stop_tokens))
 
-            # 创建自定义停止条件：检测完整三段式指令（传入input_length）
-            stopping_criteria = StoppingCriteriaList([
-                ThreePartInstructionStoppingCriteria(self.tokenizer, input_length)
-            ])
-
-            # 生成配置
+            # 生成配置（参考vision_model.py，只依靠eos_token_id自然停止）
             generation_config = {
                 "max_new_tokens": max_new_tokens,
                 "temperature": temperature,
@@ -409,8 +323,7 @@ class LanguageModel:
                 "repetition_penalty": repetition_penalty,
                 "do_sample": True if temperature > 0 else False,
                 "pad_token_id": self.tokenizer.pad_token_id,
-                "eos_token_id": stop_tokens,
-                "stopping_criteria": stopping_criteria
+                "eos_token_id": stop_tokens
             }
 
             # 生成文本
