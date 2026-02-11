@@ -39,7 +39,7 @@ class EnhancedMetrics:
         初始化评估指标
 
         Args:
-            use_bertscore: 是否使用BERTScore(需要额外依赖)
+            use_bertscore: 是否使用BERTScore(默认开启，评估语义相似度)
         """
         self.use_bertscore = use_bertscore
 
@@ -50,6 +50,8 @@ class EnhancedMetrics:
         self.bertscore_metric = None
 
         logger.info("初始化增强评估指标模块")
+        if use_bertscore:
+            logger.info("BERTScore已启用（默认）- 用于评估生成指令的语义相似度")
 
     def _lazy_load_metrics(self):
         """延迟加载评估指标(避免import错误)"""
@@ -453,12 +455,229 @@ class EnhancedMetrics:
 
         return stats
 
+    def calculate_binary_classification_metrics(
+        self,
+        predictions: List[str],
+        references: List[str],
+        format_threshold: float = 1.0,
+        semantic_threshold: float = 0.3
+    ) -> Dict[str, Any]:
+        """
+        计算二分类指标：TP, TN, FP, FN
+
+        定义：
+        - 有效指令（正类）= 格式完整 AND 语义相似度达标
+        - 格式完整 = 三段式结构完整（Definition + Emphasis & Caution + Things to Avoid）
+        - 语义相似度达标 = ROUGE-L >= semantic_threshold 或 BERTScore F1 >= 0.6
+
+        分类：
+        - TP (True Positive): 格式正确 + 语义达标
+        - FP (False Positive): 格式正确 + 语义不达标（生成了错误的指令）
+        - FN (False Negative): 格式不正确 或 语义不达标
+        - TN (True Negative): 在当前场景中不适用（所有输入都需要生成指令）
+
+        Args:
+            predictions: 生成的指令列表
+            references: 参考指令列表
+            format_threshold: 格式分数阈值（默认1.0，即完全正确）
+            semantic_threshold: 语义相似度阈值（ROUGE-L，默认0.3）
+
+        Returns:
+            dict: 包含TP, FP, FN, TN, Precision, Recall, F1, Accuracy的字典
+        """
+        logger.info(f"计算二分类指标 - 样本数: {len(predictions)}")
+        logger.info(f"格式阈值: {format_threshold}, 语义阈值: {semantic_threshold}")
+
+        if len(predictions) != len(references):
+            raise ValueError(
+                f"预测和参考数量不匹配: {len(predictions)} vs {len(references)}"
+            )
+
+        # 计算格式指标
+        format_results = self.calculate_format_metrics(predictions)
+
+        # 计算ROUGE-L分数（用于语义相似度）
+        self._lazy_load_metrics()
+        try:
+            rouge_result = self.rouge_metric.compute(
+                predictions=predictions,
+                references=references
+            )
+            rouge_l_scores = []
+            # 获取每个样本的ROUGE-L分数
+            for pred, ref in zip(predictions, references):
+                sample_rouge = self.rouge_metric.compute(
+                    predictions=[pred],
+                    references=[ref]
+                )
+                rouge_l_scores.append(sample_rouge['rougeL'])
+        except Exception as e:
+            logger.error(f"ROUGE-L计算失败: {e}")
+            rouge_l_scores = [0.0] * len(predictions)
+
+        # 可选：使用BERTScore作为额外的语义相似度指标
+        bertscore_f1_scores = []
+        if self.use_bertscore and self.bertscore_metric is not None:
+            try:
+                logger.info("使用BERTScore计算语义相似度...")
+                bertscore_result = self.bertscore_metric.compute(
+                    predictions=predictions,
+                    references=references,
+                    lang='en'
+                )
+                bertscore_f1_scores = bertscore_result['f1']
+                logger.info(f"BERTScore F1平均值: {sum(bertscore_f1_scores)/len(bertscore_f1_scores):.4f}")
+            except Exception as e:
+                logger.error(f"BERTScore计算失败: {e}")
+                bertscore_f1_scores = [0.0] * len(predictions)
+
+        # 计算每个样本的分类
+        tp = 0  # True Positive
+        fp = 0  # False Positive
+        fn = 0  # False Negative
+        tn = 0  # True Negative (在当前场景中为0)
+
+        valid_samples = []  # 记录TP样本索引
+        invalid_samples = []  # 记录FP/FN样本索引
+
+        for i, (pred, ref) in enumerate(zip(predictions, references)):
+            # 检查格式完整性
+            format_check = self._check_single_format(pred)
+            is_format_valid = (
+                format_check['has_definition'] and
+                format_check['has_emphasis'] and
+                format_check['has_avoid'] and
+                format_check['format_score'] >= format_threshold
+            )
+
+            # 检查语义相似度
+            rouge_l_score = rouge_l_scores[i]
+            is_semantic_valid = rouge_l_score >= semantic_threshold
+
+            # 如果有BERTScore，使用更严格的条件
+            if bertscore_f1_scores:
+                bertscore_f1 = bertscore_f1_scores[i]
+                is_semantic_valid = is_semantic_valid or bertscore_f1 >= 0.6
+
+            # 分类逻辑
+            if is_format_valid and is_semantic_valid:
+                tp += 1
+                valid_samples.append(i)
+            elif is_format_valid and not is_semantic_valid:
+                fp += 1
+                invalid_samples.append(i)
+            else:
+                fn += 1
+                invalid_samples.append(i)
+
+        # 计算派生指标
+        total = len(predictions)
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+        accuracy = (tp + tn) / total if total > 0 else 0.0
+
+        results = {
+            # 基础分类指标
+            'TP': tp,
+            'FP': fp,
+            'FN': fn,
+            'TN': tn,
+
+            # 派生指标
+            'precision': precision,
+            'recall': recall,
+            'f1_score': f1_score,
+            'accuracy': accuracy,
+
+            # 元数据
+            'total_samples': total,
+            'valid_samples': valid_samples,
+            'invalid_samples': invalid_samples,
+
+            # 阈值信息
+            'format_threshold': format_threshold,
+            'semantic_threshold': semantic_threshold,
+            'use_bertscore': self.use_bertscore and len(bertscore_f1_scores) > 0
+        }
+
+        logger.info(f"二分类指标计算完成:")
+        logger.info(f"  TP: {tp}, FP: {fp}, FN: {fn}, TN: {tn}")
+        logger.info(f"  Precision: {precision:.4f}, Recall: {recall:.4f}")
+        logger.info(f"  F1 Score: {f1_score:.4f}, Accuracy: {accuracy:.4f}")
+
+        return results
+
+    def _check_single_format(self, instruction: str) -> Dict[str, Any]:
+        """
+        检查单个指令的格式
+
+        Args:
+            instruction: 指令文本
+
+        Returns:
+            dict: 格式检查结果
+        """
+        import re
+
+        result = {
+            'has_definition': False,
+            'has_emphasis': False,
+            'has_avoid': False,
+            'definition_has_content': False,
+            'emphasis_valid': False,
+            'avoid_valid': False,
+            'format_score': 0.0
+        }
+
+        if not instruction or len(instruction.strip()) < 10:
+            return result
+
+        lines = [line.strip() for line in instruction.strip().split('\n') if line.strip()]
+
+        for line in lines:
+            # Definition检查
+            if line.startswith('Definition:'):
+                result['has_definition'] = True
+                content = line[len('Definition:'):].strip()
+                if content and content != '-':
+                    result['definition_has_content'] = True
+
+            # Emphasis检查
+            elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
+                result['has_emphasis'] = True
+                prefix_len = len('Emphasis & Caution:') if 'Emphasis & Caution:' in line else len('Emphasis and Caution:')
+                content = line[prefix_len:].strip()
+                if content:
+                    result['emphasis_valid'] = True
+
+            # Avoid检查
+            elif line.startswith('Things to Avoid:'):
+                result['has_avoid'] = True
+                content = line[len('Things to Avoid:'):].strip()
+                if content:
+                    result['avoid_valid'] = True
+
+        # 计算格式分数
+        score = 0.0
+        if result['definition_has_content']:
+            score += 0.4
+        if result['has_emphasis']:
+            score += 0.3
+        if result['has_avoid']:
+            score += 0.3
+
+        result['format_score'] = score
+
+        return result
+
     def generate_comprehensive_report(
         self,
         predictions: List[str],
         references: List[str],
         expert_usage: Optional[Dict[str, int]] = None,
-        save_path: Optional[str] = None
+        save_path: Optional[str] = None,
+        include_binary_metrics: bool = True
     ) -> Dict[str, Any]:
         """
         生成综合评估报告
@@ -468,6 +687,7 @@ class EnhancedMetrics:
             references: 参考指令列表
             expert_usage: 专家使用统计
             save_path: 保存路径(可选)
+            include_binary_metrics: 是否包含二分类指标（默认True）
 
         Returns:
             dict: 综合评估报告
@@ -484,17 +704,26 @@ class EnhancedMetrics:
         }
 
         # 1. 生成质量指标
-        logger.info("\n[1/3] 计算生成质量指标...")
+        logger.info("\n[1/4] 计算生成质量指标...")
         report['generation_quality'] = self.calculate_generation_quality(
             predictions, references
         )
 
         # 2. 格式指标
-        logger.info("\n[2/3] 计算格式指标...")
+        logger.info("\n[2/4] 计算格式指标...")
         report['format_metrics'] = self.calculate_format_metrics(predictions)
 
-        # 3. 统计指标
-        logger.info("\n[3/3] 计算统计指标...")
+        # 3. 二分类指标（TP/TN/FP/FN）
+        if include_binary_metrics:
+            logger.info("\n[3/4] 计算二分类指标（TP/TN/FP/FN）...")
+            report['binary_classification'] = self.calculate_binary_classification_metrics(
+                predictions, references
+            )
+        else:
+            logger.info("\n[3/4] 跳过二分类指标计算")
+
+        # 4. 统计指标
+        logger.info("\n[4/4] 计算统计指标...")
         report['statistical_metrics'] = self.calculate_statistical_metrics(
             predictions, expert_usage
         )
@@ -553,7 +782,9 @@ class EnhancedMetrics:
         print(f"  ROUGE-L:   {quality['rougeL']:.4f}")
         print(f"  METEOR:    {quality['meteor']:.4f}")
         if 'bertscore_f1' in quality:
-            print(f"  BERTScore: {quality['bertscore_f1']:.4f}")
+            print(f"  BERTScore P: {quality['bertscore_precision']:.4f}")
+            print(f"  BERTScore R: {quality['bertscore_recall']:.4f}")
+            print(f"  BERTScore F1: {quality['bertscore_f1']:.4f}")
 
         # 格式指标
         print("\n[格式指标]")
@@ -563,6 +794,20 @@ class EnhancedMetrics:
         print(f"  Definition有效: {format_m['definition_has_content']:.2%}")
         print(f"  Emphasis有效:   {format_m['emphasis_valid']:.2%}")
         print(f"  Avoid有效:      {format_m['avoid_valid']:.2%}")
+
+        # 二分类指标
+        if 'binary_classification' in report:
+            print("\n[二分类指标 (TP/TN/FP/FN)]")
+            binary = report['binary_classification']
+            print(f"  TP (True Positive):  {binary['TP']:4d}  - 格式正确且语义达标")
+            print(f"  FP (False Positive): {binary['FP']:4d}  - 格式正确但语义不达标")
+            print(f"  FN (False Negative): {binary['FN']:4d}  - 格式错误或语义不达标")
+            print(f"  TN (True Negative):  {binary['TN']:4d}  - 不适用")
+            print(f"  ---")
+            print(f"  Precision (精确率): {binary['precision']:.4f}")
+            print(f"  Recall (召回率):    {binary['recall']:.4f}")
+            print(f"  F1 Score:           {binary['f1_score']:.4f}")
+            print(f"  Accuracy (准确率):  {binary['accuracy']:.4f}")
 
         # 统计指标
         print("\n[统计指标]")
@@ -584,8 +829,8 @@ if __name__ == "__main__":
     print("增强评估指标模块测试")
     print("=" * 60)
 
-    # 创建评估器
-    metrics = EnhancedMetrics(use_bertscore=False)
+    # 创建评估器（默认开启BERTScore）
+    metrics = EnhancedMetrics(use_bertscore=True)
 
     # 测试数据
     predictions = [
@@ -613,6 +858,8 @@ if __name__ == "__main__":
         print(f"BLEU: {quality_results['bleu']:.4f}")
         print(f"ROUGE-L: {quality_results['rougeL']:.4f}")
         print(f"METEOR: {quality_results['meteor']:.4f}")
+        if 'bertscore_f1' in quality_results:
+            print(f"BERTScore F1: {quality_results['bertscore_f1']:.4f}")
     except Exception as e:
         print(f"生成质量指标计算失败(可能缺少依赖): {e}")
 
@@ -622,5 +869,19 @@ if __name__ == "__main__":
     stats_results = metrics.calculate_statistical_metrics(predictions, expert_usage)
     print(f"平均字符长度: {stats_results['char_length']['mean']:.1f}")
     print(f"平均单词数: {stats_results['word_count']['mean']:.1f}")
+
+    print("\n测试4: 二分类指标（TP/TN/FP/FN）")
+    print("-" * 60)
+    try:
+        binary_results = metrics.calculate_binary_classification_metrics(
+            predictions, references
+        )
+        print(f"TP: {binary_results['TP']}, FP: {binary_results['FP']}")
+        print(f"FN: {binary_results['FN']}, TN: {binary_results['TN']}")
+        print(f"Precision: {binary_results['precision']:.4f}")
+        print(f"Recall: {binary_results['recall']:.4f}")
+        print(f"F1 Score: {binary_results['f1_score']:.4f}")
+    except Exception as e:
+        print(f"二分类指标计算失败: {e}")
 
     print("\n测试完成!")

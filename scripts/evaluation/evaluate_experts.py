@@ -453,6 +453,12 @@ class ExpertEvaluator:
             instructions=valid_predictions
         )
 
+        # 二分类指标（TP/TN/FP/FN）
+        binary_metrics = self.metrics.calculate_binary_classification_metrics(
+            predictions=valid_predictions,
+            references=valid_references
+        )
+
         # 统计指标
         statistical_metrics = self.metrics.calculate_statistical_metrics(
             instructions=valid_predictions
@@ -471,6 +477,7 @@ class ExpertEvaluator:
             'valid_samples': len(valid_predictions),
             'generation_quality': quality_metrics,
             'format_metrics': format_metrics,
+            'binary_classification': binary_metrics,
             'statistical_metrics': statistical_metrics,
             'validation_summary': validation_summary
         }
@@ -573,9 +580,17 @@ class ExpertEvaluator:
                 'bleu': result['generation_quality'].get('bleu', 0),
                 'rouge_l': result['generation_quality'].get('rougeL', 0),
                 'meteor': result['generation_quality'].get('meteor', 0),
+                'bertscore_f1': result['generation_quality'].get('bertscore_f1', 0),
                 'format_score': result['format_metrics'].get('avg_format_score', 0),
                 'valid_rate': result['format_metrics'].get('valid_rate', 0),
-                'avg_length': result['statistical_metrics']['char_length'].get('mean', 0)
+                'avg_length': result['statistical_metrics']['char_length'].get('mean', 0),
+                # 二分类指标
+                'precision': result.get('binary_classification', {}).get('precision', 0),
+                'recall': result.get('binary_classification', {}).get('recall', 0),
+                'f1_score': result.get('binary_classification', {}).get('f1_score', 0),
+                'tp': result.get('binary_classification', {}).get('TP', 0),
+                'fp': result.get('binary_classification', {}).get('FP', 0),
+                'fn': result.get('binary_classification', {}).get('FN', 0)
             }
 
         return summary
@@ -586,7 +601,8 @@ class ExpertEvaluator:
         print("专家评估对比摘要")
         print("=" * 80)
 
-        print(f"\n{'专家':<30} {'BLEU':<10} {'ROUGE-L':<10} {'METEOR':<10} {'格式分数':<10} {'通过率':<10}")
+        # 生成质量指标
+        print(f"\n{'专家':<20} {'BLEU':<10} {'ROUGE-L':<10} {'METEOR':<10} {'BERTScore':<10}")
         print("-" * 80)
 
         for expert_name, result in results.items():
@@ -596,11 +612,40 @@ class ExpertEvaluator:
             bleu = result['generation_quality'].get('bleu', 0)
             rouge_l = result['generation_quality'].get('rougeL', 0)
             meteor = result['generation_quality'].get('meteor', 0)
+            bertscore = result['generation_quality'].get('bertscore_f1', 0)
+
+            print(f"{expert_name:<20} {bleu:<10.4f} {rouge_l:<10.4f} {meteor:<10.4f} {bertscore:<10.4f}")
+
+        # 格式指标
+        print(f"\n{'专家':<20} {'格式分数':<12} {'通过率':<12}")
+        print("-" * 80)
+
+        for expert_name, result in results.items():
+            if not result:
+                continue
+
             format_score = result['format_metrics'].get('avg_format_score', 0)
             valid_rate = result['format_metrics'].get('valid_rate', 0)
 
-            print(
-                f"{expert_name:<30} {bleu:<10.4f} {rouge_l:<10.4f} {meteor:<10.4f} {format_score:<10.4f} {valid_rate:<10.2%}")
+            print(f"{expert_name:<20} {format_score:<12.4f} {valid_rate:<12.2%}")
+
+        # 二分类指标
+        print(f"\n{'专家':<20} {'Precision':<12} {'Recall':<12} {'F1 Score':<12} {'TP':<6} {'FP':<6} {'FN':<6}")
+        print("-" * 80)
+
+        for expert_name, result in results.items():
+            if not result:
+                continue
+
+            binary = result.get('binary_classification', {})
+            precision = binary.get('precision', 0)
+            recall = binary.get('recall', 0)
+            f1 = binary.get('f1_score', 0)
+            tp = binary.get('TP', 0)
+            fp = binary.get('FP', 0)
+            fn = binary.get('FN', 0)
+
+            print(f"{expert_name:<20} {precision:<12.4f} {recall:<12.4f} {f1:<12.4f} {tp:<6d} {fp:<6d} {fn:<6d}")
 
         print("=" * 80 + "\n")
 
@@ -615,8 +660,10 @@ def main():
                         help='测试模式:每个数据集只使用10条数据快速验证流程')
     parser.add_argument('--show-samples', action='store_true',
                         help='显示测试数据样本(前5条)')
-    parser.add_argument('--use-bertscore', action='store_true',
-                        help='使用BERTScore(计算较慢)')
+    parser.add_argument('--use-bertscore', action='store_true', default=True,
+                        help='使用BERTScore评估语义相似度（默认启用）')
+    parser.add_argument('--no-bertscore', dest='use_bertscore', action='store_false',
+                        help='禁用BERTScore（加快评估速度）')
     parser.add_argument('--strict-validation', action='store_true',
                         help='使用严格的格式验证')
     parser.add_argument('--save-dir', type=str, default=None,

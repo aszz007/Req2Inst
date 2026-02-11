@@ -95,15 +95,30 @@ class ThreePartInstructionStoppingCriteria(StoppingCriteria):
 
         # 如果找到完整的三段式结构
         if has_definition and has_emphasis and has_avoid:
-            # 检查Things to Avoid后是否有句号或足够内容
+            # 检查Things to Avoid后是否有完整的句子
             avoid_idx = generated_text.rfind("Things to Avoid:")
 
             if avoid_idx != -1:
-                after_avoid = generated_text[avoid_idx + len("Things to Avoid:"):]
-                # 检查是否有句号、换行或足够的内容(至少20个字符)
-                if '.' in after_avoid or '\n' in after_avoid or len(after_avoid.strip()) > 20:
-                    logger.debug("[StoppingCriteria] 检测到完整三段式指令，停止生成")
-                    return True
+                after_avoid = generated_text[avoid_idx + len("Things to Avoid:"):].strip()
+
+                # 检查是否为显式的"-"标记（表示无内容）
+                if after_avoid.startswith('-'):
+                    # 检查"-"后是否有换行或其他内容
+                    if '\n' in after_avoid or len(after_avoid) > 10:
+                        logger.debug("[StoppingCriteria] 检测到完整三段式指令（Things to Avoid为-），停止生成")
+                        return True
+                else:
+                    # 不是"-"，需要检查是否有完整的句子结尾
+                    # 必须以句号、问号或感叹号结尾
+                    if any(after_avoid.endswith(punct) for punct in ['.', '!', '?']):
+                        # 额外检查：确保句子有一定长度，避免误判
+                        if len(after_avoid.strip()) >= 5:
+                            logger.debug("[StoppingCriteria] 检测到完整三段式指令（Things to Avoid有完整句子），停止生成")
+                            return True
+                    # 或者检测到换行符（表示下一段开始）
+                    elif '\n' in after_avoid and len(after_avoid.strip()) >= 5:
+                        logger.debug("[StoppingCriteria] 检测到完整三段式指令（Things to Avoid后有换行），停止生成")
+                        return True
 
         return False
 
