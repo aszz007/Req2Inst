@@ -27,6 +27,43 @@ from src.utils.logger import get_logger
 logger = get_logger('metrics.enhanced')
 
 
+class EvaluationThresholds:
+    """评估阈值配置类"""
+
+    # 语义相似度阈值
+    ROUGE_L_THRESHOLD = 0.5  # ROUGE-L阈值，从0.3提高到0.5
+    BERTSCORE_F1_THRESHOLD = 0.85  # BERTScore F1阈值，从0.6提高到0.85
+
+    # 组合逻辑
+    USE_AND_LOGIC = True  # True=AND逻辑(两个都需满足), False=OR逻辑(满足一个即可)
+
+    # 格式分数阈值
+    FORMAT_SCORE_THRESHOLD = 1.0  # 格式分数阈值(0-1)，1.0表示完全正确
+
+    @classmethod
+    def get_config(cls) -> dict:
+        """获取当前配置"""
+        return {
+            'rouge_l_threshold': cls.ROUGE_L_THRESHOLD,
+            'bertscore_f1_threshold': cls.BERTSCORE_F1_THRESHOLD,
+            'use_and_logic': cls.USE_AND_LOGIC,
+            'format_score_threshold': cls.FORMAT_SCORE_THRESHOLD
+        }
+
+    @classmethod
+    def update_config(cls, rouge_l: float = None, bertscore_f1: float = None,
+                     use_and: bool = None, format_score: float = None):
+        """更新配置"""
+        if rouge_l is not None:
+            cls.ROUGE_L_THRESHOLD = rouge_l
+        if bertscore_f1 is not None:
+            cls.BERTSCORE_F1_THRESHOLD = bertscore_f1
+        if use_and is not None:
+            cls.USE_AND_LOGIC = use_and
+        if format_score is not None:
+            cls.FORMAT_SCORE_THRESHOLD = format_score
+
+
 class EnhancedMetrics:
     """
     增强的评估指标系统
@@ -459,8 +496,10 @@ class EnhancedMetrics:
         self,
         predictions: List[str],
         references: List[str],
-        format_threshold: float = 1.0,
-        semantic_threshold: float = 0.3
+        format_threshold: float = None,
+        rouge_threshold: float = None,
+        bertscore_threshold: float = None,
+        use_and_logic: bool = None
     ) -> Dict[str, Any]:
         """
         计算二分类指标：TP, TN, FP, FN
@@ -468,7 +507,7 @@ class EnhancedMetrics:
         定义：
         - 有效指令（正类）= 格式完整 AND 语义相似度达标
         - 格式完整 = 三段式结构完整（Definition + Emphasis & Caution + Things to Avoid）
-        - 语义相似度达标 = ROUGE-L >= semantic_threshold 或 BERTScore F1 >= 0.6
+        - 语义相似度达标 = (ROUGE-L >= rouge_threshold) AND/OR (BERTScore F1 >= bertscore_threshold)
 
         分类：
         - TP (True Positive): 格式正确 + 语义达标
@@ -479,14 +518,30 @@ class EnhancedMetrics:
         Args:
             predictions: 生成的指令列表
             references: 参考指令列表
-            format_threshold: 格式分数阈值（默认1.0，即完全正确）
-            semantic_threshold: 语义相似度阈值（ROUGE-L，默认0.3）
+            format_threshold: 格式分数阈值（默认使用配置值）
+            rouge_threshold: ROUGE-L阈值（默认使用配置值）
+            bertscore_threshold: BERTScore F1阈值（默认使用配置值）
+            use_and_logic: 是否使用AND逻辑组合ROUGE和BERTScore（默认使用配置值）
 
         Returns:
             dict: 包含TP, FP, FN, TN, Precision, Recall, F1, Accuracy的字典
         """
+        # 使用配置的默认值
+        if format_threshold is None:
+            format_threshold = EvaluationThresholds.FORMAT_SCORE_THRESHOLD
+        if rouge_threshold is None:
+            rouge_threshold = EvaluationThresholds.ROUGE_L_THRESHOLD
+        if bertscore_threshold is None:
+            bertscore_threshold = EvaluationThresholds.BERTSCORE_F1_THRESHOLD
+        if use_and_logic is None:
+            use_and_logic = EvaluationThresholds.USE_AND_LOGIC
+
         logger.info(f"计算二分类指标 - 样本数: {len(predictions)}")
-        logger.info(f"格式阈值: {format_threshold}, 语义阈值: {semantic_threshold}")
+        logger.info(f"阈值配置:")
+        logger.info(f"  格式分数阈值: {format_threshold}")
+        logger.info(f"  ROUGE-L阈值: {rouge_threshold}")
+        logger.info(f"  BERTScore F1阈值: {bertscore_threshold}")
+        logger.info(f"  组合逻辑: {'AND (两者都需满足)' if use_and_logic else 'OR (满足一个即可)'}")
 
         if len(predictions) != len(references):
             raise ValueError(
@@ -552,12 +607,21 @@ class EnhancedMetrics:
 
             # 检查语义相似度
             rouge_l_score = rouge_l_scores[i]
-            is_semantic_valid = rouge_l_score >= semantic_threshold
+            rouge_valid = rouge_l_score >= rouge_threshold
 
-            # 如果有BERTScore，使用更严格的条件
+            # 如果有BERTScore，使用配置的组合逻辑
             if bertscore_f1_scores:
                 bertscore_f1 = bertscore_f1_scores[i]
-                is_semantic_valid = is_semantic_valid or bertscore_f1 >= 0.6
+                bertscore_valid = bertscore_f1 >= bertscore_threshold
+
+                # 根据配置使用AND或OR逻辑
+                if use_and_logic:
+                    is_semantic_valid = rouge_valid and bertscore_valid
+                else:
+                    is_semantic_valid = rouge_valid or bertscore_valid
+            else:
+                # 如果没有BERTScore，只使用ROUGE
+                is_semantic_valid = rouge_valid
 
             # 分类逻辑
             if is_format_valid and is_semantic_valid:
@@ -597,13 +661,16 @@ class EnhancedMetrics:
 
             # 阈值信息
             'format_threshold': format_threshold,
-            'semantic_threshold': semantic_threshold,
+            'rouge_threshold': rouge_threshold,
+            'bertscore_threshold': bertscore_threshold,
+            'use_and_logic': use_and_logic,
             'use_bertscore': self.use_bertscore and len(bertscore_f1_scores) > 0
         }
 
         logger.info(f"二分类指标计算完成:")
         logger.info(f"  TP: {tp}, FP: {fp}, FN: {fn}, TN: {tn}")
         logger.info(f"  Precision: {precision:.4f}, Recall: {recall:.4f}")
+        logger.info(f"  F1 Score: {f1_score:.4f}, Accuracy: {accuracy:.4f}")
         logger.info(f"  F1 Score: {f1_score:.4f}, Accuracy: {accuracy:.4f}")
 
         return results

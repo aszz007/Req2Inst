@@ -120,13 +120,15 @@ class ExpertEvaluator:
 
     def evaluate_text_expert(
             self,
-            num_samples: Optional[int] = None
+            num_samples: Optional[int] = None,
+            save_predictions: bool = True
     ) -> Dict:
         """
         评估文本专家
 
         Args:
             num_samples: 使用的样本数(None表示全部)
+            save_predictions: 是否保存预测数据到JSON
 
         Returns:
             dict: 评估结果
@@ -155,6 +157,7 @@ class ExpertEvaluator:
             return {}
 
         # 生成预测
+        inputs = []
         predictions = []
         references = []
 
@@ -162,11 +165,13 @@ class ExpertEvaluator:
             logger.info(f"生成 {i}/{len(test_data)}")
 
             try:
+                inputs.append(item['input'])
                 pred = expert.generate_instruction(item['input'])
                 predictions.append(pred)
                 references.append(item['output'])
             except Exception as e:
                 logger.error(f"生成失败: {e}")
+                inputs.append(item['input'])
                 predictions.append("")
                 references.append(item['output'])
 
@@ -181,20 +186,25 @@ class ExpertEvaluator:
         results = self._evaluate_predictions(
             predictions=predictions,
             references=references,
-            expert_name='text_expert'
+            expert_name='text_expert',
+            inputs=inputs,
+            save_predictions=save_predictions,
+            save_dir=str(self.path_cfg.METRICS_DIR)
         )
 
         return results
 
     def evaluate_image_expert(
             self,
-            num_samples: Optional[int] = None
+            num_samples: Optional[int] = None,
+            save_predictions: bool = True
     ) -> Dict:
         """
         评估图像专家
 
         Args:
             num_samples: 使用的样本数
+            save_predictions: 是否保存预测数据到JSON
 
         Returns:
             dict: 评估结果
@@ -223,6 +233,7 @@ class ExpertEvaluator:
             return {}
 
         # 生成预测
+        inputs = []
         predictions = []
         references = []
 
@@ -230,11 +241,13 @@ class ExpertEvaluator:
             logger.info(f"生成 {i}/{len(test_data)}")
 
             try:
+                inputs.append(item['input'])
                 pred = expert.generate_instruction(item['input'])
                 predictions.append(pred)
                 references.append(item['output'])
             except Exception as e:
                 logger.error(f"生成失败: {e}")
+                inputs.append(item['input'])
                 predictions.append("")
                 references.append(item['output'])
 
@@ -249,20 +262,25 @@ class ExpertEvaluator:
         results = self._evaluate_predictions(
             predictions=predictions,
             references=references,
-            expert_name='image_expert'
+            expert_name='image_expert',
+            inputs=inputs,
+            save_predictions=save_predictions,
+            save_dir=str(self.path_cfg.METRICS_DIR)
         )
 
         return results
 
     def evaluate_uml_expert(
             self,
-            num_samples: Optional[int] = None
+            num_samples: Optional[int] = None,
+            save_predictions: bool = True
     ) -> Dict:
         """
         评估UML专家
 
         Args:
             num_samples: 使用的样本数
+            save_predictions: 是否保存预测数据到JSON
 
         Returns:
             dict: 评估结果
@@ -271,7 +289,7 @@ class ExpertEvaluator:
         logger.info("评估UML专家")
         logger.info("=" * 80)
 
-        # 加载数据集
+        # 加载数据集（只有一个版本：uml_dataset_qwen3_v3.csv）
         loader = UMLDatasetLoader()
         data = loader.load_csv_file()
         _, _, test_data = split_dataset_for_expert(data, 'uml')
@@ -280,6 +298,7 @@ class ExpertEvaluator:
             test_data = test_data[:num_samples]
 
         logger.info(f"测试样本数: {len(test_data)}")
+        logger.info(f"数据集: uml_dataset_qwen3_v3.csv")
 
         # 显示样本数据
         self._display_samples(test_data, "UML Expert")
@@ -291,6 +310,7 @@ class ExpertEvaluator:
             return {}
 
         # 生成预测
+        inputs = []
         predictions = []
         references = []
 
@@ -298,11 +318,13 @@ class ExpertEvaluator:
             logger.info(f"生成 {i}/{len(test_data)}")
 
             try:
+                inputs.append(item['input'])
                 pred = expert.generate_instruction(item['input'])
                 predictions.append(pred)
                 references.append(item['output'])
             except Exception as e:
                 logger.error(f"生成失败: {e}")
+                inputs.append(item['input'])
                 predictions.append("")
                 references.append(item['output'])
 
@@ -317,20 +339,25 @@ class ExpertEvaluator:
         results = self._evaluate_predictions(
             predictions=predictions,
             references=references,
-            expert_name='uml_expert'
+            expert_name='uml_expert',
+            inputs=inputs,
+            save_predictions=save_predictions,
+            save_dir=str(self.path_cfg.METRICS_DIR)
         )
 
         return results
 
     def evaluate_general_expert(
             self,
-            num_samples: Optional[int] = None
+            num_samples: Optional[int] = None,
+            save_predictions: bool = True
     ) -> Dict:
         """
         评估通用专家
 
         Args:
             num_samples: 使用的样本数
+            save_predictions: 是否保存预测数据到JSON
 
         Returns:
             dict: 评估结果
@@ -340,6 +367,7 @@ class ExpertEvaluator:
         logger.info("=" * 80)
 
         # 加载混合数据集(从text、image、uml各取一部分)
+        # 使用uml_dataset_qwen3_v3.csv
         text_loader = TextDatasetLoader()
         image_loader = ImageDatasetLoader()
         uml_loader = UMLDatasetLoader()
@@ -366,6 +394,7 @@ class ExpertEvaluator:
         )
 
         logger.info(f"测试样本数: {len(test_data)} (text: {min_samples}, image: {min_samples}, uml: {min_samples})")
+        logger.info(f"UML数据集: uml_dataset_qwen3_v3.csv")
 
         # 显示样本数据
         self._display_samples(test_data, "General Expert")
@@ -377,6 +406,7 @@ class ExpertEvaluator:
             return {}
 
         # 生成预测
+        inputs = []
         predictions = []
         references = []
 
@@ -384,11 +414,13 @@ class ExpertEvaluator:
             logger.info(f"生成 {i}/{len(test_data)}")
 
             try:
+                inputs.append(item['input'])
                 pred = expert.generate_instruction(item['input'])
                 predictions.append(pred)
                 references.append(item['output'])
             except Exception as e:
                 logger.error(f"生成失败: {e}")
+                inputs.append(item['input'])
                 predictions.append("")
                 references.append(item['output'])
 
@@ -403,7 +435,10 @@ class ExpertEvaluator:
         results = self._evaluate_predictions(
             predictions=predictions,
             references=references,
-            expert_name='general_expert'
+            expert_name='general_expert',
+            inputs=inputs,
+            save_predictions=save_predictions,
+            save_dir=str(self.path_cfg.METRICS_DIR)
         )
 
         return results
@@ -412,7 +447,10 @@ class ExpertEvaluator:
             self,
             predictions: List[str],
             references: List[str],
-            expert_name: str
+            expert_name: str,
+            inputs: Optional[List[str]] = None,
+            save_predictions: bool = False,
+            save_dir: Optional[str] = None
     ) -> Dict:
         """
         评估预测结果
@@ -421,6 +459,9 @@ class ExpertEvaluator:
             predictions: 预测列表
             references: 参考列表
             expert_name: 专家名称
+            inputs: 输入列表（可选，用于保存详细数据）
+            save_predictions: 是否保存预测结果到JSON
+            save_dir: 保存目录
 
         Returns:
             dict: 评估结果
@@ -441,6 +482,16 @@ class ExpertEvaluator:
         valid_references = [pair[1] for pair in valid_pairs]
 
         logger.info(f"有效样本数: {len(valid_predictions)}/{len(predictions)}")
+
+        # 保存详细预测数据（如果需要）
+        if save_predictions and save_dir and inputs:
+            self._save_predictions_json(
+                inputs=inputs,
+                predictions=predictions,
+                references=references,
+                expert_name=expert_name,
+                save_dir=save_dir
+            )
 
         # 生成质量指标
         quality_metrics = self.metrics.calculate_generation_quality(
@@ -483,6 +534,52 @@ class ExpertEvaluator:
         }
 
         return results
+
+    def _save_predictions_json(
+            self,
+            inputs: List[str],
+            predictions: List[str],
+            references: List[str],
+            expert_name: str,
+            save_dir: str
+    ):
+        """
+        保存预测数据到JSON文件，用于后续快速计算指标
+
+        Args:
+            inputs: 输入列表
+            predictions: 预测列表
+            references: 参考列表
+            expert_name: 专家名称
+            save_dir: 保存目录
+        """
+        save_dir = Path(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'{expert_name}_predictions_{timestamp}.json'
+        filepath = save_dir / filename
+
+        data = {
+            'expert_name': expert_name,
+            'timestamp': timestamp,
+            'total_samples': len(inputs),
+            'samples': [
+                {
+                    'index': i,
+                    'input': inp,
+                    'prediction': pred,
+                    'reference': ref
+                }
+                for i, (inp, pred, ref) in enumerate(zip(inputs, predictions, references))
+            ]
+        }
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+        logger.info(f"预测数据已保存至: {filepath}")
+        logger.info(f"可使用 calculate_metrics_from_json.py 脚本快速重新计算指标")
 
     def evaluate_all_experts(
             self,

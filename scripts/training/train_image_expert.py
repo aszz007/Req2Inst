@@ -1,20 +1,20 @@
 """
 图像专家训练脚本
 功能:训练Image Expert,将图像描述转换为标注指令
-环境:qwen_text(transformers==4.32.0)
-基础模型:Qwen-7B-Chat
+环境:instruction_generator(transformers==4.51.0)
+基础模型:Qwen3-8B（默认）
 输出:lora_weights/experts/image_expert/
 
 使用方法:
   # 方法1: 通过环境管理脚本运行(推荐)
   python scripts/run_with_env.py --env text --script scripts/training/train_image_expert.py
 
-  # 方法2: 直接在qwen_text环境中运行
-  conda activate qwen_text
+  # 方法2: 直接在instruction_generator环境中运行
+  conda activate instruction_generator
   python scripts/training/train_image_expert.py
 
 作者:Training System
-日期:2025-02-07(修正版 - 所有Expert统一使用qwen_text环境)
+日期:2025-02-13
 """
 
 import sys
@@ -108,10 +108,10 @@ def validate_environment():
         version = transformers.__version__
         print(f"Transformers版本: {version}")
 
-        # Image Expert应该使用transformers 4.32.0
-        if not version.startswith('4.32'):
-            logger.warning(f"警告:当前transformers版本为{version},推荐使用4.32.x")
-            logger.warning("请确认是否在qwen_text环境中运行")
+        # Image Expert应该使用transformers 4.51.0（Qwen3-8B要求）
+        if not version.startswith('4.51'):
+            logger.warning(f"警告:当前transformers版本为{version},推荐使用4.51.x")
+            logger.warning("请确认是否在instruction_generator环境中运行")
     except ImportError:
         logger.error("未安装transformers库")
         return False

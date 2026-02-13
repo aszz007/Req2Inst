@@ -1,8 +1,8 @@
 """
 通用专家训练脚本
 功能：训练General Expert，作为兜底专家处理各类需求（text + image + uml）
-环境：qwen_text（transformers==4.32.0）
-基础模型：Qwen-7B-Chat
+环境：instruction_generator（transformers==4.51.0）
+基础模型：Qwen3-8B（默认）
 数据集：text_dataset + image_dataset + uml_dataset_qwen3_v3
 输出：lora_weights/experts/general_expert/
 
@@ -10,12 +10,12 @@
   # 方法1: 通过环境管理脚本运行（推荐）
   python scripts/run_with_env.py --env text --script scripts/training/train_general_expert.py
 
-  # 方法2: 直接在qwen_text环境中运行
-  conda activate qwen_text
+  # 方法2: 直接在instruction_generator环境中运行
+  conda activate instruction_generator
   python scripts/training/train_general_expert.py
 
 作者：Training System
-日期：2025-02-11
+日期：2025-02-13
 """
 
 import sys
@@ -116,10 +116,10 @@ def validate_environment():
         version = transformers.__version__
         print(f"Transformers版本: {version}")
 
-        # General Expert应该使用transformers 4.32.0
-        if not version.startswith('4.32'):
-            logger.warning(f"警告：当前transformers版本为{version}，推荐使用4.32.x")
-            logger.warning("请确认是否在qwen_text环境中运行")
+        # General Expert应该使用transformers 4.51.0（Qwen3-8B要求）
+        if not version.startswith('4.51'):
+            logger.warning(f"警告：当前transformers版本为{version}，推荐使用4.51.x")
+            logger.warning("请确认是否在instruction_generator环境中运行")
     except ImportError:
         logger.error("未安装transformers库")
         return False

@@ -3,14 +3,14 @@
 功能:
   - 处理Low_Requirements文本需求
   - 生成三段式众包指令
-  - 使用Qwen-7B-Chat + LoRA微调权重
+  - 使用Qwen3-8B + LoRA微调权重
 
-环境要求: qwen_text
-模型: Qwen-7B-Chat
+环境要求: instruction_generator
+模型: Qwen3-8B（默认）
 训练数据: dataset/text/
 
 作者: Expert System
-日期: 2025-02-03
+日期: 2025-02-13
 """
 
 from pathlib import Path

@@ -4,7 +4,9 @@
   - 支持LoRA权重动态加载/卸载
   - 4bit量化优化
   - 统一的generate接口
-支持模型：Qwen-7B-Chat
+  - 支持Qwen-7B-Chat和Qwen3-8B
+  - 根据模型类型自动选择target_modules
+支持模型：Qwen-7B-Chat（遗留）、Qwen3-8B（默认）
 """
 
 import torch
@@ -33,13 +35,10 @@ import tempfile
 import shutil
 warnings.filterwarnings('ignore')
 
-from config.settings import get_path_config, get_device_config
+from config.settings import get_path_config, get_device_config, get_model_config
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-
 
 
 class LanguageModel:
@@ -56,8 +55,24 @@ class LanguageModel:
         # 获取配置
         path_cfg = get_path_config()
         device_cfg = get_device_config()
+        model_cfg = get_model_config()
 
-        self.model_path = model_path or str(path_cfg.QWEN_7B_CHAT_PATH)
+        # 如果未指定路径，使用配置中的默认模型
+        if model_path is None:
+            self.model_path = str(path_cfg.get_text_model_path())
+            self.model_version = model_cfg.version
+        else:
+            self.model_path = model_path
+            # 根据路径推断模型版本
+            if 'Qwen3-8B' in model_path or 'qwen3-8B' in model_path:
+                self.model_version = 'qwen3_8b'
+            elif 'Qwen-7B-Chat' in model_path or 'qwen-7B-Chat' in model_path:
+                self.model_version = 'qwen7b'
+            else:
+                # 默认假设是 Qwen3-8B
+                self.model_version = 'qwen3_8b'
+                logger.warning(f"无法从路径推断模型版本，假设为 Qwen3-8B: {model_path}")
+
         self.device = device_cfg.get_device()
         self.device_cfg = device_cfg
 
@@ -72,6 +87,7 @@ class LanguageModel:
         self.is_lora_loaded = False    # LoRA加载状态
 
         logger.info(f"初始化语言模型")
+        logger.info(f"模型版本: {self.model_version}")
         logger.info(f"模型路径: {self.model_path}")
         logger.info(f"设备: {self.device}")
         logger.info(f"GPU信息: {device_cfg.get_gpu_info()}")
@@ -125,6 +141,24 @@ class LanguageModel:
         except Exception as e:
             logger.error(f"模型加载失败: {e}")
             raise
+
+    def get_target_modules(self) -> list:
+        """
+        根据模型版本返回适当的LoRA target_modules
+
+        Returns:
+            list: target_modules列表
+        """
+        if self.model_version == 'qwen7b':
+            # Qwen-7B-Chat使用concatenated attention
+            return ["c_attn"]
+        elif self.model_version == 'qwen3_8b':
+            # Qwen3-8B使用标准Transformers架构
+            return ["q_proj", "k_proj", "v_proj", "o_proj"]
+        else:
+            # 默认使用Qwen3-8B的配置
+            logger.warning(f"未知模型版本 {self.model_version}，使用Qwen3-8B的target_modules")
+            return ["q_proj", "k_proj", "v_proj", "o_proj"]
 
     def _clean_lora_config(self, lora_path: Path) -> Optional[Path]:
         """

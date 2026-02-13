@@ -4,17 +4,17 @@
   - 处理图像描述JSON
   - 生成三段式图像标注众包指令
 
-环境要求: qwen_text
-模型: Qwen-7B-Chat(用于指令生成)
+环境要求: instruction_generator
+模型: Qwen3-8B（用于指令生成）
 训练数据: dataset/image/image_dataset.csv (只有1个版本)
 
 说明:
   - Image Expert只有1个,因为图像数据集只有1个版本
-  - 基础模型是Qwen-7B-Chat,不是视觉模型
+  - 基础模型是Qwen3-8B,不是视觉模型
   - 输入是JSON文本描述,不是图像
 
 作者: Expert System
-日期: 2025-02-03
+日期: 2025-02-13
 """
 
 import json

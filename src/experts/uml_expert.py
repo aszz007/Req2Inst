@@ -4,16 +4,16 @@ UML专家 - 将UML用例图JSON转换为业务逻辑实现指令
   - 处理UML用例图JSON数据
   - 生成三段式业务逻辑实现众包指令
 
-环境要求: qwen_text
-模型: Qwen-7B-Chat
+环境要求: instruction_generator
+模型: Qwen3-8B（默认）
 训练数据: dataset/uml/uml_dataset_qwen3_v3.csv
 
 说明:
-  - 基于Qwen-7B-Chat训练
+  - 基于Qwen3-8B训练
   - 使用Qwen3-VL识别的UML数据集
 
 作者: Expert System
-日期: 2025-02-03
+日期: 2025-02-13
 """
 
 import json

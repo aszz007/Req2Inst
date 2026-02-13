@@ -1,23 +1,27 @@
 #!/usr/bin/env python
 """
-批量训练UML和General专家脚本
+批量训练所有专家脚本
 
-功能:自动执行UML Expert和General Expert的训练
-环境:qwen_text(transformers==4.32.0)
-基础模型:Qwen-7B-Chat
+功能:自动执行所有Expert的训练
+环境:instruction_generator(transformers==4.51.0)
+基础模型:Qwen3-8B（默认）
 
-Expert清单(共2个):
-1. UML Expert (uml_dataset_qwen3_v3.csv - 1500条数据)
-2. General Expert (text + image + uml数据集)
+Expert清单(共4个):
+1. Text Expert (text_dataset - 文本需求转众包指令)
+2. Image Expert (image_dataset - 图像描述转标注指令)
+3. UML Expert (uml_dataset_qwen3_v3.csv - 1500条数据)
+4. General Expert (text + image + uml数据集 - 通用兜底专家)
 
 使用方法:
   # 测试模式(快速验证流程,每个Expert仅训练1个epoch)
   python scripts/training/batch_train_all_experts.py --test
 
-  # 完整训练模式(训练UML和General Expert)
+  # 完整训练模式(训练所有4个Expert)
   python scripts/training/batch_train_all_experts.py --all
 
   # 训练特定Expert
+  python scripts/training/batch_train_all_experts.py --expert text
+  python scripts/training/batch_train_all_experts.py --expert image
   python scripts/training/batch_train_all_experts.py --expert uml
   python scripts/training/batch_train_all_experts.py --expert general
 
@@ -25,7 +29,7 @@ Expert清单(共2个):
   python scripts/training/batch_train_all_experts.py --all --resume-from 2
 
 作者:Training System
-日期:2025-02-11
+日期:2025-02-13
 """
 
 import subprocess
@@ -108,11 +112,27 @@ class TrainingTask:
 
 
 def create_all_tasks() -> List[TrainingTask]:
-    """创建训练任务（UML和General专家）"""
+    """创建训练任务（所有4个专家）"""
     tasks = []
     task_id = 1
 
-    # 任务1: UML Expert
+    # 任务1: Text Expert
+    tasks.append(TrainingTask(
+        task_id=task_id,
+        expert_type='text',
+        description="文本需求转众包指令专家(text_dataset)"
+    ))
+    task_id += 1
+
+    # 任务2: Image Expert
+    tasks.append(TrainingTask(
+        task_id=task_id,
+        expert_type='image',
+        description="图像描述转标注指令专家(image_dataset)"
+    ))
+    task_id += 1
+
+    # 任务3: UML Expert
     tasks.append(TrainingTask(
         task_id=task_id,
         expert_type='uml',
@@ -120,7 +140,7 @@ def create_all_tasks() -> List[TrainingTask]:
     ))
     task_id += 1
 
-    # 任务2: General Expert
+    # 任务4: General Expert
     tasks.append(TrainingTask(
         task_id=task_id,
         expert_type='general',
@@ -142,7 +162,7 @@ def run_task(task: TrainingTask, test_mode: bool = False) -> bool:
     Returns:
         bool: 训练是否成功
     """
-    print_header(f"训练任务 {task.task_id}/8: {task.description}")
+    print_header(f"训练任务 {task.task_id}/4: {task.description}")
     print_info(str(task))
 
     if not task.script_path.exists():
@@ -233,20 +253,20 @@ def print_summary(results: List[Dict]):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='批量训练UML和General Expert')
+    parser = argparse.ArgumentParser(description='批量训练所有Expert')
 
     # 训练模式
     mode_group = parser.add_mutually_exclusive_group(required=True)
     mode_group.add_argument('--test', action='store_true',
                             help='测试模式:每个Expert仅训练1个epoch,快速验证流程')
     mode_group.add_argument('--all', action='store_true',
-                            help='完整训练模式:训练UML和General Expert')
-    mode_group.add_argument('--expert', type=str, choices=['uml', 'general'],
+                            help='完整训练模式:训练所有4个Expert')
+    mode_group.add_argument('--expert', type=str, choices=['text', 'image', 'uml', 'general'],
                             help='仅训练指定类型的Expert')
 
     # 其他选项
     parser.add_argument('--resume-from', type=int, metavar='N',
-                        help='从第N个任务继续训练(1-2)')
+                        help='从第N个任务继续训练(1-4)')
 
     args = parser.parse_args()
 

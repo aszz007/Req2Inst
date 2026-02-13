@@ -5,16 +5,16 @@
   - 生成三段式众包指令
   - 作为其他专家的兜底方案
 
-环境要求: qwen_text
-模型: Qwen-7B-Chat
+环境要求: instruction_generator
+模型: Qwen3-8B（默认）
 训练数据: dataset/ (text + image + uml混合)
 
 说明:
-  - 基于Qwen-7B-Chat训练
+  - 基于Qwen3-8B训练
   - 混合数据: text(全部) + image(全部) + UML(全部)
 
 作者: Expert System
-日期: 2025-02-03
+日期: 2025-02-13
 """
 
 import json

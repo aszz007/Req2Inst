@@ -4,11 +4,11 @@
   - 统一的专家接口定义
   - LoRA权重管理
   - 指令生成和验证
-  - 支持多模型版本
+  - 支持Qwen3-8B（默认）和Qwen-7B-Chat（遗留）
 
 作者: Expert System
-日期: 2025-01-30
-更新: 2025-02-03 - 支持版本参数和路径配置
+日期: 2025-02-13
+更新: 支持Qwen3-8B作为默认模型
 """
 
 from abc import ABC, abstractmethod
