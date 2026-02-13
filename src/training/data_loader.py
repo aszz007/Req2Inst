@@ -143,25 +143,103 @@ class InstructionDataset(Dataset):
         # 注意:input_text已经包含了完整的prompt格式,直接拼接output即可
         full_text = f"{input_text}{output_text}"
 
-        # Tokenize
+        # Tokenize完整序列，不padding - padding由InstructionDataCollator在batch级别完成
         encodings = self.tokenizer(
             full_text,
             truncation=True,
             max_length=self.max_length,
-            padding='max_length',
+            padding=False,
+            return_tensors='pt'
+        )
+
+        # 单独tokenize prompt以获取其token长度，用于label masking
+        prompt_encodings = self.tokenizer(
+            input_text,
+            truncation=True,
+            max_length=self.max_length,
+            padding=False,
             return_tensors='pt'
         )
 
         input_ids = encodings['input_ids'].squeeze()
         attention_mask = encodings['attention_mask'].squeeze()
 
-        # Labels与input_ids相同(用于因果语言建模)
+        # Labels = input_ids，但将prompt部分设为-100，仅对output（指令生成部分）计算loss
         labels = input_ids.clone()
+        prompt_len = min(prompt_encodings['input_ids'].shape[1], labels.shape[0])
+        labels[:prompt_len] = -100
 
         return {
             'input_ids': input_ids,
             'attention_mask': attention_mask,
             'labels': labels
+        }
+
+
+class InstructionDataCollator:
+    """
+    自定义数据收集器，将batch中的序列动态padding到该batch最长长度。
+
+    相较于DataCollatorForLanguageModeling的优势：
+    1. 保留已设置的-100 label masking（不覆盖prompt部分的掩码）
+    2. 每个batch仅padding到当前batch最长序列，减少无效计算
+    3. padding tokens的label设为-100，不参与loss计算
+    """
+
+    def __init__(self, tokenizer, pad_to_multiple_of: int = None):
+        """
+        Args:
+            tokenizer: 分词器（用于获取pad_token_id）
+            pad_to_multiple_of: 若指定，则将序列长度padding到该值的倍数（可提升GPU计算效率）
+        """
+        self.tokenizer = tokenizer
+        self.pad_to_multiple_of = pad_to_multiple_of
+
+    def __call__(self, features):
+        max_length = max(len(f['input_ids']) for f in features)
+
+        if self.pad_to_multiple_of:
+            max_length = (
+                (max_length + self.pad_to_multiple_of - 1)
+                // self.pad_to_multiple_of
+                * self.pad_to_multiple_of
+            )
+
+        pad_token_id = self.tokenizer.pad_token_id
+
+        batch_input_ids = []
+        batch_attention_mask = []
+        batch_labels = []
+
+        for feature in features:
+            input_ids = feature['input_ids']
+            attention_mask = feature['attention_mask']
+            labels = feature['labels']
+
+            pad_len = max_length - len(input_ids)
+
+            # padding：input_ids用pad_token_id，attention_mask用0，labels用-100
+            input_ids = torch.cat([
+                input_ids,
+                torch.full((pad_len,), pad_token_id, dtype=input_ids.dtype)
+            ])
+            attention_mask = torch.cat([
+                attention_mask,
+                torch.zeros(pad_len, dtype=attention_mask.dtype)
+            ])
+            labels = torch.cat([
+                labels,
+                torch.full((pad_len,), -100, dtype=labels.dtype)
+            ])
+
+            batch_input_ids.append(input_ids)
+            batch_attention_mask.append(attention_mask)
+            batch_labels.append(labels)
+
+        return {
+            'input_ids': torch.stack(batch_input_ids),
+            'attention_mask': torch.stack(batch_attention_mask),
+            'labels': torch.stack(batch_labels),
         }
 
 

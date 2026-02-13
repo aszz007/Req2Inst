@@ -22,7 +22,6 @@ from transformers import (
     AutoTokenizer,
     TrainingArguments,
     Trainer,
-    DataCollatorForLanguageModeling,
     BitsAndBytesConfig,
     TrainerCallback,
     EarlyStoppingCallback
@@ -69,6 +68,7 @@ from src.training.data_loader import (
     UMLDatasetLoader,
     GeneralDatasetLoader,
     InstructionDataset,
+    InstructionDataCollator,
     split_dataset_for_expert
 )
 from src.utils.logger import get_logger
@@ -163,7 +163,8 @@ class ExpertTrainer:
                  base_model_path: Optional[str] = None,
                  output_dir: Optional[str] = None,
                  use_4bit: bool = True,
-                 use_rtx4090_optimization: bool = True):
+                 use_rtx4090_optimization: bool = True,
+                 debug_samples: bool = True):
         """
         初始化训练器
 
@@ -173,6 +174,7 @@ class ExpertTrainer:
             output_dir: 输出目录（None则从配置获取）
             use_4bit: 是否使用4bit量化训练
             use_rtx4090_optimization: 是否启用RTX 4090优化
+            debug_samples: 是否在训练开始前打印前5个训练样本（默认开启）
         """
         # 验证专家类型
         valid_types = ['text', 'image', 'uml', 'general']
@@ -182,6 +184,7 @@ class ExpertTrainer:
         self.expert_type = expert_type
         self.use_4bit = use_4bit
         self.use_rtx4090_optimization = use_rtx4090_optimization
+        self.debug_samples = debug_samples
 
         # 获取配置
         self.path_cfg = get_path_config()
@@ -417,9 +420,15 @@ class ExpertTrainer:
             # 4bit量化配置
             if self.use_4bit and self.device_cfg.device == "cuda":
                 logger.info("使用4bit量化训练")
+                # RTX 4090优化时使用BF16 compute dtype，与训练精度保持一致
+                compute_dtype = (
+                    torch.bfloat16
+                    if self.use_rtx4090_optimization
+                    else torch.float16
+                )
                 quantization_config = BitsAndBytesConfig(
                     load_in_4bit=True,
-                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_compute_dtype=compute_dtype,
                     bnb_4bit_use_double_quant=True,
                     bnb_4bit_quant_type="nf4"
                 )
@@ -441,9 +450,14 @@ class ExpertTrainer:
                 low_cpu_mem_usage=True
             )
 
-            # 为4bit训练准备模型
+            # 为4bit训练准备模型，同时启用gradient checkpointing支持
             if self.use_4bit:
-                self.model = prepare_model_for_kbit_training(self.model)
+                self.model = prepare_model_for_kbit_training(
+                    self.model,
+                    use_gradient_checkpointing=True
+                )
+            # 启用input requires_grad，确保gradient checkpointing与LoRA适配层兼容
+            self.model.enable_input_require_grads()
 
             # 配置LoRA
             logger.info("配置LoRA参数...")
@@ -599,14 +613,13 @@ class ExpertTrainer:
                 "logging_dir": str(self.path_cfg.TRAINING_LOGS_DIR / f"{self.expert_type}_expert"),
                 "logging_steps": logging_steps,
                 "save_strategy": save_strategy_value,
-                "save_steps": save_steps if save_strategy_value == "steps" else None,
                 "save_total_limit": 3,
                 "load_best_model_at_end": True,
                 "metric_for_best_model": "eval_loss",
                 "greater_is_better": False,
 
-                # 显存优化选项 - 禁用gradient checkpointing以避免与LoRA的兼容性问题
-                "gradient_checkpointing": False,
+                # 显存优化选项 - 通过enable_input_require_grads()确保LoRA兼容性
+                "gradient_checkpointing": True,
 
                 # 4090优化选项
                 "bf16": True if self.use_rtx4090_optimization and self.device_cfg.device == "cuda" else False,
@@ -619,15 +632,20 @@ class ExpertTrainer:
                 "fp16": False if self.use_rtx4090_optimization else (True if self.device_cfg.device == "cuda" else False),
                 "report_to": "none",
                 "remove_unused_columns": False,
+                "seed": self.train_cfg.seed,
             }
 
             # 根据transformers版本选择正确的参数名
             if use_eval_strategy:
                 training_args_dict["eval_strategy"] = eval_strategy_value
-                training_args_dict["eval_steps"] = eval_steps if eval_strategy_value == "steps" else None
             else:
                 training_args_dict["evaluation_strategy"] = eval_strategy_value
-                training_args_dict["eval_steps"] = eval_steps if eval_strategy_value == "steps" else None
+
+            # 仅在steps策略时设置具体步数，避免传入None导致部分版本报错
+            if eval_strategy_value == "steps":
+                training_args_dict["eval_steps"] = eval_steps
+            if save_strategy_value == "steps":
+                training_args_dict["save_steps"] = save_steps
 
             training_args = TrainingArguments(**training_args_dict)
 
@@ -638,7 +656,7 @@ class ExpertTrainer:
                 logger.info("  ✓ BF16混合精度训练")
                 logger.info("  ✓ TF32加速")
                 logger.info("  ✓ Fused AdamW优化器")
-                logger.info("  ✓ Gradient checkpointing: False (已禁用以避免LoRA兼容性问题)")
+                logger.info("  ✓ Gradient checkpointing: True (通过enable_input_require_grads确保LoRA兼容)")
 
                 if self.use_4bit:
                     logger.info("  ✓ 4bit量化配置 (QLoRA标准方案):")
@@ -655,43 +673,44 @@ class ExpertTrainer:
                 logger.info("  ✓ 预取因子: 2")
                 logger.info("=" * 60)
 
-            # 数据收集器
-            data_collator = DataCollatorForLanguageModeling(
+            # 数据收集器 - 动态padding并保留label masking
+            data_collator = InstructionDataCollator(
                 tokenizer=self.tokenizer,
-                mlm=False  # 因果语言建模
+                pad_to_multiple_of=8
             )
 
-            # ===== 调试输出：打印前5个训练样本的完整prompt =====
-            logger.info("=" * 80)
-            logger.info("[训练数据调试] 前5个训练样本的完整内容:")
-            logger.info("=" * 80)
+            # ===== 调试输出：打印前5个训练样本的完整prompt（可通过debug_samples=False关闭）=====
+            if self.debug_samples:
+                logger.info("=" * 80)
+                logger.info("[训练数据调试] 前5个训练样本的完整内容:")
+                logger.info("=" * 80)
 
-            num_samples_to_show = min(5, len(self.train_data))
-            for i in range(num_samples_to_show):
-                sample = self.train_data[i]
-                logger.info(f"\n[样本 {i+1}/{num_samples_to_show}]")
-                logger.info("-" * 80)
+                num_samples_to_show = min(5, len(self.train_data))
+                for i in range(num_samples_to_show):
+                    sample = self.train_data[i]
+                    logger.info(f"\n[样本 {i+1}/{num_samples_to_show}]")
+                    logger.info("-" * 80)
 
-                # 打印完整的input
-                if 'input' in sample:
-                    input_data = sample['input']
-                    logger.info(f"Input (完整):\n{input_data}")
+                    # 打印完整的input
+                    if 'input' in sample:
+                        input_data = sample['input']
+                        logger.info(f"Input (完整):\n{input_data}")
 
-                # 打印完整的input_with_prompt
-                if 'input_with_prompt' in sample:
-                    prompt = sample['input_with_prompt']
-                    logger.info(f"\nPrompt (完整, {len(prompt)}字符):\n{prompt}")
+                    # 打印完整的input_with_prompt
+                    if 'input_with_prompt' in sample:
+                        prompt = sample['input_with_prompt']
+                        logger.info(f"\nPrompt (完整, {len(prompt)}字符):\n{prompt}")
 
-                # 打印完整的output
-                if 'output' in sample:
-                    output_data = sample['output']
-                    logger.info(f"\nOutput (完整):\n{output_data}")
+                    # 打印完整的output
+                    if 'output' in sample:
+                        output_data = sample['output']
+                        logger.info(f"\nOutput (完整):\n{output_data}")
 
-                logger.info("-" * 80)
+                    logger.info("-" * 80)
 
-            logger.info("=" * 80)
-            logger.info("[调试输出结束] 请检查上述样本的prompt是否包含完整JSON结构")
-            logger.info("=" * 80)
+                logger.info("=" * 80)
+                logger.info("[调试输出结束] 请检查上述样本的prompt是否包含完整JSON结构")
+                logger.info("=" * 80)
             # ===== 调试输出结束 =====
 
             # 创建Trainer

@@ -185,12 +185,16 @@ Task: Generate a UML diagram analysis instruction for crowdsourcing workers.
 
 {GeneralInstructionTemplate.FORMAT_INSTRUCTIONS}"""
 
-        # 构建完整的Qwen格式prompt
+        # 构建完整的Qwen格式prompt（assistant部分使用空think块禁用Qwen3思考模式）
         prompt = f"""<|im_start|>system
 {GeneralInstructionTemplate.SYSTEM_PROMPT}<|im_end|>
 <|im_start|>user
 {user_message}<|im_end|>
 <|im_start|>assistant
+<think>
+
+</think>
+
 """
 
         return prompt

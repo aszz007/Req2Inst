@@ -106,9 +106,14 @@ def validate_environment():
         print(f"Transformers版本: {tf_version}")
 
         # UML Expert应该使用transformers 4.51.0（Qwen3-8B要求）
-        if not tf_version.startswith('4.51'):
-            logger.warning(f"警告:当前transformers版本为{tf_version},推荐使用4.51.x")
-            logger.warning("请确认是否在instruction_generator环境中运行")
+        try:
+            v_parts = tf_version.split('.')
+            major, minor = int(v_parts[0]), int(v_parts[1])
+            if not (major > 4 or (major == 4 and minor >= 51)):
+                logger.warning(f"警告:当前transformers版本为{tf_version},推荐使用>=4.51.0")
+                logger.warning("请确认是否在instruction_generator环境中运行")
+        except (ValueError, IndexError):
+            logger.warning(f"无法解析transformers版本: {tf_version}")
 
     except ImportError:
         logger.error("未安装transformers库")

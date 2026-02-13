@@ -8,9 +8,13 @@ from .data_loader import (
     TextDatasetLoader,
     ImageDatasetLoader,
     UMLDatasetLoader,
+    GeneralDatasetLoader,
 
     # 数据集类
     InstructionDataset,
+
+    # 数据收集器
+    InstructionDataCollator,
 
     # 工具函数
     split_dataset,
@@ -18,17 +22,20 @@ from .data_loader import (
     create_dataloader,
 )
 
-# 待实现的训练器导入（阶段3会用到）
-# from .expert_trainer import ExpertTrainer
+from .expert_trainer import ExpertTrainer
 
 __all__ = [
     # 数据加载器
     'TextDatasetLoader',
     'ImageDatasetLoader',
     'UMLDatasetLoader',
+    'GeneralDatasetLoader',
 
     # 数据集
     'InstructionDataset',
+
+    # 数据收集器
+    'InstructionDataCollator',
 
     # 工具函数
     'split_dataset',
@@ -36,7 +43,7 @@ __all__ = [
     'create_dataloader',
 
     # 训练器
-    # 'ExpertTrainer',
+    'ExpertTrainer',
 ]
 
 # 版本信息

@@ -110,9 +110,14 @@ def validate_environment():
         print(f"Transformers版本: {version}")
 
         # Text Expert应该使用transformers 4.51.0（Qwen3-8B要求）
-        if not version.startswith('4.51'):
-            logger.warning(f"警告：当前transformers版本为{version}，推荐使用4.51.x")
-            logger.warning("请确认是否在instruction_generator环境中运行")
+        try:
+            v_parts = version.split('.')
+            major, minor = int(v_parts[0]), int(v_parts[1])
+            if not (major > 4 or (major == 4 and minor >= 51)):
+                logger.warning(f"警告：当前transformers版本为{version}，推荐使用>=4.51.0")
+                logger.warning("请确认是否在instruction_generator环境中运行")
+        except (ValueError, IndexError):
+            logger.warning(f"无法解析transformers版本: {version}")
     except ImportError:
         logger.error("未安装transformers库")
         return False
@@ -147,15 +152,11 @@ def main():
     """主训练流程"""
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='训练文本专家')
-    parser.add_argument('--use_4bit', action='store_true', default=False,
+    parser.add_argument('--use_4bit', action='store_true', dest='use_4bit',
                         help='使用4bit量化训练')
-    parser.add_argument('--no_4bit', dest='use_4bit', action='store_false',
-                        help='不使用4bit量化（默认）')
-    # 注意：默认不使用4bit，因为设置default=False
-    # 如果想默认启用4bit，需要改为default=True
-
-    # 实际解析时的默认行为
-    parser.set_defaults(use_4bit=True)  # 默认启用4bit量化（重要修改）
+    parser.add_argument('--no_4bit', action='store_false', dest='use_4bit',
+                        help='不使用4bit量化')
+    parser.set_defaults(use_4bit=True)  # 默认启用4bit量化
 
     args = parser.parse_args()
 
