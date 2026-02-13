@@ -23,7 +23,8 @@ from transformers import (
     TrainingArguments,
     Trainer,
     DataCollatorForLanguageModeling,
-    BitsAndBytesConfig
+    BitsAndBytesConfig,
+    TrainerCallback
 )
 from peft import (
     LoraConfig,
@@ -92,6 +93,57 @@ def _should_use_eval_strategy():
         return (major > 4) or (major == 4 and minor >= 46)
     except:
         return False
+
+
+class TrainingHistoryCallback(TrainerCallback):
+    """
+    自定义回调函数，用于记录训练过程中的所有日志
+
+    记录内容包括：
+    - loss: 训练损失
+    - grad_norm: 梯度范数
+    - learning_rate: 学习率
+    - epoch: 当前epoch
+    - eval_loss: 验证损失（如果有）
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.training_history = []
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        """
+        在每次日志记录时调用
+
+        Args:
+            args: TrainingArguments
+            state: TrainerState
+            control: TrainerControl
+            logs: 日志字典
+        """
+        if logs is not None:
+            # 创建日志记录
+            log_entry = {
+                'step': state.global_step,
+                'epoch': logs.get('epoch', state.epoch),
+            }
+
+            # 记录所有日志内容
+            for key, value in logs.items():
+                if key not in ['step', 'epoch']:
+                    log_entry[key] = value
+
+            # 添加到历史记录
+            self.training_history.append(log_entry)
+
+    def get_history(self):
+        """
+        获取完整的训练历史
+
+        Returns:
+            list: 训练历史记录列表
+        """
+        return self.training_history
 
 
 class ExpertTrainer:
@@ -187,6 +239,9 @@ class ExpertTrainer:
         self.train_dataset = None
         self.val_dataset = None
         self.test_dataset = None
+
+        # 初始化训练历史回调
+        self.history_callback = TrainingHistoryCallback()
 
         logger.info(f"初始化{expert_type}专家训练器")
         logger.info(f"基础模型: {self.base_model_path}")
@@ -590,6 +645,7 @@ class ExpertTrainer:
                 train_dataset=self.train_dataset,
                 eval_dataset=self.val_dataset,
                 data_collator=data_collator,
+                callbacks=[self.history_callback],
             )
 
             # 执行训练
@@ -610,6 +666,29 @@ class ExpertTrainer:
             metrics_file = self.output_dir / "training_metrics.json"
             with open(metrics_file, 'w') as f:
                 json.dump(metrics, f, indent=2)
+
+            # 保存训练历史记录
+            training_history = self.history_callback.get_history()
+            history_file = self.output_dir / "training_history.json"
+
+            history_data = {
+                'expert_type': self.expert_type,
+                'total_steps': len(training_history),
+                'num_epochs': self.train_cfg.num_epochs,
+                'batch_size': batch_size,
+                'gradient_accumulation_steps': gradient_accumulation_steps,
+                'effective_batch_size': batch_size * gradient_accumulation_steps,
+                'learning_rate': self.train_cfg.learning_rate,
+                'use_4bit': self.use_4bit,
+                'use_rtx4090_optimization': self.use_rtx4090_optimization,
+                'history': training_history
+            }
+
+            with open(history_file, 'w') as f:
+                json.dump(history_data, f, indent=2)
+
+            logger.info(f"训练历史已保存至: {history_file}")
+            logger.info(f"共记录 {len(training_history)} 个训练步骤的数据")
 
             logger.info(f"LoRA权重已保存至: {self.output_dir}")
             logger.info(f"训练指标已保存至: {metrics_file}")
