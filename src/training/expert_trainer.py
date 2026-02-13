@@ -6,9 +6,11 @@
   - 支持LoRA微调
   - 支持梯度累积
   - 自动保存检查点和最终权重
+  - 支持Qwen3-8B（默认）和Qwen-7B-Chat（遗留）
+  - 根据模型版本自动选择target_modules
 
 作者：Training System
-日期：2025-01-30
+日期：2025-02-13
 """
 
 import os
@@ -56,7 +58,8 @@ from config.settings import (
     get_lora_config,
     get_training_config,
     get_device_config,
-    get_vision_model_config
+    get_vision_model_config,
+    get_model_config
 )
 from src.training.data_loader import (
     TextDatasetLoader,
@@ -132,6 +135,7 @@ class ExpertTrainer:
         self.lora_cfg = get_lora_config('conservative')
         self.train_cfg = get_training_config()
         self.device_cfg = get_device_config()
+        self.model_cfg = get_model_config()  # 获取文本模型配置
 
         # 从环境变量读取训练参数（用于批量训练脚本的测试模式）
         import os
@@ -149,10 +153,22 @@ class ExpertTrainer:
         if base_model_path:
             self.base_model_path = base_model_path
         else:
-            # ⚠️ 重要：所有Expert都使用Qwen-7B-Chat（文本模型）
+            # ⚠️ 重要：所有Expert都使用Qwen3-8B（默认文本模型）
             # Image/UML Expert的输入是JSON文本描述，不是图像/UML图
             # 视觉模型仅用于数据准备阶段（raw → interim）
-            self.base_model_path = str(self.path_cfg.QWEN_7B_CHAT_PATH)
+            self.base_model_path = str(self.path_cfg.get_text_model_path())
+
+        # 根据模型路径确定模型版本
+        if 'Qwen3-8B' in self.base_model_path or 'qwen3-8B' in self.base_model_path:
+            self.model_version = 'qwen3_8b'
+        elif 'Qwen-7B-Chat' in self.base_model_path or 'qwen-7B-Chat' in self.base_model_path:
+            self.model_version = 'qwen7b'
+        else:
+            self.model_version = self.model_cfg.version
+            logger.warning(f"无法从路径推断模型版本，使用配置中的版本: {self.model_version}")
+
+        # 根据模型版本确定target_modules
+        self.target_modules = self._get_target_modules()
 
         # 设置输出目录
         if output_dir:
@@ -181,6 +197,24 @@ class ExpertTrainer:
         # 打印实际训练配置
         self._print_training_config()
 
+    def _get_target_modules(self) -> list:
+        """
+        根据模型版本返回适当的LoRA target_modules
+
+        Returns:
+            list: target_modules列表
+        """
+        if self.model_version == 'qwen7b':
+            # Qwen-7B-Chat使用concatenated attention
+            return ["c_attn"]
+        elif self.model_version == 'qwen3_8b':
+            # Qwen3-8B使用标准Transformers架构
+            return ["q_proj", "k_proj", "v_proj", "o_proj"]
+        else:
+            # 默认使用Qwen3-8B的配置
+            logger.warning(f"未知模型版本 {self.model_version}，使用Qwen3-8B的target_modules")
+            return ["q_proj", "k_proj", "v_proj", "o_proj"]
+
     def _print_training_config(self):
         """打印实际训练配置（包含从环境变量读取的参数）"""
         print()
@@ -188,13 +222,14 @@ class ExpertTrainer:
         print("-" * 80)
         print(f"专家类型: {self.expert_type.upper()} Expert")
         print(f"基础模型: {self.base_model_path}")
+        print(f"模型版本: {self.model_version}")
         print(f"输出目录: {self.output_dir}")
         print()
         print(f"LoRA配置:")
         print(f"  - Rank: {self.lora_cfg.rank}")
         print(f"  - Alpha: {self.lora_cfg.alpha}")
         print(f"  - Dropout: {self.lora_cfg.dropout}")
-        print(f"  - Target Modules: ['c_attn'] (Qwen-7B-Chat)")
+        print(f"  - Target Modules: {self.target_modules}")
         print()
 
         if self.use_rtx4090_optimization:
@@ -338,7 +373,7 @@ class ExpertTrainer:
             # 加载基础模型
             logger.info(f"加载基础模型: {self.base_model_path}")
 
-            # ⚠️ 重要：所有Expert都使用AutoModelForCausalLM（Qwen-7B-Chat）
+            # ⚠️ 重要：所有Expert都使用AutoModelForCausalLM（Qwen3-8B默认）
             # Image/UML Expert处理的是JSON文本，不是图像/UML图
             logger.info("使用AutoModelForCausalLM加载文本模型")
             self.model = AutoModelForCausalLM.from_pretrained(
@@ -357,10 +392,11 @@ class ExpertTrainer:
             # 配置LoRA
             logger.info("配置LoRA参数...")
 
-            # ⚠️ 重要：所有Expert都使用Qwen-7B-Chat的target_modules
-            # Qwen-7B-Chat使用concatenated attention: c_attn
-            target_modules = ["c_attn"]
-            logger.info("所有Expert使用Qwen-7B-Chat, target_modules: ['c_attn']")
+            # ⚠️ 重要：根据模型版本选择正确的target_modules
+            # Qwen-7B-Chat: ["c_attn"] (concatenated attention)
+            # Qwen3-8B: ["q_proj", "k_proj", "v_proj", "o_proj"]
+            target_modules = self.target_modules
+            logger.info(f"使用模型: {self.model_version}, target_modules: {target_modules}")
 
             peft_config = LoraConfig(
                 task_type=TaskType.CAUSAL_LM,
