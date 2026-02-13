@@ -1,0 +1,65 @@
+{
+  "mode": "full",
+  "timestamp": "2026-02-07T13:09:42.394445",
+  "total_tasks": 8,
+  "successful_tasks": 8,
+  "failed_tasks": 0,
+  "tasks": [
+    {
+      "task_id": 1,
+      "expert_type": "text",
+      "dataset_version": null,
+      "description": "文本需求转换专家",
+      "success": true
+    },
+    {
+      "task_id": 2,
+      "expert_type": "image",
+      "dataset_version": null,
+      "description": "图像描述转换专家",
+      "success": true
+    },
+    {
+      "task_id": 3,
+      "expert_type": "uml",
+      "dataset_version": "qwen2.5",
+      "description": "UML描述转换专家(qwen2.5数据集)",
+      "success": true
+    },
+    {
+      "task_id": 4,
+      "expert_type": "uml",
+      "dataset_version": "qwen3",
+      "description": "UML描述转换专家(qwen3数据集)",
+      "success": true
+    },
+    {
+      "task_id": 5,
+      "expert_type": "uml",
+      "dataset_version": "qwen235B",
+      "description": "UML描述转换专家(qwen235B数据集)",
+      "success": true
+    },
+    {
+      "task_id": 6,
+      "expert_type": "general",
+      "dataset_version": "qwen2.5",
+      "description": "通用兜底专家(qwen2.5数据集)",
+      "success": true
+    },
+    {
+      "task_id": 7,
+      "expert_type": "general",
+      "dataset_version": "qwen3",
+      "description": "通用兜底专家(qwen3数据集)",
+      "success": true
+    },
+    {
+      "task_id": 8,
+      "expert_type": "general",
+      "dataset_version": "qwen235B",
+      "description": "通用兜底专家(qwen235B数据集)",
+      "success": true
+    }
+  ]
+}

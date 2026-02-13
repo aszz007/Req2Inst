@@ -1,0 +1,34 @@
+{
+  "text_expert": {
+    "bleu": 0.38616502738115804,
+    "rouge_l": 0.5044635031570154,
+    "meteor": 0.6508203126699877,
+    "format_score": 1.0,
+    "valid_rate": 1.0,
+    "avg_length": 225.82258064516128
+  },
+  "image_expert": {
+    "bleu": 0.5061644210807607,
+    "rouge_l": 0.7003393370713477,
+    "meteor": 0.6625065448064295,
+    "format_score": 1.0,
+    "valid_rate": 1.0,
+    "avg_length": 206.98
+  },
+  "uml_expert": {
+    "bleu": 0.32258896961224226,
+    "rouge_l": 0.4958223685595441,
+    "meteor": 0.5298589054119871,
+    "format_score": 1.0,
+    "valid_rate": 1.0,
+    "avg_length": 628.6666666666666
+  },
+  "general_expert": {
+    "bleu": 0.2517044065379165,
+    "rouge_l": 0.511963158408479,
+    "meteor": 0.5338353590658823,
+    "format_score": 1.0,
+    "valid_rate": 1.0,
+    "avg_length": 277.52666666666664
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "mode": "full",
+  "timestamp": "2026-02-07T19:20:37.506330",
+  "total_tasks": 1,
+  "successful_tasks": 0,
+  "failed_tasks": 1,
+  "tasks": [
+    {
+      "task_id": 2,
+      "expert_type": "image",
+      "dataset_version": null,
+      "description": "图像描述转换专家",
+      "success": false
+    }
+  ]
+}

@@ -1,0 +1,1501 @@
+﻿行号,Header,是否有效,错误,警告
+1,authentication_complex_0,True,,[LENGTH] Definition过长(575字符)，建议精简
+2,authentication_complex_1,True,,[LENGTH] Definition过长(519字符)，建议精简
+3,authentication_complex_10,True,,
+4,authentication_complex_11,True,,[LENGTH] Definition过长(617字符)，建议精简
+5,authentication_complex_12,True,,[LENGTH] Definition过长(592字符)，建议精简
+6,authentication_complex_13,True,,[LENGTH] Definition过长(552字符)，建议精简
+7,authentication_complex_14,True,,[LENGTH] Definition过长(526字符)，建议精简
+8,authentication_complex_2,True,,
+9,authentication_complex_3,True,,[LENGTH] Definition过长(516字符)，建议精简
+10,authentication_complex_4,True,,[LENGTH] Definition过长(516字符)，建议精简
+11,authentication_complex_5,True,,
+12,authentication_complex_6,True,,[LENGTH] Definition过长(548字符)，建议精简
+13,authentication_complex_7,True,,[LENGTH] Definition过长(523字符)，建议精简
+14,authentication_complex_8,True,,[LENGTH] Definition过长(627字符)，建议精简
+15,authentication_complex_9,True,,
+16,authentication_medium_0,True,,
+17,authentication_medium_1,True,,[LENGTH] Definition过长(536字符)，建议精简
+18,authentication_medium_10,True,,
+19,authentication_medium_11,True,,
+20,authentication_medium_12,True,,
+21,authentication_medium_13,True,,
+22,authentication_medium_14,True,,
+23,authentication_medium_15,True,,
+24,authentication_medium_16,True,,
+25,authentication_medium_17,True,,[LENGTH] Definition过长(625字符)，建议精简
+26,authentication_medium_18,True,,
+27,authentication_medium_19,True,,
+28,authentication_medium_2,True,,
+29,authentication_medium_20,True,,
+30,authentication_medium_21,True,,
+31,authentication_medium_22,True,,
+32,authentication_medium_23,True,,
+33,authentication_medium_24,True,,
+34,authentication_medium_25,True,,
+35,authentication_medium_26,True,,
+36,authentication_medium_27,True,,[LENGTH] Definition过长(591字符)，建议精简
+37,authentication_medium_28,True,,
+38,authentication_medium_29,True,,
+39,authentication_medium_3,True,,
+40,authentication_medium_30,True,,
+41,authentication_medium_31,True,,[LENGTH] Definition过长(550字符)，建议精简
+42,authentication_medium_32,True,,
+43,authentication_medium_33,True,,
+44,authentication_medium_34,True,,
+45,authentication_medium_35,True,,[LENGTH] Definition过长(513字符)，建议精简
+46,authentication_medium_36,True,,
+47,authentication_medium_37,True,,
+48,authentication_medium_38,True,,
+49,authentication_medium_39,True,,
+50,authentication_medium_4,True,,
+51,authentication_medium_40,True,,
+52,authentication_medium_41,True,,
+53,authentication_medium_42,True,,
+54,authentication_medium_43,True,,
+55,authentication_medium_44,True,,
+56,authentication_medium_45,True,,
+57,authentication_medium_46,True,,
+58,authentication_medium_47,True,,
+59,authentication_medium_48,True,,
+60,authentication_medium_49,True,,
+61,authentication_medium_5,True,,
+62,authentication_medium_50,True,,
+63,authentication_medium_51,True,,
+64,authentication_medium_52,True,,
+65,authentication_medium_53,True,,
+66,authentication_medium_54,True,,
+67,authentication_medium_55,True,,
+68,authentication_medium_56,True,,
+69,authentication_medium_57,True,,
+70,authentication_medium_58,True,,
+71,authentication_medium_59,True,,
+72,authentication_medium_6,True,,
+73,authentication_medium_7,True,,
+74,authentication_medium_8,True,,
+75,authentication_medium_9,True,,
+76,authentication_simple_0,True,,
+77,authentication_simple_1,True,,
+78,authentication_simple_10,True,,
+79,authentication_simple_11,True,,
+80,authentication_simple_12,True,,
+81,authentication_simple_13,True,,
+82,authentication_simple_14,True,,
+83,authentication_simple_15,True,,
+84,authentication_simple_16,True,,
+85,authentication_simple_17,True,,
+86,authentication_simple_18,True,,
+87,authentication_simple_19,True,,
+88,authentication_simple_2,True,,
+89,authentication_simple_20,True,,
+90,authentication_simple_21,True,,
+91,authentication_simple_22,True,,
+92,authentication_simple_23,True,,
+93,authentication_simple_24,True,,
+94,authentication_simple_25,True,,
+95,authentication_simple_26,True,,
+96,authentication_simple_27,True,,
+97,authentication_simple_28,True,,
+98,authentication_simple_29,True,,
+99,authentication_simple_3,True,,
+100,authentication_simple_30,True,,
+101,authentication_simple_31,True,,
+102,authentication_simple_32,True,,
+103,authentication_simple_33,True,,
+104,authentication_simple_34,True,,
+105,authentication_simple_35,True,,
+106,authentication_simple_36,True,,
+107,authentication_simple_37,True,,
+108,authentication_simple_38,True,,
+109,authentication_simple_39,True,,
+110,authentication_simple_4,True,,
+111,authentication_simple_40,True,,
+112,authentication_simple_41,True,,
+113,authentication_simple_42,True,,
+114,authentication_simple_43,True,,
+115,authentication_simple_44,True,,
+116,authentication_simple_45,True,,
+117,authentication_simple_46,True,,
+118,authentication_simple_47,True,,
+119,authentication_simple_48,True,,
+120,authentication_simple_49,True,,
+121,authentication_simple_5,True,,
+122,authentication_simple_50,True,,
+123,authentication_simple_51,True,,
+124,authentication_simple_52,True,,
+125,authentication_simple_53,True,,
+126,authentication_simple_54,True,,
+127,authentication_simple_55,True,,
+128,authentication_simple_56,True,,
+129,authentication_simple_57,True,,
+130,authentication_simple_58,True,,
+131,authentication_simple_59,True,,
+132,authentication_simple_6,True,,
+133,authentication_simple_60,True,,
+134,authentication_simple_61,True,,
+135,authentication_simple_62,True,,
+136,authentication_simple_63,True,,
+137,authentication_simple_64,True,,
+138,authentication_simple_65,True,,
+139,authentication_simple_66,True,,
+140,authentication_simple_67,True,,
+141,authentication_simple_68,True,,
+142,authentication_simple_69,True,,
+143,authentication_simple_7,True,,
+144,authentication_simple_70,True,,
+145,authentication_simple_71,True,,
+146,authentication_simple_72,True,,
+147,authentication_simple_73,True,,
+148,authentication_simple_74,True,,
+149,authentication_simple_8,True,,
+150,authentication_simple_9,True,,
+151,booking_system_complex_0,True,,[LENGTH] Definition过长(552字符)，建议精简
+152,booking_system_complex_1,True,,[DUPLICATION] Definition和Emphasis & Caution内容重复度过高(71.1%)
+153,booking_system_complex_10,True,,[LENGTH] Definition过长(580字符)，建议精简
+154,booking_system_complex_11,True,,
+155,booking_system_complex_12,True,,[LENGTH] Definition过长(615字符)，建议精简
+156,booking_system_complex_13,True,,
+157,booking_system_complex_14,True,,[LENGTH] Definition过长(583字符)，建议精简
+158,booking_system_complex_2,True,,[LENGTH] Definition过长(629字符)，建议精简
+159,booking_system_complex_3,True,,[LENGTH] Definition过长(514字符)，建议精简
+160,booking_system_complex_4,True,,[LENGTH] Definition过长(509字符)，建议精简
+161,booking_system_complex_5,True,,[LENGTH] Definition过长(526字符)，建议精简
+162,booking_system_complex_6,True,,[LENGTH] Definition过长(506字符)，建议精简
+163,booking_system_complex_7,True,,[LENGTH] Definition过长(582字符)，建议精简
+164,booking_system_complex_8,True,,[LENGTH] Definition过长(637字符)，建议精简
+165,booking_system_complex_9,True,,[LENGTH] Definition过长(501字符)，建议精简
+166,booking_system_medium_0,True,,
+167,booking_system_medium_1,True,,
+168,booking_system_medium_10,True,,
+169,booking_system_medium_11,True,,
+170,booking_system_medium_12,True,,
+171,booking_system_medium_13,True,,
+172,booking_system_medium_14,True,,
+173,booking_system_medium_15,True,,
+174,booking_system_medium_16,True,,
+175,booking_system_medium_17,True,,
+176,booking_system_medium_18,True,,
+177,booking_system_medium_19,True,,
+178,booking_system_medium_2,True,,
+179,booking_system_medium_20,True,,
+180,booking_system_medium_21,True,,
+181,booking_system_medium_22,True,,
+182,booking_system_medium_23,True,,
+183,booking_system_medium_24,True,,
+184,booking_system_medium_25,True,,
+185,booking_system_medium_26,True,,
+186,booking_system_medium_27,True,,
+187,booking_system_medium_28,True,,
+188,booking_system_medium_29,True,,
+189,booking_system_medium_3,True,,
+190,booking_system_medium_30,True,,
+191,booking_system_medium_31,True,,
+192,booking_system_medium_32,True,,
+193,booking_system_medium_33,True,,
+194,booking_system_medium_34,True,,
+195,booking_system_medium_35,True,,[LENGTH] Definition过长(526字符)，建议精简
+196,booking_system_medium_36,True,,
+197,booking_system_medium_37,True,,
+198,booking_system_medium_38,True,,
+199,booking_system_medium_39,True,,
+200,booking_system_medium_4,True,,
+201,booking_system_medium_40,True,,
+202,booking_system_medium_41,True,,
+203,booking_system_medium_42,True,,
+204,booking_system_medium_43,True,,
+205,booking_system_medium_44,True,,
+206,booking_system_medium_45,True,,
+207,booking_system_medium_46,True,,
+208,booking_system_medium_47,True,,
+209,booking_system_medium_48,True,,[LENGTH] Definition过长(503字符)，建议精简
+210,booking_system_medium_49,True,,
+211,booking_system_medium_5,True,,
+212,booking_system_medium_50,True,,
+213,booking_system_medium_51,True,,
+214,booking_system_medium_52,True,,
+215,booking_system_medium_53,True,,
+216,booking_system_medium_54,True,,[LENGTH] Definition过长(636字符)，建议精简
+217,booking_system_medium_55,True,,
+218,booking_system_medium_56,True,,
+219,booking_system_medium_57,True,,
+220,booking_system_medium_58,True,,
+221,booking_system_medium_59,True,,
+222,booking_system_medium_6,True,,
+223,booking_system_medium_7,True,,
+224,booking_system_medium_8,True,,
+225,booking_system_medium_9,True,,[LENGTH] Definition过长(513字符)，建议精简
+226,booking_system_simple_0,True,,
+227,booking_system_simple_1,True,,
+228,booking_system_simple_10,True,,
+229,booking_system_simple_11,True,,
+230,booking_system_simple_12,True,,
+231,booking_system_simple_13,True,,
+232,booking_system_simple_14,True,,
+233,booking_system_simple_15,True,,
+234,booking_system_simple_16,True,,
+235,booking_system_simple_17,True,,
+236,booking_system_simple_18,True,,
+237,booking_system_simple_19,True,,
+238,booking_system_simple_2,True,,
+239,booking_system_simple_20,True,,
+240,booking_system_simple_21,True,,
+241,booking_system_simple_22,True,,
+242,booking_system_simple_23,True,,
+243,booking_system_simple_24,True,,
+244,booking_system_simple_25,True,,
+245,booking_system_simple_26,True,,
+246,booking_system_simple_27,True,,
+247,booking_system_simple_28,True,,
+248,booking_system_simple_29,True,,
+249,booking_system_simple_3,True,,
+250,booking_system_simple_30,True,,
+251,booking_system_simple_31,True,,
+252,booking_system_simple_32,True,,
+253,booking_system_simple_33,True,,
+254,booking_system_simple_34,True,,
+255,booking_system_simple_35,True,,
+256,booking_system_simple_36,True,,
+257,booking_system_simple_37,True,,
+258,booking_system_simple_38,True,,
+259,booking_system_simple_39,True,,
+260,booking_system_simple_4,True,,
+261,booking_system_simple_40,True,,
+262,booking_system_simple_41,True,,
+263,booking_system_simple_42,True,,
+264,booking_system_simple_43,True,,
+265,booking_system_simple_44,True,,
+266,booking_system_simple_45,True,,
+267,booking_system_simple_46,True,,
+268,booking_system_simple_47,True,,
+269,booking_system_simple_48,True,,
+270,booking_system_simple_49,True,,
+271,booking_system_simple_5,True,,
+272,booking_system_simple_50,True,,
+273,booking_system_simple_51,True,,
+274,booking_system_simple_52,True,,
+275,booking_system_simple_53,True,,
+276,booking_system_simple_54,True,,
+277,booking_system_simple_55,True,,
+278,booking_system_simple_56,True,,
+279,booking_system_simple_57,True,,
+280,booking_system_simple_58,True,,
+281,booking_system_simple_59,True,,
+282,booking_system_simple_6,True,,
+283,booking_system_simple_60,True,,
+284,booking_system_simple_61,True,,
+285,booking_system_simple_62,True,,
+286,booking_system_simple_63,True,,
+287,booking_system_simple_64,True,,
+288,booking_system_simple_65,True,,
+289,booking_system_simple_66,True,,
+290,booking_system_simple_67,True,,
+291,booking_system_simple_68,True,,
+292,booking_system_simple_69,True,,
+293,booking_system_simple_7,True,,
+294,booking_system_simple_70,True,,
+295,booking_system_simple_71,True,,
+296,booking_system_simple_72,True,,
+297,booking_system_simple_73,True,,
+298,booking_system_simple_74,True,,
+299,booking_system_simple_8,True,,
+300,booking_system_simple_9,True,,
+301,content_management_complex_0,True,,[LENGTH] Definition过长(577字符)，建议精简
+302,content_management_complex_1,True,,[LENGTH] Definition过长(851字符)，建议精简
+303,content_management_complex_10,True,,[LENGTH] Definition过长(527字符)，建议精简
+304,content_management_complex_11,True,,[LENGTH] Definition过长(609字符)，建议精简
+305,content_management_complex_12,True,,[LENGTH] Definition过长(806字符)，建议精简
+306,content_management_complex_13,True,,
+307,content_management_complex_14,True,,[LENGTH] Definition过长(636字符)，建议精简
+308,content_management_complex_2,True,,
+309,content_management_complex_3,True,,[LENGTH] Definition过长(578字符)，建议精简
+310,content_management_complex_4,True,,[LENGTH] Definition过长(594字符)，建议精简
+311,content_management_complex_5,True,,[LENGTH] Definition过长(591字符)，建议精简
+312,content_management_complex_6,True,,
+313,content_management_complex_7,True,,[LENGTH] Definition过长(543字符)，建议精简
+314,content_management_complex_8,True,,
+315,content_management_complex_9,True,,[LENGTH] Definition过长(587字符)，建议精简
+316,content_management_medium_0,True,,
+317,content_management_medium_1,True,,
+318,content_management_medium_10,True,,
+319,content_management_medium_11,True,,
+320,content_management_medium_12,True,,
+321,content_management_medium_13,True,,
+322,content_management_medium_14,True,,
+323,content_management_medium_15,True,,
+324,content_management_medium_16,True,,
+325,content_management_medium_17,True,,
+326,content_management_medium_18,True,,
+327,content_management_medium_19,True,,
+328,content_management_medium_2,True,,
+329,content_management_medium_20,True,,
+330,content_management_medium_21,True,,
+331,content_management_medium_22,True,,
+332,content_management_medium_23,True,,
+333,content_management_medium_24,True,,
+334,content_management_medium_25,True,,[LENGTH] Definition过长(501字符)，建议精简
+335,content_management_medium_26,True,,
+336,content_management_medium_27,True,,
+337,content_management_medium_28,True,,
+338,content_management_medium_29,True,,
+339,content_management_medium_3,True,,
+340,content_management_medium_30,True,,
+341,content_management_medium_31,True,,
+342,content_management_medium_32,True,,
+343,content_management_medium_33,True,,
+344,content_management_medium_34,True,,[LENGTH] Definition过长(592字符)，建议精简
+345,content_management_medium_35,True,,[LENGTH] Definition过长(502字符)，建议精简
+346,content_management_medium_36,True,,
+347,content_management_medium_37,True,,
+348,content_management_medium_38,True,,
+349,content_management_medium_39,True,,
+350,content_management_medium_4,True,,
+351,content_management_medium_40,True,,
+352,content_management_medium_41,True,,
+353,content_management_medium_42,True,,
+354,content_management_medium_43,True,,[LENGTH] Definition过长(541字符)，建议精简
+355,content_management_medium_44,True,,
+356,content_management_medium_45,True,,
+357,content_management_medium_46,True,,
+358,content_management_medium_47,True,,
+359,content_management_medium_48,True,,
+360,content_management_medium_49,True,,[LENGTH] Definition过长(514字符)，建议精简
+361,content_management_medium_5,True,,
+362,content_management_medium_50,True,,
+363,content_management_medium_51,True,,
+364,content_management_medium_52,True,,
+365,content_management_medium_53,True,,
+366,content_management_medium_54,True,,
+367,content_management_medium_55,True,,
+368,content_management_medium_56,True,,
+369,content_management_medium_57,True,,
+370,content_management_medium_58,True,,[LENGTH] Definition过长(534字符)，建议精简
+371,content_management_medium_59,True,,
+372,content_management_medium_6,True,,
+373,content_management_medium_7,True,,
+374,content_management_medium_8,True,,
+375,content_management_medium_9,True,,
+376,content_management_simple_0,True,,
+377,content_management_simple_1,True,,
+378,content_management_simple_10,True,,
+379,content_management_simple_11,True,,
+380,content_management_simple_12,True,,
+381,content_management_simple_13,True,,
+382,content_management_simple_14,True,,
+383,content_management_simple_15,True,,
+384,content_management_simple_16,True,,
+385,content_management_simple_17,True,,
+386,content_management_simple_18,True,,
+387,content_management_simple_19,True,,
+388,content_management_simple_2,True,,
+389,content_management_simple_20,True,,
+390,content_management_simple_21,True,,
+391,content_management_simple_22,True,,
+392,content_management_simple_23,True,,
+393,content_management_simple_24,True,,
+394,content_management_simple_25,True,,
+395,content_management_simple_26,True,,
+396,content_management_simple_27,True,,
+397,content_management_simple_28,True,,
+398,content_management_simple_29,True,,
+399,content_management_simple_3,True,,
+400,content_management_simple_30,True,,
+401,content_management_simple_31,True,,
+402,content_management_simple_32,True,,
+403,content_management_simple_33,True,,
+404,content_management_simple_34,True,,
+405,content_management_simple_35,True,,
+406,content_management_simple_36,True,,
+407,content_management_simple_37,True,,
+408,content_management_simple_38,True,,
+409,content_management_simple_39,True,,
+410,content_management_simple_4,True,,
+411,content_management_simple_40,True,,
+412,content_management_simple_41,True,,
+413,content_management_simple_42,True,,
+414,content_management_simple_43,True,,
+415,content_management_simple_44,True,,
+416,content_management_simple_45,True,,
+417,content_management_simple_46,True,,
+418,content_management_simple_47,True,,
+419,content_management_simple_48,True,,
+420,content_management_simple_49,True,,
+421,content_management_simple_5,True,,
+422,content_management_simple_50,True,,
+423,content_management_simple_51,True,,
+424,content_management_simple_52,True,,
+425,content_management_simple_53,True,,
+426,content_management_simple_54,True,,
+427,content_management_simple_55,True,,
+428,content_management_simple_56,True,,
+429,content_management_simple_57,True,,
+430,content_management_simple_58,True,,
+431,content_management_simple_59,True,,
+432,content_management_simple_6,True,,
+433,content_management_simple_60,True,,
+434,content_management_simple_61,True,,
+435,content_management_simple_62,True,,
+436,content_management_simple_63,True,,
+437,content_management_simple_64,True,,
+438,content_management_simple_65,True,,
+439,content_management_simple_66,True,,
+440,content_management_simple_67,True,,
+441,content_management_simple_68,True,,
+442,content_management_simple_69,True,,
+443,content_management_simple_7,True,,
+444,content_management_simple_70,True,,
+445,content_management_simple_71,True,,
+446,content_management_simple_72,True,,
+447,content_management_simple_73,True,,
+448,content_management_simple_74,True,,
+449,content_management_simple_8,True,,
+450,content_management_simple_9,True,,
+451,customer_service_complex_0,True,,[LENGTH] Definition过长(529字符)，建议精简
+452,customer_service_complex_1,True,,[LENGTH] Definition过长(576字符)，建议精简
+453,customer_service_complex_10,True,,[LENGTH] Definition过长(735字符)，建议精简
+454,customer_service_complex_11,True,,[LENGTH] Definition过长(575字符)，建议精简
+455,customer_service_complex_12,True,,[LENGTH] Definition过长(512字符)，建议精简
+456,customer_service_complex_13,True,,[LENGTH] Definition过长(505字符)，建议精简
+457,customer_service_complex_14,True,,
+458,customer_service_complex_2,True,,[LENGTH] Definition过长(533字符)，建议精简
+459,customer_service_complex_3,True,,[DUPLICATION] Definition和Emphasis & Caution内容重复度过高(72.1%)
+460,customer_service_complex_4,True,,
+461,customer_service_complex_5,True,,[LENGTH] Definition过长(622字符)，建议精简
+462,customer_service_complex_6,True,,[LENGTH] Definition过长(542字符)，建议精简
+463,customer_service_complex_7,True,,[LENGTH] Definition过长(503字符)，建议精简
+464,customer_service_complex_8,True,,[LENGTH] Definition过长(594字符)，建议精简
+465,customer_service_complex_9,True,,[LENGTH] Definition过长(567字符)，建议精简
+466,customer_service_medium_0,True,,
+467,customer_service_medium_1,True,,
+468,customer_service_medium_10,True,,
+469,customer_service_medium_11,True,,
+470,customer_service_medium_12,True,,
+471,customer_service_medium_13,True,,
+472,customer_service_medium_14,True,,
+473,customer_service_medium_15,True,,[COVERAGE] Use Cases覆盖率过低(27%)，仅提及4/15个
+474,customer_service_medium_16,True,,
+475,customer_service_medium_17,True,,
+476,customer_service_medium_18,True,,[COVERAGE] Use Cases覆盖率过低(20%)，仅提及2/10个
+477,customer_service_medium_19,True,,
+478,customer_service_medium_2,True,,
+479,customer_service_medium_20,True,,[DUPLICATION] Definition和Emphasis & Caution内容重复度过高(71.0%)
+480,customer_service_medium_21,True,,
+481,customer_service_medium_22,True,,
+482,customer_service_medium_23,True,,[COVERAGE] Use Cases覆盖率过低(36%)，仅提及4/11个
+483,customer_service_medium_24,True,,
+484,customer_service_medium_25,True,,
+485,customer_service_medium_26,True,,[COVERAGE] Use Cases覆盖率过低(38%)，仅提及5/13个
+486,customer_service_medium_27,True,,
+487,customer_service_medium_28,True,,[COVERAGE] Use Cases覆盖率过低(20%)，仅提及2/10个
+488,customer_service_medium_29,True,,
+489,customer_service_medium_3,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及5/15个
+490,customer_service_medium_30,True,,[LENGTH] Definition过长(579字符)，建议精简
+491,customer_service_medium_31,True,,
+492,customer_service_medium_32,True,,
+493,customer_service_medium_33,True,,[COVERAGE] Use Cases覆盖率过低(25%)，仅提及3/12个
+494,customer_service_medium_34,True,,
+495,customer_service_medium_35,True,,[COVERAGE] Use Cases覆盖率过低(45%)，仅提及5/11个
+496,customer_service_medium_36,True,,[COVERAGE] Use Cases覆盖率过低(15%)，仅提及2/13个
+497,customer_service_medium_37,True,,[COVERAGE] Use Cases覆盖率过低(27%)，仅提及3/11个
+498,customer_service_medium_38,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及1/3个 | [COVERAGE] Use Cases覆盖率过低(29%)，仅提及4/14个
+499,customer_service_medium_39,True,,[COVERAGE] Use Cases覆盖率过低(25%)，仅提及3/12个
+500,customer_service_medium_4,True,,[COVERAGE] Use Cases覆盖率过低(27%)，仅提及4/15个
+501,customer_service_medium_40,True,,[COVERAGE] Use Cases覆盖率过低(27%)，仅提及3/11个
+502,customer_service_medium_41,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及1/3个 | [COVERAGE] Use Cases覆盖率过低(13%)，仅提及2/15个
+503,customer_service_medium_42,True,,
+504,customer_service_medium_43,True,,
+505,customer_service_medium_44,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及1/3个 | [COVERAGE] Use Cases覆盖率过低(15%)，仅提及2/13个
+506,customer_service_medium_45,True,,
+507,customer_service_medium_46,True,,[COVERAGE] Use Cases覆盖率过低(31%)，仅提及4/13个
+508,customer_service_medium_47,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(23%)，仅提及3/13个
+509,customer_service_medium_48,True,,[COVERAGE] Use Cases覆盖率过低(23%)，仅提及3/13个
+510,customer_service_medium_49,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(27%)，仅提及4/15个
+511,customer_service_medium_5,True,,[CORRESPONDENCE] Description中的actors似乎没有在Instruction中提及 | [COVERAGE] Actors覆盖率过低(0%)，仅提及0/2个
+512,customer_service_medium_50,True,,
+513,customer_service_medium_51,True,,[COVERAGE] Use Cases覆盖率过低(43%)，仅提及6/14个
+514,customer_service_medium_52,True,,
+515,customer_service_medium_53,True,,[LENGTH] Definition过长(531字符)，建议精简
+516,customer_service_medium_54,True,,
+517,customer_service_medium_55,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及5/15个
+518,customer_service_medium_56,True,,[COVERAGE] Use Cases覆盖率过低(29%)，仅提及4/14个
+519,customer_service_medium_57,True,,[COVERAGE] Use Cases覆盖率过低(27%)，仅提及4/15个
+520,customer_service_medium_58,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及1/3个 | [COVERAGE] Use Cases覆盖率过低(42%)，仅提及5/12个
+521,customer_service_medium_59,True,,
+522,customer_service_medium_6,True,,
+523,customer_service_medium_7,True,,
+524,customer_service_medium_8,True,,
+525,customer_service_medium_9,True,,
+526,customer_service_simple_0,True,,
+527,customer_service_simple_1,True,,
+528,customer_service_simple_10,True,,
+529,customer_service_simple_11,True,,
+530,customer_service_simple_12,True,,
+531,customer_service_simple_13,True,,
+532,customer_service_simple_14,True,,
+533,customer_service_simple_15,True,,
+534,customer_service_simple_16,True,,
+535,customer_service_simple_17,True,,
+536,customer_service_simple_18,True,,
+537,customer_service_simple_19,True,,
+538,customer_service_simple_2,True,,
+539,customer_service_simple_20,True,,
+540,customer_service_simple_21,True,,
+541,customer_service_simple_22,True,,
+542,customer_service_simple_23,True,,
+543,customer_service_simple_24,True,,
+544,customer_service_simple_25,True,,
+545,customer_service_simple_26,True,,
+546,customer_service_simple_27,True,,
+547,customer_service_simple_28,True,,
+548,customer_service_simple_29,True,,
+549,customer_service_simple_3,True,,
+550,customer_service_simple_30,True,,
+551,customer_service_simple_31,True,,
+552,customer_service_simple_32,True,,
+553,customer_service_simple_33,True,,
+554,customer_service_simple_34,True,,
+555,customer_service_simple_35,True,,
+556,customer_service_simple_36,True,,
+557,customer_service_simple_37,True,,
+558,customer_service_simple_38,True,,
+559,customer_service_simple_39,True,,
+560,customer_service_simple_4,True,,
+561,customer_service_simple_40,True,,
+562,customer_service_simple_41,True,,
+563,customer_service_simple_42,True,,
+564,customer_service_simple_43,True,,
+565,customer_service_simple_44,True,,
+566,customer_service_simple_45,True,,
+567,customer_service_simple_46,True,,
+568,customer_service_simple_47,True,,
+569,customer_service_simple_48,True,,
+570,customer_service_simple_49,True,,
+571,customer_service_simple_5,True,,
+572,customer_service_simple_50,True,,
+573,customer_service_simple_51,True,,
+574,customer_service_simple_52,True,,
+575,customer_service_simple_53,True,,
+576,customer_service_simple_54,True,,
+577,customer_service_simple_55,True,,
+578,customer_service_simple_56,True,,
+579,customer_service_simple_57,True,,
+580,customer_service_simple_58,True,,
+581,customer_service_simple_59,True,,
+582,customer_service_simple_6,True,,
+583,customer_service_simple_60,True,,
+584,customer_service_simple_61,True,,
+585,customer_service_simple_62,True,,
+586,customer_service_simple_63,True,,
+587,customer_service_simple_64,True,,
+588,customer_service_simple_65,True,,
+589,customer_service_simple_66,True,,
+590,customer_service_simple_67,True,,
+591,customer_service_simple_68,True,,
+592,customer_service_simple_69,True,,
+593,customer_service_simple_7,True,,
+594,customer_service_simple_70,True,,
+595,customer_service_simple_71,True,,
+596,customer_service_simple_72,True,,
+597,customer_service_simple_73,True,,
+598,customer_service_simple_74,True,,
+599,customer_service_simple_8,True,,
+600,customer_service_simple_9,True,,
+601,data_analysis_complex_0,True,,
+602,data_analysis_complex_1,True,,[LENGTH] Definition过长(583字符)，建议精简 | [COVERAGE] Use Cases覆盖率过低(19%)，仅提及4/21个
+603,data_analysis_complex_10,True,,[LENGTH] Definition过长(653字符)，建议精简 | [COVERAGE] Use Cases覆盖率过低(26%)，仅提及6/23个
+604,data_analysis_complex_11,True,,[LENGTH] Definition过长(538字符)，建议精简 | [COVERAGE] Use Cases覆盖率过低(10%)，仅提及2/20个
+605,data_analysis_complex_12,True,,[COVERAGE] Use Cases覆盖率过低(20%)，仅提及4/20个
+606,data_analysis_complex_13,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(32%)，仅提及8/25个
+607,data_analysis_complex_14,True,,[COVERAGE] Use Cases覆盖率过低(39%)，仅提及7/18个
+608,data_analysis_complex_2,True,,[COVERAGE] Use Cases覆盖率过低(11%)，仅提及2/19个
+609,data_analysis_complex_3,True,,[COVERAGE] Use Cases覆盖率过低(45%)，仅提及9/20个
+610,data_analysis_complex_4,True,,[LENGTH] Definition过长(553字符)，建议精简
+611,data_analysis_complex_5,True,,[LENGTH] Definition过长(798字符)，建议精简 | [COVERAGE] Use Cases覆盖率过低(17%)，仅提及4/24个
+612,data_analysis_complex_6,True,,[COVERAGE] Use Cases覆盖率过低(25%)，仅提及5/20个
+613,data_analysis_complex_7,True,,[LENGTH] Definition过长(610字符)，建议精简 | [COVERAGE] Use Cases覆盖率过低(41%)，仅提及9/22个
+614,data_analysis_complex_8,True,,[LENGTH] Definition过长(630字符)，建议精简
+615,data_analysis_complex_9,True,,[COVERAGE] Use Cases覆盖率过低(17%)，仅提及4/24个
+616,data_analysis_medium_0,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及4/12个
+617,data_analysis_medium_1,True,,[COVERAGE] Use Cases覆盖率过低(13%)，仅提及2/15个
+618,data_analysis_medium_10,True,,
+619,data_analysis_medium_11,True,,[COVERAGE] Use Cases覆盖率过低(27%)，仅提及3/11个
+620,data_analysis_medium_12,True,,[LENGTH] Definition过长(577字符)，建议精简
+621,data_analysis_medium_13,True,,
+622,data_analysis_medium_14,True,,
+623,data_analysis_medium_15,True,,
+624,data_analysis_medium_16,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及1/3个
+625,data_analysis_medium_17,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(20%)，仅提及2/10个
+626,data_analysis_medium_18,True,,[LENGTH] Definition过长(501字符)，建议精简 | [DUPLICATION] Definition和Emphasis & Caution内容重复度过高(75.0%)
+627,data_analysis_medium_19,True,,[COVERAGE] Use Cases覆盖率过低(36%)，仅提及4/11个
+628,data_analysis_medium_2,True,,[COVERAGE] Use Cases覆盖率过低(30%)，仅提及3/10个
+629,data_analysis_medium_20,True,,[COVERAGE] Use Cases覆盖率过低(15%)，仅提及2/13个
+630,data_analysis_medium_21,True,,[COVERAGE] Use Cases覆盖率过低(17%)，仅提及2/12个
+631,data_analysis_medium_22,True,,[COVERAGE] Use Cases覆盖率过低(31%)，仅提及4/13个
+632,data_analysis_medium_23,True,,[COVERAGE] Use Cases覆盖率过低(27%)，仅提及3/11个
+633,data_analysis_medium_24,True,,[COVERAGE] Use Cases覆盖率过低(27%)，仅提及3/11个
+634,data_analysis_medium_25,True,,
+635,data_analysis_medium_26,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及4/12个
+636,data_analysis_medium_27,True,,[COVERAGE] Use Cases覆盖率过低(42%)，仅提及5/12个
+637,data_analysis_medium_28,True,,[COVERAGE] Use Cases覆盖率过低(15%)，仅提及2/13个
+638,data_analysis_medium_29,True,,[COVERAGE] Use Cases覆盖率过低(43%)，仅提及6/14个
+639,data_analysis_medium_3,True,,[COVERAGE] Use Cases覆盖率过低(20%)，仅提及2/10个
+640,data_analysis_medium_30,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及4/10个
+641,data_analysis_medium_31,True,,[COVERAGE] Use Cases覆盖率过低(29%)，仅提及4/14个
+642,data_analysis_medium_32,True,,[COVERAGE] Use Cases覆盖率过低(13%)，仅提及2/15个
+643,data_analysis_medium_33,True,,[LENGTH] Definition过长(508字符)，建议精简 | [COVERAGE] Use Cases覆盖率过低(25%)，仅提及3/12个
+644,data_analysis_medium_34,True,,
+645,data_analysis_medium_35,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及4/10个
+646,data_analysis_medium_36,True,,[COVERAGE] Use Cases覆盖率过低(38%)，仅提及5/13个
+647,data_analysis_medium_37,True,,
+648,data_analysis_medium_38,True,,
+649,data_analysis_medium_39,True,,[COVERAGE] Use Cases覆盖率过低(45%)，仅提及5/11个
+650,data_analysis_medium_4,True,,[LENGTH] Definition过长(543字符)，建议精简
+651,data_analysis_medium_40,True,,
+652,data_analysis_medium_41,True,,[COVERAGE] Use Cases覆盖率过低(21%)，仅提及3/14个
+653,data_analysis_medium_42,True,,[COVERAGE] Use Cases覆盖率过低(23%)，仅提及3/13个
+654,data_analysis_medium_43,True,,
+655,data_analysis_medium_44,True,,[COVERAGE] Use Cases覆盖率过低(15%)，仅提及2/13个
+656,data_analysis_medium_45,True,,
+657,data_analysis_medium_46,True,,
+658,data_analysis_medium_47,True,,[COVERAGE] Use Cases覆盖率过低(46%)，仅提及6/13个
+659,data_analysis_medium_48,True,,[COVERAGE] Use Cases覆盖率过低(46%)，仅提及6/13个
+660,data_analysis_medium_49,True,,[LENGTH] Definition过长(549字符)，建议精简
+661,data_analysis_medium_5,True,,
+662,data_analysis_medium_50,True,,[COVERAGE] Use Cases覆盖率过低(7%)，仅提及1/14个
+663,data_analysis_medium_51,True,,[COVERAGE] Use Cases覆盖率过低(18%)，仅提及2/11个
+664,data_analysis_medium_52,True,,[LENGTH] Definition过长(506字符)，建议精简
+665,data_analysis_medium_53,True,,[COVERAGE] Use Cases覆盖率过低(38%)，仅提及5/13个
+666,data_analysis_medium_54,True,,[COVERAGE] Use Cases覆盖率过低(30%)，仅提及3/10个
+667,data_analysis_medium_55,True,,
+668,data_analysis_medium_56,True,,
+669,data_analysis_medium_57,True,,[COVERAGE] Use Cases覆盖率过低(9%)，仅提及1/11个
+670,data_analysis_medium_58,True,,
+671,data_analysis_medium_59,True,,[COVERAGE] Use Cases覆盖率过低(45%)，仅提及5/11个
+672,data_analysis_medium_6,True,,[COVERAGE] Use Cases覆盖率过低(9%)，仅提及1/11个
+673,data_analysis_medium_7,True,,[COVERAGE] Use Cases覆盖率过低(15%)，仅提及2/13个
+674,data_analysis_medium_8,True,,[COVERAGE] Use Cases覆盖率过低(38%)，仅提及5/13个
+675,data_analysis_medium_9,True,,[COVERAGE] Use Cases覆盖率过低(46%)，仅提及6/13个
+676,data_analysis_simple_0,True,,
+677,data_analysis_simple_1,True,,[COVERAGE] Use Cases覆盖率过低(14%)，仅提及1/7个
+678,data_analysis_simple_10,True,,[COVERAGE] Use Cases覆盖率过低(43%)，仅提及3/7个
+679,data_analysis_simple_11,True,,
+680,data_analysis_simple_12,True,,[COVERAGE] Use Cases覆盖率过低(14%)，仅提及1/7个
+681,data_analysis_simple_13,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及2/5个
+682,data_analysis_simple_14,True,,
+683,data_analysis_simple_15,True,,
+684,data_analysis_simple_16,True,,
+685,data_analysis_simple_17,True,,
+686,data_analysis_simple_18,True,,
+687,data_analysis_simple_19,True,,
+688,data_analysis_simple_2,True,,
+689,data_analysis_simple_20,True,,[COVERAGE] Use Cases覆盖率过低(29%)，仅提及2/7个
+690,data_analysis_simple_21,True,,[COVERAGE] Use Cases覆盖率过低(29%)，仅提及2/7个
+691,data_analysis_simple_22,True,,
+692,data_analysis_simple_23,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及2/6个
+693,data_analysis_simple_24,True,,
+694,data_analysis_simple_25,True,,
+695,data_analysis_simple_26,True,,
+696,data_analysis_simple_27,True,,[COVERAGE] Use Cases覆盖率过低(38%)，仅提及3/8个
+697,data_analysis_simple_28,True,,[CORRESPONDENCE] Description中的use cases似乎没有在Instruction中提及 | [COVERAGE] Use Cases覆盖率过低(0%)，仅提及0/7个
+698,data_analysis_simple_29,True,,
+699,data_analysis_simple_3,True,,
+700,data_analysis_simple_30,True,,
+701,data_analysis_simple_31,True,,
+702,data_analysis_simple_32,True,,
+703,data_analysis_simple_33,True,,
+704,data_analysis_simple_34,True,,
+705,data_analysis_simple_35,True,,
+706,data_analysis_simple_36,True,,
+707,data_analysis_simple_37,True,,
+708,data_analysis_simple_38,True,,
+709,data_analysis_simple_39,True,,
+710,data_analysis_simple_4,True,,
+711,data_analysis_simple_40,True,,
+712,data_analysis_simple_41,True,,
+713,data_analysis_simple_42,True,,
+714,data_analysis_simple_43,True,,
+715,data_analysis_simple_44,True,,
+716,data_analysis_simple_45,True,,
+717,data_analysis_simple_46,True,,
+718,data_analysis_simple_47,True,,
+719,data_analysis_simple_48,True,,
+720,data_analysis_simple_49,True,,
+721,data_analysis_simple_5,True,,
+722,data_analysis_simple_50,True,,
+723,data_analysis_simple_51,True,,
+724,data_analysis_simple_52,True,,
+725,data_analysis_simple_53,True,,
+726,data_analysis_simple_54,True,,
+727,data_analysis_simple_55,True,,
+728,data_analysis_simple_56,True,,
+729,data_analysis_simple_57,True,,
+730,data_analysis_simple_58,True,,
+731,data_analysis_simple_59,True,,
+732,data_analysis_simple_6,True,,
+733,data_analysis_simple_60,True,,
+734,data_analysis_simple_61,True,,
+735,data_analysis_simple_62,True,,
+736,data_analysis_simple_63,True,,
+737,data_analysis_simple_64,True,,
+738,data_analysis_simple_65,True,,
+739,data_analysis_simple_66,True,,
+740,data_analysis_simple_67,True,,
+741,data_analysis_simple_68,True,,
+742,data_analysis_simple_69,True,,
+743,data_analysis_simple_7,True,,
+744,data_analysis_simple_70,True,,
+745,data_analysis_simple_71,True,,
+746,data_analysis_simple_72,True,,
+747,data_analysis_simple_73,True,,
+748,data_analysis_simple_74,True,,
+749,data_analysis_simple_8,True,,
+750,data_analysis_simple_9,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及2/6个
+751,ecommerce_complex_0,True,,[COVERAGE] Use Cases覆盖率过低(13%)，仅提及3/23个
+752,ecommerce_complex_1,True,,[COVERAGE] Use Cases覆盖率过低(42%)，仅提及8/19个
+753,ecommerce_complex_10,True,,[COVERAGE] Use Cases覆盖率过低(19%)，仅提及5/26个
+754,ecommerce_complex_11,True,,[COVERAGE] Use Cases覆盖率过低(11%)，仅提及2/18个
+755,ecommerce_complex_12,True,,[LENGTH] Definition过长(508字符)，建议精简
+756,ecommerce_complex_13,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及2/6个 | [COVERAGE] Use Cases覆盖率过低(17%)，仅提及4/23个
+757,ecommerce_complex_14,True,,[COVERAGE] Actors覆盖率过低(17%)，仅提及1/6个 | [COVERAGE] Use Cases覆盖率过低(26%)，仅提及6/23个
+758,ecommerce_complex_2,True,,[COVERAGE] Use Cases覆盖率过低(29%)，仅提及6/21个
+759,ecommerce_complex_3,True,,[COVERAGE] Actors覆盖率过低(17%)，仅提及1/6个 | [COVERAGE] Use Cases覆盖率过低(25%)，仅提及5/20个
+760,ecommerce_complex_4,True,,[COVERAGE] Actors覆盖率过低(17%)，仅提及1/6个 | [COVERAGE] Use Cases覆盖率过低(17%)，仅提及4/24个
+761,ecommerce_complex_5,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及2/6个 | [COVERAGE] Use Cases覆盖率过低(43%)，仅提及10/23个
+762,ecommerce_complex_6,True,,[COVERAGE] Use Cases覆盖率过低(38%)，仅提及9/24个
+763,ecommerce_complex_7,True,,[COVERAGE] Use Cases覆盖率过低(24%)，仅提及5/21个
+764,ecommerce_complex_8,True,,[COVERAGE] Use Cases覆盖率过低(16%)，仅提及3/19个
+765,ecommerce_complex_9,True,,
+766,ecommerce_medium_0,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(45%)，仅提及5/11个
+767,ecommerce_medium_1,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及1/3个 | [COVERAGE] Use Cases覆盖率过低(15%)，仅提及2/13个
+768,ecommerce_medium_10,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个
+769,ecommerce_medium_11,True,,
+770,ecommerce_medium_12,True,,[COVERAGE] Use Cases覆盖率过低(25%)，仅提及3/12个
+771,ecommerce_medium_13,True,,[COVERAGE] Use Cases覆盖率过低(20%)，仅提及3/15个
+772,ecommerce_medium_14,True,,
+773,ecommerce_medium_15,True,,[COVERAGE] Use Cases覆盖率过低(42%)，仅提及5/12个
+774,ecommerce_medium_16,True,,
+775,ecommerce_medium_17,True,,
+776,ecommerce_medium_18,True,,
+777,ecommerce_medium_19,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(15%)，仅提及2/13个
+778,ecommerce_medium_2,True,,[COVERAGE] Use Cases覆盖率过低(36%)，仅提及5/14个
+779,ecommerce_medium_20,True,,
+780,ecommerce_medium_21,True,,[COVERAGE] Use Cases覆盖率过低(29%)，仅提及4/14个
+781,ecommerce_medium_22,True,,[COVERAGE] Use Cases覆盖率过低(43%)，仅提及6/14个
+782,ecommerce_medium_23,True,,[COVERAGE] Use Cases覆盖率过低(20%)，仅提及3/15个
+783,ecommerce_medium_24,True,,[COVERAGE] Use Cases覆盖率过低(45%)，仅提及5/11个
+784,ecommerce_medium_25,True,,
+785,ecommerce_medium_26,True,,[COVERAGE] Use Cases覆盖率过低(31%)，仅提及4/13个
+786,ecommerce_medium_27,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及1/3个 | [COVERAGE] Use Cases覆盖率过低(15%)，仅提及2/13个
+787,ecommerce_medium_28,True,,
+788,ecommerce_medium_29,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及5/15个
+789,ecommerce_medium_3,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(27%)，仅提及4/15个
+790,ecommerce_medium_30,True,,
+791,ecommerce_medium_31,True,,
+792,ecommerce_medium_32,True,,
+793,ecommerce_medium_33,True,,
+794,ecommerce_medium_34,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及4/12个
+795,ecommerce_medium_35,True,,[LENGTH] Definition过长(522字符)，建议精简
+796,ecommerce_medium_36,True,,[COVERAGE] Use Cases覆盖率过低(15%)，仅提及2/13个
+797,ecommerce_medium_37,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及4/10个
+798,ecommerce_medium_38,True,,[COVERAGE] Use Cases覆盖率过低(27%)，仅提及4/15个
+799,ecommerce_medium_39,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及1/3个 | [COVERAGE] Use Cases覆盖率过低(27%)，仅提及4/15个
+800,ecommerce_medium_4,True,,[COVERAGE] Use Cases覆盖率过低(43%)，仅提及6/14个
+801,ecommerce_medium_40,True,,[COVERAGE] Use Cases覆盖率过低(23%)，仅提及3/13个
+802,ecommerce_medium_41,True,,
+803,ecommerce_medium_42,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(31%)，仅提及4/13个
+804,ecommerce_medium_43,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(36%)，仅提及4/11个
+805,ecommerce_medium_44,True,,[COVERAGE] Use Cases覆盖率过低(27%)，仅提及4/15个
+806,ecommerce_medium_45,True,,
+807,ecommerce_medium_46,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及1/3个 | [COVERAGE] Use Cases覆盖率过低(46%)，仅提及6/13个
+808,ecommerce_medium_47,True,,
+809,ecommerce_medium_48,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及4/12个
+810,ecommerce_medium_49,True,,
+811,ecommerce_medium_5,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及4/10个
+812,ecommerce_medium_50,True,,
+813,ecommerce_medium_51,True,,
+814,ecommerce_medium_52,True,,[COVERAGE] Use Cases覆盖率过低(45%)，仅提及5/11个
+815,ecommerce_medium_53,True,,[COVERAGE] Use Cases覆盖率过低(13%)，仅提及2/15个
+816,ecommerce_medium_54,True,,
+817,ecommerce_medium_55,True,,[COVERAGE] Use Cases覆盖率过低(43%)，仅提及6/14个
+818,ecommerce_medium_56,True,,[COVERAGE] Use Cases覆盖率过低(47%)，仅提及7/15个
+819,ecommerce_medium_57,True,,
+820,ecommerce_medium_58,True,,[LENGTH] Definition过长(590字符)，建议精简 | [COVERAGE] Use Cases覆盖率过低(40%)，仅提及6/15个
+821,ecommerce_medium_59,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(20%)，仅提及3/15个
+822,ecommerce_medium_6,True,,
+823,ecommerce_medium_7,True,,
+824,ecommerce_medium_8,True,,
+825,ecommerce_medium_9,True,,[COVERAGE] Use Cases覆盖率过低(46%)，仅提及6/13个
+826,ecommerce_simple_0,True,,
+827,ecommerce_simple_1,True,,
+828,ecommerce_simple_10,True,,
+829,ecommerce_simple_11,True,,
+830,ecommerce_simple_12,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及2/5个
+831,ecommerce_simple_13,True,,
+832,ecommerce_simple_14,True,,
+833,ecommerce_simple_15,True,,
+834,ecommerce_simple_16,True,,
+835,ecommerce_simple_17,True,,[DUPLICATION] Definition和Emphasis & Caution内容重复度过高(75.0%)
+836,ecommerce_simple_18,True,,
+837,ecommerce_simple_19,True,,
+838,ecommerce_simple_2,True,,
+839,ecommerce_simple_20,True,,
+840,ecommerce_simple_21,True,,[COVERAGE] Use Cases覆盖率过低(43%)，仅提及3/7个
+841,ecommerce_simple_22,True,,
+842,ecommerce_simple_23,True,,
+843,ecommerce_simple_24,True,,
+844,ecommerce_simple_25,True,,
+845,ecommerce_simple_26,True,,
+846,ecommerce_simple_27,True,,
+847,ecommerce_simple_28,True,,
+848,ecommerce_simple_29,True,,
+849,ecommerce_simple_3,True,,
+850,ecommerce_simple_30,True,,
+851,ecommerce_simple_31,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及2/5个
+852,ecommerce_simple_32,True,,
+853,ecommerce_simple_33,True,,
+854,ecommerce_simple_34,True,,
+855,ecommerce_simple_35,True,,
+856,ecommerce_simple_36,True,,
+857,ecommerce_simple_37,True,,
+858,ecommerce_simple_38,True,,
+859,ecommerce_simple_39,True,,
+860,ecommerce_simple_4,True,,
+861,ecommerce_simple_40,True,,
+862,ecommerce_simple_41,True,,
+863,ecommerce_simple_42,True,,
+864,ecommerce_simple_43,True,,
+865,ecommerce_simple_44,True,,
+866,ecommerce_simple_45,True,,[COVERAGE] Use Cases覆盖率过低(29%)，仅提及2/7个
+867,ecommerce_simple_46,True,,
+868,ecommerce_simple_47,True,,[COVERAGE] Use Cases覆盖率过低(38%)，仅提及3/8个
+869,ecommerce_simple_48,True,,
+870,ecommerce_simple_49,True,,
+871,ecommerce_simple_5,True,,
+872,ecommerce_simple_50,True,,
+873,ecommerce_simple_51,True,,[COVERAGE] Use Cases覆盖率过低(25%)，仅提及2/8个
+874,ecommerce_simple_52,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及2/5个
+875,ecommerce_simple_53,True,,
+876,ecommerce_simple_54,True,,
+877,ecommerce_simple_55,True,,
+878,ecommerce_simple_56,True,,
+879,ecommerce_simple_57,True,,
+880,ecommerce_simple_58,True,,
+881,ecommerce_simple_59,True,,[COVERAGE] Use Cases覆盖率过低(38%)，仅提及3/8个
+882,ecommerce_simple_6,True,,
+883,ecommerce_simple_60,True,,
+884,ecommerce_simple_61,True,,
+885,ecommerce_simple_62,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及2/6个
+886,ecommerce_simple_63,True,,
+887,ecommerce_simple_64,True,,
+888,ecommerce_simple_65,True,,
+889,ecommerce_simple_66,True,,
+890,ecommerce_simple_67,True,,
+891,ecommerce_simple_68,True,,
+892,ecommerce_simple_69,True,,[COVERAGE] Use Cases覆盖率过低(29%)，仅提及2/7个
+893,ecommerce_simple_7,True,,
+894,ecommerce_simple_70,True,,[COVERAGE] Use Cases覆盖率过低(14%)，仅提及1/7个
+895,ecommerce_simple_71,True,,
+896,ecommerce_simple_72,True,,
+897,ecommerce_simple_73,True,,
+898,ecommerce_simple_74,True,,
+899,ecommerce_simple_8,True,,
+900,ecommerce_simple_9,True,,
+901,file_management_complex_0,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(48%)，仅提及12/25个
+902,file_management_complex_1,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及8/20个
+903,file_management_complex_10,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及2/6个 | [COVERAGE] Use Cases覆盖率过低(27%)，仅提及7/26个
+904,file_management_complex_11,True,,[COVERAGE] Use Cases覆盖率过低(32%)，仅提及7/22个
+905,file_management_complex_12,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(25%)，仅提及5/20个
+906,file_management_complex_13,True,,[COVERAGE] Actors覆盖率过低(20%)，仅提及1/5个 | [COVERAGE] Use Cases覆盖率过低(18%)，仅提及4/22个
+907,file_management_complex_14,True,,[COVERAGE] Use Cases覆盖率过低(20%)，仅提及4/20个
+908,file_management_complex_2,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(11%)，仅提及2/19个
+909,file_management_complex_3,True,,[COVERAGE] Actors覆盖率过低(20%)，仅提及1/5个 | [COVERAGE] Use Cases覆盖率过低(19%)，仅提及4/21个
+910,file_management_complex_4,True,,[COVERAGE] Use Cases覆盖率过低(36%)，仅提及8/22个
+911,file_management_complex_5,True,,
+912,file_management_complex_6,True,,[COVERAGE] Actors覆盖率过低(17%)，仅提及1/6个
+913,file_management_complex_7,True,,[COVERAGE] Actors覆盖率过低(17%)，仅提及1/6个 | [COVERAGE] Use Cases覆盖率过低(21%)，仅提及4/19个
+914,file_management_complex_8,True,,[COVERAGE] Actors覆盖率过低(20%)，仅提及1/5个 | [COVERAGE] Use Cases覆盖率过低(9%)，仅提及2/23个
+915,file_management_complex_9,True,,[LENGTH] Definition过长(766字符)，建议精简 | [COVERAGE] Use Cases覆盖率过低(47%)，仅提及9/19个
+916,file_management_medium_0,True,,[COVERAGE] Use Cases覆盖率过低(21%)，仅提及3/14个
+917,file_management_medium_1,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(40%)，仅提及6/15个
+918,file_management_medium_10,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个
+919,file_management_medium_11,True,,[COVERAGE] Use Cases覆盖率过低(20%)，仅提及3/15个
+920,file_management_medium_12,True,,
+921,file_management_medium_13,True,,
+922,file_management_medium_14,True,,[LENGTH] Definition过长(749字符)，建议精简
+923,file_management_medium_15,True,,[DUPLICATION] Definition和Emphasis & Caution内容重复度过高(75.9%)
+924,file_management_medium_16,True,,
+925,file_management_medium_17,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(29%)，仅提及4/14个
+926,file_management_medium_18,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及1/3个 | [COVERAGE] Use Cases覆盖率过低(36%)，仅提及4/11个
+927,file_management_medium_19,True,,
+928,file_management_medium_2,True,,
+929,file_management_medium_20,True,,
+930,file_management_medium_21,True,,
+931,file_management_medium_22,True,,
+932,file_management_medium_23,True,,
+933,file_management_medium_24,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(36%)，仅提及4/11个
+934,file_management_medium_25,True,,
+935,file_management_medium_26,True,,
+936,file_management_medium_27,True,,[COVERAGE] Use Cases覆盖率过低(36%)，仅提及4/11个
+937,file_management_medium_28,True,,[LENGTH] Definition过长(510字符)，建议精简 | [COVERAGE] Use Cases覆盖率过低(13%)，仅提及2/15个
+938,file_management_medium_29,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及1/3个 | [COVERAGE] Use Cases覆盖率过低(31%)，仅提及4/13个
+939,file_management_medium_3,True,,
+940,file_management_medium_30,True,,[COVERAGE] Actors覆盖率过低(25%)，仅提及1/4个 | [COVERAGE] Use Cases覆盖率过低(30%)，仅提及3/10个
+941,file_management_medium_31,True,,
+942,file_management_medium_32,True,,[LENGTH] Definition过长(502字符)，建议精简 | [COVERAGE] Use Cases覆盖率过低(40%)，仅提及6/15个
+943,file_management_medium_33,True,,
+944,file_management_medium_34,True,,[COVERAGE] Use Cases覆盖率过低(25%)，仅提及3/12个
+945,file_management_medium_35,True,,
+946,file_management_medium_36,True,,[LENGTH] Definition过长(586字符)，建议精简
+947,file_management_medium_37,True,,[COVERAGE] Use Cases覆盖率过低(20%)，仅提及2/10个
+948,file_management_medium_38,True,,[COVERAGE] Use Cases覆盖率过低(42%)，仅提及5/12个
+949,file_management_medium_39,True,,[COVERAGE] Use Cases覆盖率过低(47%)，仅提及7/15个
+950,file_management_medium_4,True,,
+951,file_management_medium_40,True,,[COVERAGE] Use Cases覆盖率过低(43%)，仅提及6/14个
+952,file_management_medium_41,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及1/3个 | [COVERAGE] Use Cases覆盖率过低(15%)，仅提及2/13个
+953,file_management_medium_42,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及4/12个
+954,file_management_medium_43,True,,
+955,file_management_medium_44,True,,
+956,file_management_medium_45,True,,[DUPLICATION] Definition和Emphasis & Caution内容重复度过高(77.8%)
+957,file_management_medium_46,True,,
+958,file_management_medium_47,True,,[COVERAGE] Use Cases覆盖率过低(36%)，仅提及4/11个
+959,file_management_medium_48,True,,
+960,file_management_medium_49,True,,[COVERAGE] Use Cases覆盖率过低(36%)，仅提及4/11个
+961,file_management_medium_5,True,,
+962,file_management_medium_50,True,,
+963,file_management_medium_51,True,,[COVERAGE] Use Cases覆盖率过低(42%)，仅提及5/12个
+964,file_management_medium_52,True,,[COVERAGE] Use Cases覆盖率过低(38%)，仅提及5/13个
+965,file_management_medium_53,True,,
+966,file_management_medium_54,True,,
+967,file_management_medium_55,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及1/3个 | [COVERAGE] Use Cases覆盖率过低(20%)，仅提及3/15个
+968,file_management_medium_56,True,,
+969,file_management_medium_57,True,,
+970,file_management_medium_58,True,,
+971,file_management_medium_59,True,,
+972,file_management_medium_6,True,,
+973,file_management_medium_7,True,,[COVERAGE] Use Cases覆盖率过低(10%)，仅提及1/10个
+974,file_management_medium_8,True,,
+975,file_management_medium_9,True,,
+976,file_management_simple_0,True,,
+977,file_management_simple_1,True,,
+978,file_management_simple_10,True,,
+979,file_management_simple_11,True,,
+980,file_management_simple_12,True,,
+981,file_management_simple_13,True,,
+982,file_management_simple_14,True,,
+983,file_management_simple_15,True,,
+984,file_management_simple_16,True,,
+985,file_management_simple_17,True,,
+986,file_management_simple_18,True,,
+987,file_management_simple_19,True,,
+988,file_management_simple_2,True,,
+989,file_management_simple_20,True,,[COVERAGE] Use Cases覆盖率过低(38%)，仅提及3/8个
+990,file_management_simple_21,True,,
+991,file_management_simple_22,True,,
+992,file_management_simple_23,True,,
+993,file_management_simple_24,True,,
+994,file_management_simple_25,True,,
+995,file_management_simple_26,True,,
+996,file_management_simple_27,True,,
+997,file_management_simple_28,True,,
+998,file_management_simple_29,True,,
+999,file_management_simple_3,True,,
+1000,file_management_simple_30,True,,
+1001,file_management_simple_31,True,,
+1002,file_management_simple_32,True,,
+1003,file_management_simple_33,True,,
+1004,file_management_simple_34,True,,
+1005,file_management_simple_35,True,,
+1006,file_management_simple_36,True,,
+1007,file_management_simple_37,True,,
+1008,file_management_simple_38,True,,
+1009,file_management_simple_39,True,,
+1010,file_management_simple_4,True,,
+1011,file_management_simple_40,True,,
+1012,file_management_simple_41,True,,
+1013,file_management_simple_42,True,,
+1014,file_management_simple_43,True,,
+1015,file_management_simple_44,True,,
+1016,file_management_simple_45,True,,
+1017,file_management_simple_46,True,,
+1018,file_management_simple_47,True,,
+1019,file_management_simple_48,True,,
+1020,file_management_simple_49,True,,
+1021,file_management_simple_5,True,,
+1022,file_management_simple_50,True,,
+1023,file_management_simple_51,True,,
+1024,file_management_simple_52,True,,
+1025,file_management_simple_53,True,,
+1026,file_management_simple_54,True,,
+1027,file_management_simple_55,True,,
+1028,file_management_simple_56,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及2/5个
+1029,file_management_simple_57,True,,
+1030,file_management_simple_58,True,,
+1031,file_management_simple_59,True,,
+1032,file_management_simple_6,True,,
+1033,file_management_simple_60,True,,
+1034,file_management_simple_61,True,,
+1035,file_management_simple_62,True,,
+1036,file_management_simple_63,True,,
+1037,file_management_simple_64,True,,
+1038,file_management_simple_65,True,,
+1039,file_management_simple_66,True,,
+1040,file_management_simple_67,True,,
+1041,file_management_simple_68,True,,
+1042,file_management_simple_69,True,,
+1043,file_management_simple_7,True,,
+1044,file_management_simple_70,True,,
+1045,file_management_simple_71,True,,
+1046,file_management_simple_72,True,,
+1047,file_management_simple_73,True,,
+1048,file_management_simple_74,True,,
+1049,file_management_simple_8,True,,
+1050,file_management_simple_9,True,,
+1051,notification_system_complex_0,True,,
+1052,notification_system_complex_1,True,,[LENGTH] Definition过长(535字符)，建议精简
+1053,notification_system_complex_10,True,,[LENGTH] Definition过长(512字符)，建议精简
+1054,notification_system_complex_11,True,,[LENGTH] Definition过长(912字符)，建议精简
+1055,notification_system_complex_12,True,,
+1056,notification_system_complex_13,True,,
+1057,notification_system_complex_14,True,,[LENGTH] Definition过长(742字符)，建议精简
+1058,notification_system_complex_2,True,,[LENGTH] Definition过长(679字符)，建议精简
+1059,notification_system_complex_3,True,,[LENGTH] Definition过长(894字符)，建议精简
+1060,notification_system_complex_4,True,,[LENGTH] Definition过长(628字符)，建议精简
+1061,notification_system_complex_5,True,,
+1062,notification_system_complex_6,True,,
+1063,notification_system_complex_7,True,,[LENGTH] Definition过长(535字符)，建议精简
+1064,notification_system_complex_8,True,,[LENGTH] Definition过长(551字符)，建议精简
+1065,notification_system_complex_9,True,,
+1066,notification_system_medium_0,True,,[LENGTH] Definition过长(519字符)，建议精简
+1067,notification_system_medium_1,True,,
+1068,notification_system_medium_10,True,,
+1069,notification_system_medium_11,True,,
+1070,notification_system_medium_12,True,,
+1071,notification_system_medium_13,True,,
+1072,notification_system_medium_14,True,,
+1073,notification_system_medium_15,True,,
+1074,notification_system_medium_16,True,,
+1075,notification_system_medium_17,True,,
+1076,notification_system_medium_18,True,,
+1077,notification_system_medium_19,True,,
+1078,notification_system_medium_2,True,,
+1079,notification_system_medium_20,True,,
+1080,notification_system_medium_21,True,,[LENGTH] Definition过长(598字符)，建议精简
+1081,notification_system_medium_22,True,,
+1082,notification_system_medium_23,True,,
+1083,notification_system_medium_24,True,,
+1084,notification_system_medium_25,True,,
+1085,notification_system_medium_26,True,,
+1086,notification_system_medium_27,True,,
+1087,notification_system_medium_28,True,,
+1088,notification_system_medium_29,True,,
+1089,notification_system_medium_3,True,,
+1090,notification_system_medium_30,True,,
+1091,notification_system_medium_31,True,,
+1092,notification_system_medium_32,True,,
+1093,notification_system_medium_33,True,,
+1094,notification_system_medium_34,True,,
+1095,notification_system_medium_35,True,,
+1096,notification_system_medium_36,True,,
+1097,notification_system_medium_37,True,,
+1098,notification_system_medium_38,True,,
+1099,notification_system_medium_39,True,,
+1100,notification_system_medium_4,True,,
+1101,notification_system_medium_40,True,,
+1102,notification_system_medium_41,True,,
+1103,notification_system_medium_42,True,,[LENGTH] Definition过长(563字符)，建议精简
+1104,notification_system_medium_43,True,,
+1105,notification_system_medium_44,True,,
+1106,notification_system_medium_45,True,,[LENGTH] Definition过长(518字符)，建议精简
+1107,notification_system_medium_46,True,,
+1108,notification_system_medium_47,True,,
+1109,notification_system_medium_48,True,,
+1110,notification_system_medium_49,True,,
+1111,notification_system_medium_5,True,,
+1112,notification_system_medium_50,True,,
+1113,notification_system_medium_51,True,,
+1114,notification_system_medium_52,True,,
+1115,notification_system_medium_53,True,,
+1116,notification_system_medium_54,True,,
+1117,notification_system_medium_55,True,,
+1118,notification_system_medium_56,True,,
+1119,notification_system_medium_57,True,,
+1120,notification_system_medium_58,True,,
+1121,notification_system_medium_59,True,,
+1122,notification_system_medium_6,True,,
+1123,notification_system_medium_7,True,,
+1124,notification_system_medium_8,True,,
+1125,notification_system_medium_9,True,,
+1126,notification_system_simple_0,True,,
+1127,notification_system_simple_1,True,,
+1128,notification_system_simple_10,True,,
+1129,notification_system_simple_11,True,,
+1130,notification_system_simple_12,True,,
+1131,notification_system_simple_13,True,,
+1132,notification_system_simple_14,True,,
+1133,notification_system_simple_15,True,,
+1134,notification_system_simple_16,True,,
+1135,notification_system_simple_17,True,,
+1136,notification_system_simple_18,True,,
+1137,notification_system_simple_19,True,,
+1138,notification_system_simple_2,True,,
+1139,notification_system_simple_20,True,,
+1140,notification_system_simple_21,True,,
+1141,notification_system_simple_22,True,,
+1142,notification_system_simple_23,True,,
+1143,notification_system_simple_24,True,,
+1144,notification_system_simple_25,True,,
+1145,notification_system_simple_26,True,,
+1146,notification_system_simple_27,True,,
+1147,notification_system_simple_28,True,,
+1148,notification_system_simple_29,True,,
+1149,notification_system_simple_3,True,,
+1150,notification_system_simple_30,True,,
+1151,notification_system_simple_31,True,,
+1152,notification_system_simple_32,True,,
+1153,notification_system_simple_33,True,,
+1154,notification_system_simple_34,True,,
+1155,notification_system_simple_35,True,,
+1156,notification_system_simple_36,True,,
+1157,notification_system_simple_37,True,,
+1158,notification_system_simple_38,True,,
+1159,notification_system_simple_39,True,,
+1160,notification_system_simple_4,True,,
+1161,notification_system_simple_40,True,,
+1162,notification_system_simple_41,True,,
+1163,notification_system_simple_42,True,,
+1164,notification_system_simple_43,True,,
+1165,notification_system_simple_44,True,,
+1166,notification_system_simple_45,True,,
+1167,notification_system_simple_46,True,,
+1168,notification_system_simple_47,True,,
+1169,notification_system_simple_48,True,,
+1170,notification_system_simple_49,True,,
+1171,notification_system_simple_5,True,,
+1172,notification_system_simple_50,True,,
+1173,notification_system_simple_51,True,,
+1174,notification_system_simple_52,True,,
+1175,notification_system_simple_53,True,,
+1176,notification_system_simple_54,True,,
+1177,notification_system_simple_55,True,,
+1178,notification_system_simple_56,True,,
+1179,notification_system_simple_57,True,,
+1180,notification_system_simple_58,True,,
+1181,notification_system_simple_59,True,,
+1182,notification_system_simple_6,True,,
+1183,notification_system_simple_60,True,,
+1184,notification_system_simple_61,True,,
+1185,notification_system_simple_62,True,,
+1186,notification_system_simple_63,True,,
+1187,notification_system_simple_64,True,,
+1188,notification_system_simple_65,True,,
+1189,notification_system_simple_66,True,,
+1190,notification_system_simple_67,True,,[LENGTH] Things to Avoid过短(2字符)，可能不完整
+1191,notification_system_simple_68,True,,
+1192,notification_system_simple_69,True,,
+1193,notification_system_simple_7,True,,
+1194,notification_system_simple_70,True,,
+1195,notification_system_simple_71,True,,
+1196,notification_system_simple_72,True,,
+1197,notification_system_simple_73,True,,
+1198,notification_system_simple_74,True,,
+1199,notification_system_simple_8,True,,
+1200,notification_system_simple_9,True,,
+1201,permission_management_complex_0,True,,[LENGTH] Definition过长(513字符)，建议精简
+1202,permission_management_complex_1,True,,[LENGTH] Definition过长(518字符)，建议精简
+1203,permission_management_complex_10,True,,
+1204,permission_management_complex_11,True,,[LENGTH] Definition过长(529字符)，建议精简
+1205,permission_management_complex_12,True,,[LENGTH] Definition过长(511字符)，建议精简
+1206,permission_management_complex_13,True,,[LENGTH] Definition过长(842字符)，建议精简
+1207,permission_management_complex_14,True,,[LENGTH] Definition过长(506字符)，建议精简
+1208,permission_management_complex_2,True,,[LENGTH] Definition过长(563字符)，建议精简
+1209,permission_management_complex_3,True,,[LENGTH] Definition过长(566字符)，建议精简
+1210,permission_management_complex_4,True,,[LENGTH] Definition过长(595字符)，建议精简
+1211,permission_management_complex_5,True,,
+1212,permission_management_complex_6,True,,[LENGTH] Definition过长(600字符)，建议精简
+1213,permission_management_complex_7,True,,
+1214,permission_management_complex_8,True,,[LENGTH] Definition过长(536字符)，建议精简
+1215,permission_management_complex_9,True,,[LENGTH] Definition过长(539字符)，建议精简
+1216,permission_management_medium_0,True,,
+1217,permission_management_medium_1,True,,
+1218,permission_management_medium_10,True,,
+1219,permission_management_medium_11,True,,
+1220,permission_management_medium_12,True,,
+1221,permission_management_medium_13,True,,
+1222,permission_management_medium_14,True,,
+1223,permission_management_medium_15,True,,
+1224,permission_management_medium_16,True,,
+1225,permission_management_medium_17,True,,
+1226,permission_management_medium_18,True,,[COVERAGE] Use Cases覆盖率过低(42%)，仅提及5/12个
+1227,permission_management_medium_19,True,,
+1228,permission_management_medium_2,True,,
+1229,permission_management_medium_20,True,,[COVERAGE] Use Cases覆盖率过低(20%)，仅提及2/10个
+1230,permission_management_medium_21,True,,[COVERAGE] Use Cases覆盖率过低(27%)，仅提及4/15个
+1231,permission_management_medium_22,True,,[COVERAGE] Use Cases覆盖率过低(36%)，仅提及4/11个
+1232,permission_management_medium_23,True,,[COVERAGE] Use Cases覆盖率过低(36%)，仅提及5/14个
+1233,permission_management_medium_24,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及5/15个
+1234,permission_management_medium_25,True,,
+1235,permission_management_medium_26,True,,
+1236,permission_management_medium_27,True,,[COVERAGE] Use Cases覆盖率过低(13%)，仅提及2/15个
+1237,permission_management_medium_28,True,,
+1238,permission_management_medium_29,True,,
+1239,permission_management_medium_3,True,,[COVERAGE] Use Cases覆盖率过低(31%)，仅提及4/13个
+1240,permission_management_medium_30,True,,
+1241,permission_management_medium_31,True,,[COVERAGE] Use Cases覆盖率过低(30%)，仅提及3/10个
+1242,permission_management_medium_32,True,,[COVERAGE] Use Cases覆盖率过低(46%)，仅提及6/13个
+1243,permission_management_medium_33,True,,
+1244,permission_management_medium_34,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及6/15个
+1245,permission_management_medium_35,True,,[COVERAGE] Use Cases覆盖率过低(46%)，仅提及6/13个
+1246,permission_management_medium_36,True,,
+1247,permission_management_medium_37,True,,[COVERAGE] Use Cases覆盖率过低(29%)，仅提及4/14个
+1248,permission_management_medium_38,True,,[COVERAGE] Use Cases覆盖率过低(20%)，仅提及3/15个
+1249,permission_management_medium_39,True,,[COVERAGE] Use Cases覆盖率过低(20%)，仅提及2/10个
+1250,permission_management_medium_4,True,,[LENGTH] Definition过长(512字符)，建议精简
+1251,permission_management_medium_40,True,,[DUPLICATION] Definition和Emphasis & Caution内容重复度过高(70.4%)
+1252,permission_management_medium_41,True,,
+1253,permission_management_medium_42,True,,[DUPLICATION] Definition和Emphasis & Caution内容重复度过高(71.1%)
+1254,permission_management_medium_43,True,,
+1255,permission_management_medium_44,True,,
+1256,permission_management_medium_45,True,,
+1257,permission_management_medium_46,True,,[COVERAGE] Use Cases覆盖率过低(27%)，仅提及4/15个
+1258,permission_management_medium_47,True,,
+1259,permission_management_medium_48,True,,[COVERAGE] Use Cases覆盖率过低(36%)，仅提及4/11个
+1260,permission_management_medium_49,True,,
+1261,permission_management_medium_5,True,,
+1262,permission_management_medium_50,True,,[COVERAGE] Use Cases覆盖率过低(20%)，仅提及3/15个
+1263,permission_management_medium_51,True,,
+1264,permission_management_medium_52,True,,
+1265,permission_management_medium_53,True,,
+1266,permission_management_medium_54,True,,[COVERAGE] Use Cases覆盖率过低(43%)，仅提及6/14个
+1267,permission_management_medium_55,True,,[LENGTH] Definition过长(620字符)，建议精简 | [COVERAGE] Use Cases覆盖率过低(40%)，仅提及6/15个
+1268,permission_management_medium_56,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及4/10个
+1269,permission_management_medium_57,True,,[LENGTH] Definition过长(558字符)，建议精简
+1270,permission_management_medium_58,True,,[COVERAGE] Use Cases覆盖率过低(21%)，仅提及3/14个
+1271,permission_management_medium_59,True,,[COVERAGE] Use Cases覆盖率过低(31%)，仅提及4/13个
+1272,permission_management_medium_6,True,,
+1273,permission_management_medium_7,True,,
+1274,permission_management_medium_8,True,,
+1275,permission_management_medium_9,True,,
+1276,permission_management_simple_0,True,,[COVERAGE] Use Cases覆盖率过低(43%)，仅提及3/7个
+1277,permission_management_simple_1,True,,
+1278,permission_management_simple_10,True,,
+1279,permission_management_simple_11,True,,
+1280,permission_management_simple_12,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及2/6个
+1281,permission_management_simple_13,True,,
+1282,permission_management_simple_14,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及2/6个
+1283,permission_management_simple_15,True,,
+1284,permission_management_simple_16,True,,[COVERAGE] Use Cases覆盖率过低(25%)，仅提及2/8个
+1285,permission_management_simple_17,True,,[COVERAGE] Use Cases覆盖率过低(25%)，仅提及2/8个
+1286,permission_management_simple_18,True,,[COVERAGE] Use Cases覆盖率过低(29%)，仅提及2/7个
+1287,permission_management_simple_19,True,,
+1288,permission_management_simple_2,True,,
+1289,permission_management_simple_20,True,,
+1290,permission_management_simple_21,True,,
+1291,permission_management_simple_22,True,,
+1292,permission_management_simple_23,True,,
+1293,permission_management_simple_24,True,,
+1294,permission_management_simple_25,True,,
+1295,permission_management_simple_26,True,,
+1296,permission_management_simple_27,True,,[COVERAGE] Use Cases覆盖率过低(29%)，仅提及2/7个
+1297,permission_management_simple_28,True,,[DUPLICATION] Definition和Emphasis & Caution内容重复度过高(70.8%)
+1298,permission_management_simple_29,True,,
+1299,permission_management_simple_3,True,,
+1300,permission_management_simple_30,True,,
+1301,permission_management_simple_31,True,,
+1302,permission_management_simple_32,True,,[COVERAGE] Use Cases覆盖率过低(38%)，仅提及3/8个
+1303,permission_management_simple_33,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及2/5个
+1304,permission_management_simple_34,True,,[COVERAGE] Use Cases覆盖率过低(43%)，仅提及3/7个
+1305,permission_management_simple_35,True,,
+1306,permission_management_simple_36,True,,
+1307,permission_management_simple_37,True,,
+1308,permission_management_simple_38,True,,
+1309,permission_management_simple_39,True,,[COVERAGE] Use Cases覆盖率过低(25%)，仅提及2/8个
+1310,permission_management_simple_4,True,,
+1311,permission_management_simple_40,True,,[COVERAGE] Use Cases覆盖率过低(25%)，仅提及2/8个
+1312,permission_management_simple_41,True,,[COVERAGE] Use Cases覆盖率过低(25%)，仅提及2/8个
+1313,permission_management_simple_42,True,,
+1314,permission_management_simple_43,True,,
+1315,permission_management_simple_44,True,,
+1316,permission_management_simple_45,True,,
+1317,permission_management_simple_46,True,,
+1318,permission_management_simple_47,True,,
+1319,permission_management_simple_48,True,,[COVERAGE] Use Cases覆盖率过低(29%)，仅提及2/7个
+1320,permission_management_simple_49,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及2/5个
+1321,permission_management_simple_5,True,,
+1322,permission_management_simple_50,True,,
+1323,permission_management_simple_51,True,,
+1324,permission_management_simple_52,True,,
+1325,permission_management_simple_53,True,,
+1326,permission_management_simple_54,True,,
+1327,permission_management_simple_55,True,,
+1328,permission_management_simple_56,True,,[COVERAGE] Use Cases覆盖率过低(33%)，仅提及2/6个
+1329,permission_management_simple_57,True,,[COVERAGE] Use Cases覆盖率过低(38%)，仅提及3/8个
+1330,permission_management_simple_58,True,,
+1331,permission_management_simple_59,True,,
+1332,permission_management_simple_6,True,,
+1333,permission_management_simple_60,True,,
+1334,permission_management_simple_61,True,,
+1335,permission_management_simple_62,True,,
+1336,permission_management_simple_63,True,,
+1337,permission_management_simple_64,True,,
+1338,permission_management_simple_65,True,,
+1339,permission_management_simple_66,True,,[COVERAGE] Use Cases覆盖率过低(25%)，仅提及2/8个
+1340,permission_management_simple_67,True,,
+1341,permission_management_simple_68,True,,
+1342,permission_management_simple_69,True,,
+1343,permission_management_simple_7,True,,[COVERAGE] Use Cases覆盖率过低(29%)，仅提及2/7个
+1344,permission_management_simple_70,True,,
+1345,permission_management_simple_71,True,,[COVERAGE] Use Cases覆盖率过低(40%)，仅提及2/5个
+1346,permission_management_simple_72,True,,
+1347,permission_management_simple_73,True,,
+1348,permission_management_simple_74,True,,
+1349,permission_management_simple_8,True,,[COVERAGE] Use Cases覆盖率过低(29%)，仅提及2/7个
+1350,permission_management_simple_9,True,,
+1351,social_interaction_complex_0,True,,[COVERAGE] Actors覆盖率过低(33%)，仅提及2/6个 | [COVERAGE] Use Cases覆盖率过低(32%)，仅提及7/22个
+1352,social_interaction_complex_1,True,,[LENGTH] Definition过长(599字符)，建议精简
+1353,social_interaction_complex_10,True,,[COVERAGE] Use Cases覆盖率过低(35%)，仅提及8/23个
+1354,social_interaction_complex_11,True,,[LENGTH] Definition过长(540字符)，建议精简
+1355,social_interaction_complex_12,True,,[LENGTH] Definition过长(578字符)，建议精简
+1356,social_interaction_complex_13,True,,
+1357,social_interaction_complex_14,True,,
+1358,social_interaction_complex_2,True,,[LENGTH] Definition过长(603字符)，建议精简
+1359,social_interaction_complex_3,True,,[LENGTH] Definition过长(538字符)，建议精简
+1360,social_interaction_complex_4,True,,
+1361,social_interaction_complex_5,True,,
+1362,social_interaction_complex_6,True,,[LENGTH] Definition过长(534字符)，建议精简
+1363,social_interaction_complex_7,True,,[LENGTH] Definition过长(540字符)，建议精简
+1364,social_interaction_complex_8,True,,
+1365,social_interaction_complex_9,True,,
+1366,social_interaction_medium_0,True,,
+1367,social_interaction_medium_1,True,,
+1368,social_interaction_medium_10,True,,
+1369,social_interaction_medium_11,True,,
+1370,social_interaction_medium_12,True,,
+1371,social_interaction_medium_13,True,,
+1372,social_interaction_medium_14,True,,
+1373,social_interaction_medium_15,True,,
+1374,social_interaction_medium_16,True,,
+1375,social_interaction_medium_17,True,,
+1376,social_interaction_medium_18,True,,[LENGTH] Definition过长(502字符)，建议精简
+1377,social_interaction_medium_19,True,,
+1378,social_interaction_medium_2,True,,
+1379,social_interaction_medium_20,True,,
+1380,social_interaction_medium_21,True,,
+1381,social_interaction_medium_22,True,,
+1382,social_interaction_medium_23,True,,
+1383,social_interaction_medium_24,True,,
+1384,social_interaction_medium_25,True,,
+1385,social_interaction_medium_26,True,,
+1386,social_interaction_medium_27,True,,
+1387,social_interaction_medium_28,True,,
+1388,social_interaction_medium_29,True,,
+1389,social_interaction_medium_3,True,,
+1390,social_interaction_medium_30,True,,
+1391,social_interaction_medium_31,True,,
+1392,social_interaction_medium_32,True,,
+1393,social_interaction_medium_33,True,,
+1394,social_interaction_medium_34,True,,[LENGTH] Definition过长(606字符)，建议精简
+1395,social_interaction_medium_35,True,,
+1396,social_interaction_medium_36,True,,
+1397,social_interaction_medium_37,True,,
+1398,social_interaction_medium_38,True,,
+1399,social_interaction_medium_39,True,,
+1400,social_interaction_medium_4,True,,
+1401,social_interaction_medium_40,True,,
+1402,social_interaction_medium_41,True,,
+1403,social_interaction_medium_42,True,,
+1404,social_interaction_medium_43,True,,
+1405,social_interaction_medium_44,True,,
+1406,social_interaction_medium_45,True,,
+1407,social_interaction_medium_46,True,,
+1408,social_interaction_medium_47,True,,
+1409,social_interaction_medium_48,True,,
+1410,social_interaction_medium_49,True,,
+1411,social_interaction_medium_5,True,,
+1412,social_interaction_medium_50,True,,
+1413,social_interaction_medium_51,True,,
+1414,social_interaction_medium_52,True,,
+1415,social_interaction_medium_53,True,,
+1416,social_interaction_medium_54,True,,
+1417,social_interaction_medium_55,True,,
+1418,social_interaction_medium_56,True,,
+1419,social_interaction_medium_57,True,,
+1420,social_interaction_medium_58,True,,
+1421,social_interaction_medium_59,True,,[LENGTH] Definition过长(552字符)，建议精简
+1422,social_interaction_medium_6,True,,
+1423,social_interaction_medium_7,True,,
+1424,social_interaction_medium_8,True,,
+1425,social_interaction_medium_9,True,,
+1426,social_interaction_simple_0,True,,
+1427,social_interaction_simple_1,True,,
+1428,social_interaction_simple_10,True,,
+1429,social_interaction_simple_11,True,,
+1430,social_interaction_simple_12,True,,
+1431,social_interaction_simple_13,True,,
+1432,social_interaction_simple_14,True,,
+1433,social_interaction_simple_15,True,,
+1434,social_interaction_simple_16,True,,
+1435,social_interaction_simple_17,True,,
+1436,social_interaction_simple_18,True,,
+1437,social_interaction_simple_19,True,,
+1438,social_interaction_simple_2,True,,
+1439,social_interaction_simple_20,True,,
+1440,social_interaction_simple_21,True,,
+1441,social_interaction_simple_22,True,,
+1442,social_interaction_simple_23,True,,
+1443,social_interaction_simple_24,True,,
+1444,social_interaction_simple_25,True,,
+1445,social_interaction_simple_26,True,,
+1446,social_interaction_simple_27,True,,
+1447,social_interaction_simple_28,True,,
+1448,social_interaction_simple_29,True,,
+1449,social_interaction_simple_3,True,,
+1450,social_interaction_simple_30,True,,
+1451,social_interaction_simple_31,True,,
+1452,social_interaction_simple_32,True,,
+1453,social_interaction_simple_33,True,,
+1454,social_interaction_simple_34,True,,
+1455,social_interaction_simple_35,True,,
+1456,social_interaction_simple_36,True,,
+1457,social_interaction_simple_37,True,,
+1458,social_interaction_simple_38,True,,
+1459,social_interaction_simple_39,True,,
+1460,social_interaction_simple_4,True,,
+1461,social_interaction_simple_40,True,,
+1462,social_interaction_simple_41,True,,
+1463,social_interaction_simple_42,True,,
+1464,social_interaction_simple_43,True,,
+1465,social_interaction_simple_44,True,,
+1466,social_interaction_simple_45,True,,
+1467,social_interaction_simple_46,True,,
+1468,social_interaction_simple_47,True,,
+1469,social_interaction_simple_48,True,,
+1470,social_interaction_simple_49,True,,
+1471,social_interaction_simple_5,True,,
+1472,social_interaction_simple_50,True,,
+1473,social_interaction_simple_51,True,,
+1474,social_interaction_simple_52,True,,
+1475,social_interaction_simple_53,True,,
+1476,social_interaction_simple_54,True,,
+1477,social_interaction_simple_55,True,,
+1478,social_interaction_simple_56,True,,
+1479,social_interaction_simple_57,True,,
+1480,social_interaction_simple_58,True,,
+1481,social_interaction_simple_59,True,,
+1482,social_interaction_simple_6,True,,
+1483,social_interaction_simple_60,True,,
+1484,social_interaction_simple_61,True,,
+1485,social_interaction_simple_62,True,,
+1486,social_interaction_simple_63,True,,
+1487,social_interaction_simple_64,True,,
+1488,social_interaction_simple_65,True,,
+1489,social_interaction_simple_66,True,,
+1490,social_interaction_simple_67,True,,
+1491,social_interaction_simple_68,True,,
+1492,social_interaction_simple_69,True,,
+1493,social_interaction_simple_7,True,,
+1494,social_interaction_simple_70,True,,
+1495,social_interaction_simple_71,True,,
+1496,social_interaction_simple_72,True,,
+1497,social_interaction_simple_73,True,,
+1498,social_interaction_simple_74,True,,
+1499,social_interaction_simple_8,True,,
+1500,social_interaction_simple_9,True,,

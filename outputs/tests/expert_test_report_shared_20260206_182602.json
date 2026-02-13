@@ -1,0 +1,32 @@
+{
+  "mode": "shared",
+  "total_time": 24.315447568893433,
+  "experts_tested": 4,
+  "all_passed": true,
+  "results": [
+    {
+      "expert": "text",
+      "valid": true,
+      "instruction": "Definition: In this task, verify the user login functionality with valid credentials.\nEmphasis & Caution: Ensure both username and password validation are tested.\nThings to Avoid: Skipping error message.",
+      "time": 2.451270341873169
+    },
+    {
+      "expert": "image",
+      "valid": true,
+      "instruction": "Definition: In this task, draw bounding boxes around all cars and traffic signs in the street scene.\nEmphasis & Caution: Focus on red traffic signs and vehicles in the foreground.\nThings to Avoid: Do not annotate buildings.",
+      "time": 2.0831353664398193
+    },
+    {
+      "expert": "uml",
+      "valid": true,
+      "instruction": "Definition: In this task, implement the Login System and Validate Credentials use cases with User and Admin actor interactions.\nEmphasis & Caution: Ensure Validate Credentials is a mandatory prerequisite (include) before completing login. Send Email is a conditional extension triggered on success.\nThings to Avoid: Do not focus on UI positioning.",
+      "time": 2.8821346759796143
+    },
+    {
+      "expert": "general",
+      "valid": true,
+      "instruction": "Definition: In this task, verify the user login functionality with valid credentials by validating both username and password.\nEmphasis & Caution: Validate error messages during the test.\nThings to Avoid: Skipping either username.",
+      "time": 1.9092912673950195
+    }
+  ]
+}

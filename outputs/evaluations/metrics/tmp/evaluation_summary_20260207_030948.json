@@ -1,0 +1,10 @@
+{
+  "general_expert_qwen235B": {
+    "bleu": 0.3194917931127947,
+    "rouge_l": 0.4460851695369854,
+    "meteor": 0.5940691947371348,
+    "format_score": 0.9928571428571429,
+    "valid_rate": 1.0,
+    "avg_length": 252.7
+  }
+}

@@ -108,7 +108,7 @@ def main():
         print(f"\n可用环境类型: {', '.join(ENV_MAP.keys())}")
         print("\n示例:")
         print(
-            "  python scripts/run_with_env.py --env uml_qwen3 --script scripts/raw_recognize_interim/uml/uml_raw_recognize_interim_en_local.py --single data/test.png --streaming")
+            "  python scripts/run_with_env.py --env uml_qwen3 --script scripts/preprocessing/uml/recognize_uml.py --single data/test.png --streaming")
         sys.exit(1)
 
     exit_code = run_in_env(env_name, script_path, script_args)

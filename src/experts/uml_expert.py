@@ -6,7 +6,7 @@ UML专家 - 将UML用例图JSON转换为业务逻辑实现指令
 
 环境要求: instruction_generator
 模型: Qwen3-8B（默认）
-训练数据: dataset/uml/uml_dataset_qwen3_v3.csv
+训练数据: dataset/uml/uml_dataset.csv
 
 说明:
   - 基于Qwen3-8B训练

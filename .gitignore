@@ -213,16 +213,14 @@ lora_weights/
 
 # 数据集
 data/
-dataset/
 
 # 日志和输出
 logs/
-outputs/
 
 # 其他
 .idea/
-scripts/raw_recognize_interim/uml/chrome_user_data
-scripts/raw_recognize_interim/uml/chrome_user_data_qianwen
-chrome_user_data
-chrome_user_data_repair
-chrome_user_data_uml_repair
+inputs/
+checkpoints/
+chrome_user_data/
+chrome_user_data_repair/
+chrome_user_data_uml_repair/

@@ -1,0 +1,832 @@
+High_Requirements,Low_Requirements,Instruction
+Show Critical Path; The critical path indicates which tasks will cause project delays if they are delayed.,GUI needs to provide ability to display critical path and make the changes affecting critical path updated.,"Definition: In this task, design a GUI feature that displays the critical path and updates it automatically when changes affect it.
+Emphasis & Caution: Ensure real-time updates after any relevant change.
+Things to Avoid: Do not require manual refresh."
+"Add/Remove Task links; Tasks can be linked with one another to indicate the sequence in which they have to be performed. For example, if there is a link from task 1 to task 2 then task 2 can only be started after task 1 is completed. The start date of task 2 must thus be after the end date of task 1.",GUI needs to provide ability to show utilization of a person.,"Definition: In this task, design a GUI feature that shows the utilization of a person.
+Emphasis & Caution: Display utilization clearly and accurately.
+Things to Avoid: Do not show outdated or aggregated data incorrectly."
+Change Task Begin/End Times manually with user changes; Change the start or end date either by editing its properties or by dragging-and-dropping the bar in the GUI.,"The human resource class contains name, phone, email, and holidays. The class provides functions to set and get these properties. A class is used to represent the holidays. There can be multiple holidays. ","Definition: In this task, define a human resource class with name, phone, email, and multiple holidays, including setter and getter functions.
+Emphasis & Caution: Holidays must be represented by a separate class and support multiple entries.
+Things to Avoid: Do not merge holiday data into primitive fields."
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,The manager of task hierarchy provides a method to move a task node to a specific position.,"Definition: In this task, implement a method in the task hierarchy manager to move a task node to a specific position.
+Emphasis & Caution: Preserve task hierarchy integrity after moving.
+Things to Avoid: Do not break parent-child relationships."
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,The human resource class can have multiple objects of resource assignments which assigns this resource to tasks. The class provides function to get the list of these objects.,"Definition: In this task, implement a human resource class that manages multiple resource assignment objects and returns their list.
+Emphasis & Caution: Ensure all assignments are retrievable.
+Things to Avoid: Do not return partial or copied lists."
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability of a person on certain days.,A GUI class of graphic area provides function to draw dependency. The function uses an object of task manager to add dependencies.,"Definition: In this task, implement a GUI graphic area function to draw dependencies using a task manager object.
+Emphasis & Caution: Dependency creation must be handled through the task manager.
+Things to Avoid: Do not create dependencies directly without the manager."
+Prevent Circular Dependencies;Links among tasks may not be circular in that task 1 cannot depend on task 2 if task 2 already depends on task 1.,A GUI class uses an object of resource tree table model class to display the resource tree. The resource tree table model provides functions build subtrees based on dependencies.,"Definition: In this task, use a resource tree table model object in a GUI class to display a resource tree built from dependencies.
+Emphasis & Caution: Subtrees must be built based on dependencies.
+Things to Avoid: Do not display a static or flat tree."
+Change Task Begin/End Times manually with user changes; Change the start or end date either by editing its properties or by dragging-and-dropping the bar in the GUI.,A GUI of task property provides interface and functions to add and remove human resource assignments by using an object of the resource assignments collection class.,"Definition: In this task, implement a task property GUI that adds and removes human resource assignments using a resource assignments collection object.
+Emphasis & Caution: Operations must use the collection object interface.
+Things to Avoid: Do not modify assignments directly."
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,An object of the recalculating task schedule algorithm class is used to change the start or end date based on dependency changes. The algorithm class provides functions to fulfill the constraints and to modify the start or end date of the tasks.,"Definition: In this task, use a task schedule recalculation algorithm object to update task start or end dates after dependency changes.
+Emphasis & Caution: All constraints must be fulfilled before applying date changes.
+Things to Avoid: Do not bypass the algorithm logic."
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.",The human resource class provides a function to change the availability of the person based on holidays. ,"Definition: In this task, implement a function in the human resource class to change availability based on holidays.
+Emphasis & Caution: Availability must reflect all defined holidays.
+Things to Avoid: Do not ignore existing holiday data."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,GUI needs to provide ability to assign persons to tasks.,"Definition: In this task, implement a GUI feature that assigns persons to tasks.
+Emphasis & Caution: Ensure assignments are correctly linked to tasks.
+Things to Avoid: Do not allow duplicate assignments."
+"Add/Remove Task links; Tasks can be linked with one another to indicate the sequence in which they have to be performed. For example, if there is a link from task 1 to task 2 then task 2 can only be started after task 1 is completed. The start date of task 2 must thus be after the end date of task 1.",The class of dependency collection provides a function to check if the new dependency will cause a loop each time a object of dependency class is created. The function returns an exception if there is a loop. ,"Definition: In this task, implement a dependency collection function that checks for loops when creating a new dependency and throws an exception if detected.
+Emphasis & Caution: Loop detection must occur at creation time.
+Things to Avoid: Do not allow cyclic dependencies."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,Application needs to keep track of task's begin and end times.,"Definition: In this task, implement application logic to track each task＊s begin and end times.
+Emphasis & Caution: Times must stay consistent after updates.
+Things to Avoid: Do not lose or overwrite time data incorrectly."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,GUI needs to provide ability to show is a person is  underutilized and overbooked.,"Definition: In this task, design a GUI feature that shows whether a person is underutilized or overbooked.
+Emphasis & Caution: Status must reflect current assignments.
+Things to Avoid: Do not display outdated utilization status."
+Delete Tasks; Delete an existing task and all its associated information such as links to other tasks or knowledge on what resources are supposed to work on them.,When deleting a task the GanttProject class calls GanttTreeTableNode and DefaultMutableTreeNode classes to identify the parent of the task being deleted.,"Definition: In this task, implement task deletion logic that identifies the task＊s parent using GanttTreeTableNode and DefaultMutableTreeNode.
+Emphasis & Caution: Parent identification must be accurate.
+Things to Avoid: Do not delete tasks without resolving hierarchy."
+"Add/Remove Tasks as Subtasks;A task can be made a subtask of another. For example, task 1.1 is a subtask of task 1.",GUI should able to provide ability to set progress on a task.,"Definition: In this task, implement a GUI feature that allows setting task progress.
+Emphasis & Caution: Progress values must be valid.
+Things to Avoid: Do not accept out-of-range progress values."
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability of a person on certain days.,An assignment of a resource to a task is captured as a relationship.,"Definition: In this task, model the assignment of a resource to a task as a relationship.
+Emphasis & Caution: Relationship must clearly link resource and task.
+Things to Avoid: Do not store assignments as loose attributes."
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability of a person on certain days.,The human resource class contains the variable holidays. The class provides functions to change and to get holidays. There can be multiple holidays. ,"Definition: In this task, implement holiday management in the human resource class with functions to set and get multiple holidays.
+Emphasis & Caution: Support multiple holiday entries.
+Things to Avoid: Do not overwrite existing holidays unintentionally."
+Prevent Circular Dependencies;Links among tasks may not be circular in that task 1 cannot depend on task 2 if task 2 already depends on task 1.,A GUI class of graphic area provides a function to draw dependency. The function uses an object of the task manager to add dependencies.1,"Definition: In this task, implement a GUI graphic area function to draw dependencies using a task manager object.
+Emphasis & Caution: Dependencies must be added through the task manager.
+Things to Avoid: Do not bypass the task manager."
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,A GUI class of task property provides interface and functions to add and remove dependencies by using an object of the dependency collection.,"Definition: In this task, implement a task property GUI that adds and removes dependencies using a dependency collection object.
+Emphasis & Caution: All dependency changes must go through the collection.
+Things to Avoid: Do not modify dependencies directly."
+Create a new task which typically has a  start date and an end date. Tasks are activities that one or more persons resources are expected to complete in the specified time frame.,The Task class provides a public method SetEnd() which allows to specify starting date for the task. As input argument the method takes an object of GanttCalendar class.,"Definition: In this task, implement a public SetEnd() method in the Task class that sets the task start date using a GanttCalendar object.
+Emphasis & Caution: The input must be a GanttCalendar object.
+Things to Avoid: Do not accept primitive date types."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,The Task class provides a public method SetEnd() which allows to specify starting date for the task. As input argument the method takes an object of GanttCalendar class.,"Definition: In this task, implement a public SetEnd() method in the Task class that sets the task start date using a GanttCalendar object.
+Emphasis & Caution: Ensure the method is publicly accessible.
+Things to Avoid: Do not change the method signature."
+Change Task Begin/End Times automatically with dependency changes; The start or end date should be changed automatically if one of its subtasks changes.,GUI needs to provide ability to link tasks in a project.,"Definition: In this task, implement a GUI feature that links tasks within a project.
+Emphasis & Caution: Links must reflect valid task relationships.
+Things to Avoid: Do not create invalid or circular links."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,A class is used to represent the dependency between one task and one human resource. The dependency class provides functions to get the task and the human resource. ,"Definition: In this task, implement a dependency class representing the relationship between one task and one human resource, with getter functions.
+Emphasis & Caution: Provide getters for both task and human resource.
+Things to Avoid: Do not expose internal fields directly."
+"Maintain task properties;  Edit and update task properties including start and end date, name, or progress(% complete).",A human resource assignment class is used to represent the relationship between one task and one human resource. The class provides functions to get the task and the human resource. ,"Definition: In this task, implement a human resource assignment class representing the relationship between one task and one human resource, with getter functions.
+Emphasis & Caution: Ensure a one-to-one task每resource relationship.
+Things to Avoid: Do not mix multiple tasks or resources in one assignment."
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.",GUI needs to provide ability to show utilization of a person.,"Definition: In this task, implement a GUI feature that shows the utilization of a person.
+Emphasis & Caution: Utilization must reflect current assignments.
+Things to Avoid: Do not display stale data."
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.",GUI needs to provide ability to delete resources from a project.,"Definition: In this task, implement a GUI feature that deletes resources from a project.
+Emphasis & Caution: Ensure related assignments are handled correctly.
+Things to Avoid: Do not leave orphaned references."
+Prevent Circular Dependencies;Links among tasks may not be circular in that task 1 cannot depend on task 2 if task 2 already depends on task 1.,The class of dependency collection provides a function to check if the new dependency will cause a loop each time a object of dependency class is created. The function returns an exception if there is a loop. ,"Definition: In this task, implement a dependency collection function that checks for loops when creating a dependency and throws an exception if found.
+Emphasis & Caution: Loop checking must occur at creation time.
+Things to Avoid: Do not allow cyclic dependencies."
+"Add/Remove Tasks as Subtasks;A task can be made a subtask of another. For example, task 1.1 is a subtask of task 1.",GUI needs to provide ability to display critical path and make the changes affecting critical path updated.,"Definition: In this task, implement a GUI feature that displays the critical path and updates it when changes affect it.
+Emphasis & Caution: Updates must be automatic.
+Things to Avoid: Do not require manual refresh."
+"Maintain Resource Properties;A resource has a range of properties, including name and holidays",A class is used to represent the dependency between one task and one human resource. The dependency class provides functions to get the task and the human resource. ,"Definition: In this task, implement a dependency class representing the relationship between one task and one human resource, with getter functions.
+Emphasis & Caution: Return correct task and human resource objects.
+Things to Avoid: Do not return null or unrelated objects."
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,The human resource class can have multiple objects of resource assignments which assigns this resource to tasks. The class provides function to get the list of these objects.,"Definition: In this task, implement a human resource class that holds multiple resource assignment objects and returns their list.
+Emphasis & Caution: Ensure all assignments for the resource are included.
+Things to Avoid: Do not return incomplete or copied lists."
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability of a person on certain days.,"The human resource class contains name, phone, email, and holidays. The class provides functions to set and get these properties. A class is used to represent the holidays. There can be multiple holidays. ","Definition: In this task, implement a human resource class with name, phone, email, and multiple holidays, using a separate holiday class with setters and getters.
+Emphasis & Caution: Support multiple holiday entries via the holiday class.
+Things to Avoid: Do not store holidays as primitive fields."
+"Maintain task properties;  Edit and update task properties including start and end date, name, or progress(% complete).","To delete a task from the Calendar the GanttProject class call delete method and supplied TaskId paramenter. The adjustment of allocated resources and links to other tasks takes place through interfacing with the following classes DefaultMutableTreeNode, GanttTreeTableNode, TaskNode, and AdjustTaskBoundsAlgorithm.","Definition: In this task, implement task deletion from the calendar by calling the delete method with TaskId and adjusting resources and links via specified classes.
+Emphasis & Caution: Use all listed classes to adjust bounds, resources, and links.
+Things to Avoid: Do not skip resource or dependency adjustments."
+"Add/Remove Task links; Tasks can be linked with one another to indicate the sequence in which they have to be performed. For example, if there is a link from task 1 to task 2 then task 2 can only be started after task 1 is completed. The start date of task 2 must thus be after the end date of task 1.",GUI needs to provide ability to link tasks in a project.,"Definition: In this task, implement a GUI feature that links tasks within a project.
+Emphasis & Caution: Links must represent valid task relationships.
+Things to Avoid: Do not create circular or invalid links."
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability of a person on certain days.,The Task class provides a public method SetStart() which allows to specify starting date for the task. As input argument the method takes an object of GanttCalendar class. ,"Definition: In this task, implement a public SetStart() method in the Task class that sets the task start date using a GanttCalendar object.
+Emphasis & Caution: Accept only a GanttCalendar object as input.
+Things to Avoid: Do not change the method signature."
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,GUI needs to provide ability to show is a person is  underutilized and overbooked.,"Definition: In this task, implement a GUI feature that shows whether a person is underutilized or overbooked.
+Emphasis & Caution: Status must reflect current workload.
+Things to Avoid: Do not show outdated utilization status."
+Change Task Begin/End Times manually with user changes; Change the start or end date either by editing its properties or by dragging-and-dropping the bar in the GUI.,When deleting a task the GanttProject class calls GanttTreeTableNode and DefaultMutableTreeNode classes to identify the parent of the task being deleted.,"Definition: In this task, identify a task＊s parent during deletion using GanttTreeTableNode and DefaultMutableTreeNode.
+Emphasis & Caution: Parent detection must be accurate.
+Things to Avoid: Do not delete tasks without resolving hierarchy."
+Delete Resources (person); Delete a person and all its associated information such as dependencies to all tasks the person is supposed to work on.,GUI should able to provide ability to set progress on a task.,"Definition: In this task, implement a GUI feature that allows setting task progress.
+Emphasis & Caution: Progress values must be within valid bounds.
+Things to Avoid: Do not accept invalid progress values."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,"When a resource is removed, all the tasks where the resource is assigned need to be updated. ","Definition: In this task, update all tasks assigned to a resource when that resource is removed.
+Emphasis & Caution: All affected tasks must be updated.
+Things to Avoid: Do not leave orphaned assignments."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,The start and end dates for the graph can be either flexible or rigid for the purpose of adjusting and fixing potential collisions. ,"Definition: In this task, handle graph start and end dates as flexible or rigid to adjust and resolve collisions.
+Emphasis & Caution: Respect the selected flexibility mode.
+Things to Avoid: Do not ignore collision constraints."
+Create a new task which typically has a  start date and an end date. Tasks are activities that one or more persons resources are expected to complete in the specified time frame.,The system should be able to evaluate critical path in a project.,"Definition: In this task, implement system logic to evaluate the critical path of a project.
+Emphasis & Caution: Ensure calculation reflects current task dependencies.
+Things to Avoid: Do not use outdated project data."
+"Add/Remove Task links; Tasks can be linked with one another to indicate the sequence in which they have to be performed. For example, if there is a link from task 1 to task 2 then task 2 can only be started after task 1 is completed. The start date of task 2 must thus be after the end date of task 1.",The Task class provides a public method SetStart() which allows to specify starting date for the task. As input argument the method takes an object of GanttCalendar class. ,"Definition: In this task, implement a public SetStart() method in the Task class that sets the task start date using a GanttCalendar object.
+Emphasis & Caution: Accept only a GanttCalendar object as input.
+Things to Avoid: Do not alter the method signature."
+Create a new task which typically has a  start date and an end date. Tasks are activities that one or more persons resources are expected to complete in the specified time frame.,A GUI class of task property provides interface and functions to add and remove dependencies by using an object of the dependency collection.,"Definition: In this task, implement a task property GUI that adds and removes dependencies using a dependency collection object.
+Emphasis & Caution: All changes must go through the collection interface.
+Things to Avoid: Do not modify dependencies directly."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,"The human resource class contains name, phone, email, and holidays. The class provides functions to set and get these properties. A class is used to represent the holidays. There can be multiple holidays. ","Definition: In this task, implement a human resource class with name, phone, email, and multiple holidays using a separate holiday class, with setters and getters.
+Emphasis & Caution: Support multiple holidays via the holiday class.
+Things to Avoid: Do not store holidays as primitive fields."
+Create a new task which typically has a  start date and an end date. Tasks are activities that one or more persons resources are expected to complete in the specified time frame.,Using GUI user should be able to change the length of a task by dragging-and-dropping the bar on the GUI.,"Definition: In this task, implement a GUI feature that lets users change task length by dragging and dropping the task bar.
+Emphasis & Caution: Update task dates immediately after the change.
+Things to Avoid: Do not require manual date entry."
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,The class for holidays provides functions to get the start date and the finish date. The class also provides a function to check if a special date is in holiday.,"Definition: In this task, implement a holiday class with functions to get start date, end date, and check if a date is a holiday.
+Emphasis & Caution: Date checks must be accurate.
+Things to Avoid: Do not ignore boundary dates."
+Prevent Circular Dependencies;Links among tasks may not be circular in that task 1 cannot depend on task 2 if task 2 already depends on task 1.,"Every time Start/End time for a task changes, the start/end time of one or more its subtasks need to change as well.","Definition: In this task, update all subtasks＊ start and end times when a parent task＊s start or end time changes.
+Emphasis & Caution: Maintain correct task hierarchy timing.
+Things to Avoid: Do not leave subtasks unchanged."
+Change Task Begin/End Times automatically with dependency changes; The start or end date should be changed automatically if one of its subtasks changes.,Application needs to keep track of task's begin and end times.,"Definition: In this task, implement application logic to track each task＊s begin and end times.
+Emphasis & Caution: Times must stay consistent after updates.
+Things to Avoid: Do not overwrite valid time data."
+Create a new task which typically has a  start date and an end date. Tasks are activities that one or more persons resources are expected to complete in the specified time frame.,Application needs to keep track of subtasks in a task.,"Definition: In this task, implement application logic to track subtasks within a task.
+Emphasis & Caution: Preserve parent每child relationships.
+Things to Avoid: Do not treat subtasks as independent tasks."
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,The class of task uses an object of the assignments collection class to manage its assignments.,"Definition: In this task, use an assignments collection object in the Task class to manage its resource assignments.
+Emphasis & Caution: All assignment operations must use the collection.
+Things to Avoid: Do not manage assignments directly in the Task class."
+"Maintain Resource Properties;A resource has a range of properties, including name and holidays","The human resource class contains name, phone, email, and holidays. The class provides functions to set and get these properties. A class is used to represent the holidays. There can be multiple holidays. ","Definition: In this task, define a HumanResource class with name, phone, email, and multiple holidays, and provide setter and getter functions for all properties.
+Emphasis & Caution: Ensure holidays are represented by a separate class and support multiple entries.
+Things to Avoid: Do not hardcode holiday data or omit access methods."
+Create a new task which typically has a  start date and an end date. Tasks are activities that one or more persons resources are expected to complete in the specified time frame.,The Task class provides a public method SetStart() which allows to specify starting date for the task. As input argument the method takes an object of GanttCalendar class. ,"Definition: In this task, implement a public SetStart() method in the Task class that sets the task start date using a GanttCalendar object.
+Emphasis & Caution: The input parameter must be an object of GanttCalendar.
+Things to Avoid: Do not accept primitive date types or make the method non-public."
+"Maintain Resource Properties;A resource has a range of properties, including name and holidays",GUI should able to provide ability to change start/end date of a task.,"Definition: In this task, enable the GUI to allow users to modify the start and end dates of a task.
+Emphasis & Caution: Both start and end dates must be changeable via the GUI.
+Things to Avoid: Do not restrict changes to only one date."
+Delete Tasks; Delete an existing task and all its associated information such as links to other tasks or knowledge on what resources are supposed to work on them.,A GUI class of task property provides interface and functions to add and remove human resource assignments.,"Definition: In this task, design a GUI class for task properties that allows adding and removing human resource assignments.
+Emphasis & Caution: The interface must support both add and remove actions.
+Things to Avoid: Do not manage resources without a GUI interface."
+Create a new task which typically has a  start date and an end date. Tasks are activities that one or more persons resources are expected to complete in the specified time frame.,The human resource class contains the variable holidays. The class provides functions to change and to get holidays. There can be multiple holidays. ,"Definition: In this task, implement a holidays variable in the HumanResource class with functions to update and retrieve multiple holidays.
+Emphasis & Caution: Holidays must support multiple values.
+Things to Avoid: Do not store only a single holiday or omit modification methods."
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability of a person on certain days.,When deleting a task the GanttProject class calls AdjustTaskBoundsAlgorithm and passes the parent of the deleted task as a parameter. The AdjustTaskBoundsAlgorithm takes care of handling and releasing resources associated with the deleted task. ,"Definition: In this task, ensure that when a task is deleted, GanttProject calls AdjustTaskBoundsAlgorithm with the deleted task＊s parent to handle resource cleanup.
+Emphasis & Caution: The parent of the deleted task must be passed as the parameter.
+Things to Avoid: Do not skip resource handling or pass the wrong task reference."
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,"Every time Start/End time for a subtask changes, the start/end time for the parent task need to change accordingly.","Definition: In this task, update the parent task＊s start and end times whenever a subtask＊s start or end time changes.
+Emphasis & Caution: Changes must propagate immediately and consistently.
+Things to Avoid: Do not leave parent task dates unchanged."
+Create a new task which typically has a  start date and an end date. Tasks are activities that one or more persons resources are expected to complete in the specified time frame.,The class for holidays provides functions to get the start date and the finish date. The class also provides a function to check if a special date is in holiday.,"Definition: In this task, implement a Holiday class with methods to get start date, finish date, and to check whether a given date is a holiday.
+Emphasis & Caution: The date-check function must correctly detect special dates within the holiday range.
+Things to Avoid: Do not omit any of the required methods."
+"Add/Remove Tasks as Subtasks;A task can be made a subtask of another. For example, task 1.1 is a subtask of task 1.",To remove tasks as subtasks GanttTree2 class calls a method which dedent selected task nodes in GUI so that they will not be subtasks of their original parents tasks. An object of a class is used to remove relationship between selected tasks and their original parents and add relationship between selected tasks and their new parents.,"Definition: In this task, implement logic where GanttTree2 dedents selected task nodes and updates parent-child relationships using a dedicated relationship-handling object.
+Emphasis & Caution: Ensure relationships with original parents are removed and new parent relationships are added.
+Things to Avoid: Do not leave tasks linked to old parents."
+Change Task Begin/End Times manually with user changes; Change the start or end date either by editing its properties or by dragging-and-dropping the bar in the GUI.,The task manager class uses an object of dependency collection class to manage dependencies.,"Definition: In this task, use a DependencyCollection object within the TaskManager class to manage task dependencies.
+Emphasis & Caution: Dependency handling must be delegated to the collection object.
+Things to Avoid: Do not manage dependencies directly without the collection."
+"Add/Remove Tasks as Subtasks;A task can be made a subtask of another. For example, task 1.1 is a subtask of task 1.",GUI needs to provide ability to delete resources from a project.,"Definition: In this task, enable the GUI to allow users to delete resources from a project.
+Emphasis & Caution: Ensure deletion affects the project data correctly.
+Things to Avoid: Do not leave deleted resources accessible."
+"Add/Remove Tasks as Subtasks;A task can be made a subtask of another. For example, task 1.1 is a subtask of task 1.",User interface should be able to provide an ability to specify whether a specific task in a milestone.,"Definition: In this task, allow the user interface to mark whether a task is a milestone.
+Emphasis & Caution: The milestone flag must be clearly set per task.
+Things to Avoid: Do not apply milestone status globally."
+Create a new task which typically has a  start date and an end date. Tasks are activities that one or more persons resources are expected to complete in the specified time frame.,When deleting a task the GanttProject class calls GanttTreeTableNode and DefaultMutableTreeNode classes to identify the parent of the task being deleted.,"Definition: In this task, identify the parent of a deleted task by using GanttTreeTableNode and DefaultMutableTreeNode when deleting a task.
+Emphasis & Caution: Both classes must be used to locate the correct parent.
+Things to Avoid: Do not assume the parent without tree lookup."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,A GUI of task property provides interface and functions to add and remove human resource assignments by using an object of the resource assignments collection class.,"Definition: In this task, provide a task property GUI that adds and removes human resource assignments using a ResourceAssignmentsCollection object.
+Emphasis & Caution: All changes must go through the collection object.
+Things to Avoid: Do not bypass the collection when modifying assignments."
+"Add/Remove Task links; Tasks can be linked with one another to indicate the sequence in which they have to be performed. For example, if there is a link from task 1 to task 2 then task 2 can only be started after task 1 is completed. The start date of task 2 must thus be after the end date of task 1.","When a two or more tasks are link, there should be check conducted for potential collisions on the chart.","Definition: In this task, check for potential chart collisions when two or more tasks are linked.
+Emphasis & Caution: Collision checks must occur at linking time.
+Things to Avoid: Do not allow links without validation."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,A GUI provides interface and functions to edit the properties of objects of the human resource class.,"Definition: In this task, provide a GUI to edit properties of HumanResource objects.
+Emphasis & Caution: All editable properties must be supported.
+Things to Avoid: Do not edit resources without a GUI."
+Change Task Begin/End Times automatically with dependency changes; The start or end date should be changed automatically if one of its subtasks changes.,The task manager class uses an object of dependency collection class to manage dependencies.,"Definition: In this task, manage task dependencies in the TaskManager class using a DependencyCollection object.
+Emphasis & Caution: Dependency logic must be delegated to the collection.
+Things to Avoid: Do not handle dependencies directly in TaskManager."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,The fact of linking of one task to another should be captured as dependency between two tasks.,"Definition: In this task, record the linking of one task to another as a dependency between the two tasks.
+Emphasis & Caution: Each link must create a dependency entry.
+Things to Avoid: Do not link tasks without storing the dependency."
+Show Critical Path; The critical path indicates which tasks will cause project delays if they are delayed.,The class for holidays provides functions to get the start date and the finish date. The class also provides function to check if a special date is in holiday.,"Definition: In this task, implement a Holiday class with methods to get start date, finish date, and to check if a date falls within a holiday.
+Emphasis & Caution: Date checking must work for any special date.
+Things to Avoid: Do not omit required holiday methods."
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,A GUI class of human resource load distribution uses objects of a load distribution class to capture the hours each person is supposed to work.,"Definition: In this task, use a GUI class for human resource load distribution to capture working hours via LoadDistribution objects.
+Emphasis & Caution: Hours must be stored per person using the load distribution class.
+Things to Avoid: Do not record hours outside the load distribution objects."
+"Add/Remove Tasks as Subtasks;A task can be made a subtask of another. For example, task 1.1 is a subtask of task 1.",Using GUI user should be able to change the length of a task by dragging-and-dropping the bar on the GUI.,"Definition: In this task, enable the GUI to let users change task duration by drag-and-dropping the task bar.
+Emphasis & Caution: Dragging must directly update the task length.
+Things to Avoid: Do not require manual input instead of dragging."
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,"When a resource is removed, all the tasks where the resource is assigned need to be updated. ","Definition: In this task, update all tasks when a resource is removed from the system.
+Emphasis & Caution: All assignments of the removed resource must be cleared.
+Things to Avoid: Do not leave stale resource references."
+"Maintain task properties;  Edit and update task properties including start and end date, name, or progress(% complete).",The human resource class contains the variable holidays. The class provides functions to change and to get holidays. There can be multiple holidays. ,"Definition: In this task, implement holidays in the HumanResource class with methods to set and get multiple holidays.
+Emphasis & Caution: Support multiple holidays per resource.
+Things to Avoid: Do not limit holidays to a single value."
+Change Task Begin/End Times automatically with dependency changes; The start or end date should be changed automatically if one of its subtasks changes.,The class of task uses an object of the assignments collection class to manage its assignments.,"Definition: In this task, manage task assignments using an AssignmentsCollection object within the Task class.
+Emphasis & Caution: All assignment operations must use the collection object.
+Things to Avoid: Do not store assignments directly in the task."
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,A GUI class of graphic area provides a function to draw dependency. The function uses an object of the task manager to add dependencies.1,"Definition: In this task, implement a graphic area GUI function to draw dependencies using a TaskManager object.
+Emphasis & Caution: Dependencies must be added through the TaskManager.
+Things to Avoid: Do not create dependencies without the manager."
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.",The class for holidays provides functions to get the start date and the finish date. The class also provides function to check if a special date is in holiday.,"Definition: In this task, implement a Holiday class with methods to get start date, finish date, and check if a date is a holiday.
+Emphasis & Caution: Date checks must handle any given date correctly.
+Things to Avoid: Do not omit required holiday methods."
+"Maintain task properties;  Edit and update task properties including start and end date, name, or progress(% complete).",GUI should able to provide ability to change start/end date of a task.,"Definition: In this task, enable the GUI to allow users to change a task＊s start and end dates.
+Emphasis & Caution: Both dates must be editable via the GUI.
+Things to Avoid: Do not restrict editing to one date only."
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability of a person on certain days.,GUI needs to provide ability to display critical path and make the changes affecting critical path updated.,"Definition: In this task, enable the GUI to display the critical path and update it when changes affect it.
+Emphasis & Caution: Critical path updates must be automatic after changes.
+Things to Avoid: Do not display outdated critical paths."
+"Handle Milestones; A milestone is a special task. Whereas a task typically has a timeframe specified (the time needed to complete the task), a milestone is typically an event. For example, the release date of a software is an event rather than a timeframe.",A GUI class of graphic area provides a function to draw dependency. The function uses an object of the task manager to add dependencies.1,"Definition: In this task, implement a graphic area GUI function to draw dependencies using a TaskManager object.
+Emphasis & Caution: Dependencies must be added through the TaskManager.
+Things to Avoid: Do not bypass the manager when adding dependencies."
+"Maintain task properties;  Edit and update task properties including start and end date, name, or progress(% complete).",GUI should able to provide ability to change task name. ,"Definition: In this task, enable the GUI to allow users to change the task name.
+Emphasis & Caution: Name changes must update the underlying task data.
+Things to Avoid: Do not allow empty or unsaved task names."
+Delete Resources (person); Delete a person and all its associated information such as dependencies to all tasks the person is supposed to work on.,GUI needs to provide ability to change length of a task.,"Definition: In this task, enable the GUI to allow users to change the length of a task.
+Emphasis & Caution: Task duration changes must update task data immediately.
+Things to Avoid: Do not keep old duration values."
+"Maintain Resource Properties;A resource has a range of properties, including name and holidays",A GUI provides interface and functions to edit the properties of objects of the human resource class.,"Definition: In this task, provide a GUI to edit properties of HumanResource objects.
+Emphasis & Caution: All editable properties must be accessible through the GUI.
+Things to Avoid: Do not modify resources without the GUI."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,The task manager class uses an object of dependency collection class to manage dependencies.,"Definition: In this task, manage task dependencies in the TaskManager class using a DependencyCollection object.
+Emphasis & Caution: Dependency logic must be handled by the collection.
+Things to Avoid: Do not manage dependencies directly in TaskManager."
+Delete Resources (person); Delete a person and all its associated information such as dependencies to all tasks the person is supposed to work on.,An assignment of a resource to a task is captured as a relationship.,"Definition: In this task, record the assignment of a resource to a task as a relationship.
+Emphasis & Caution: Each assignment must be explicitly stored as a relationship.
+Things to Avoid: Do not assign resources without tracking the relationship."
+Change Task Begin/End Times manually with user changes; Change the start or end date either by editing its properties or by dragging-and-dropping the bar in the GUI.,Using GUI user should be able to change the length of a task by dragging-and-dropping the bar on the GUI.,"Definition: In this task, allow users to change task duration by drag-and-dropping the task bar in the GUI.
+Emphasis & Caution: Drag actions must correctly recalculate task length.
+Things to Avoid: Do not require manual duration input."
+Change Task Begin/End Times manually with user changes; Change the start or end date either by editing its properties or by dragging-and-dropping the bar in the GUI.,GUI needs to provide ability to assign task to persons.,"Definition: In this task, enable the GUI to assign tasks to persons.
+Emphasis & Caution: Assignments must link tasks and persons correctly.
+Things to Avoid: Do not create unlinked or partial assignments."
+"Maintain task properties;  Edit and update task properties including start and end date, name, or progress(% complete).",GUI should able to provide ability to set progress on a task.,"Definition: In this task, enable the GUI to set and update task progress.
+Emphasis & Caution: Progress values must be saved to the task.
+Things to Avoid: Do not allow invalid progress values."
+Show Critical Path; The critical path indicates which tasks will cause project delays if they are delayed.,The system should be able to evaluate critical path in a project.,"Definition: In this task, implement logic to evaluate the critical path of a project.
+Emphasis & Caution: Critical path must reflect current task data.
+Things to Avoid: Do not use outdated task information."
+Delete Tasks; Delete an existing task and all its associated information such as links to other tasks or knowledge on what resources are supposed to work on them.,Milestone is a task with no duration. It has only time point of occurrence.,"Definition: In this task, treat a milestone as a task with zero duration and a single time point.
+Emphasis & Caution: Milestones must not have any duration.
+Things to Avoid: Do not assign length to milestones."
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,To remove tasks as subtasks a method which dedent selected task nodes in GUI so that they will not be subtasks of their original parents tasks is used. The task tree model provides methods to remove relationship between selected tasks and their original parents and add relationship between selected tasks and their new parents.,"Definition: In this task, implement a method to dedent selected tasks in the GUI and update parent-child relationships in the task tree model.
+Emphasis & Caution: Remove old parent links and add new parent links correctly.
+Things to Avoid: Do not leave tasks linked to incorrect parents."
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,The class of task uses an object of the assignments collection class to manage its assignments.,"Definition: In this task, manage task assignments in the Task class using an AssignmentsCollection object.
+Emphasis & Caution: All assignment operations must go through the collection.
+Things to Avoid: Do not store assignments directly in the task."
+Delete Tasks; Delete an existing task and all its associated information such as links to other tasks or knowledge on what resources are supposed to work on them.,Milestone should be displayed visually differently from regular tasks.,"Definition: In this task, display milestones visually differently from regular tasks in the GUI.
+Emphasis & Caution: The visual difference must be clearly recognizable.
+Things to Avoid: Do not render milestones the same as normal tasks."
+"Maintain task properties;  Edit and update task properties including start and end date, name, or progress(% complete).",GUI needs to provide ability to assign persons to tasks.,"Definition: In this task, enable the GUI to assign persons to tasks.
+Emphasis & Caution: Assignments must correctly link persons and tasks.
+Things to Avoid: Do not create incomplete assignments."
+Delete Resources (person); Delete a person and all its associated information such as dependencies to all tasks the person is supposed to work on.,A collection of resource assignments is used to manage the relationships between multiple human resources and a single task. It contains multiple objects of the human resource assignment class. The collection provides functions to add and remove human resource assignments.,"Definition: In this task, implement a ResourceAssignmentsCollection to manage multiple human resource assignments for a single task.
+Emphasis & Caution: The collection must support adding and removing assignments.
+Things to Avoid: Do not manage assignments outside the collection."
+Create a new task which typically has a  start date and an end date. Tasks are activities that one or more persons resources are expected to complete in the specified time frame.,The Task class provides a public method SetDuration() which allows to specify the duration of the task. As input argument the method takes an object of TaskLength class,"Definition: In this task, implement a public SetDuration() method in the Task class using a TaskLength object as input.
+Emphasis & Caution: The method must accept only a TaskLength object.
+Things to Avoid: Do not use primitive duration types."
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.",The manager of task hierarchy provides a method to move a task node to a specific position.,"Definition: In this task, provide a method in the task hierarchy manager to move a task node to a specific position.
+Emphasis & Caution: The move must update the hierarchy correctly.
+Things to Avoid: Do not break parent-child relationships."
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,GUI should able to provide ability to change start/end date of a task.,"Definition: In this task, enable the GUI to allow users to change a task＊s start and end dates.
+Emphasis & Caution: Both dates must be editable.
+Things to Avoid: Do not restrict date changes to one field."
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.",When deleting a task the GanttProject class calls AdjustTaskBoundsAlgorithm and passes the parent of the deleted task as a parameter. The AdjustTaskBoundsAlgorithm takes care of handling and releasing resources associated with the deleted task. ,"Definition: In this task, ensure GanttProject calls AdjustTaskBoundsAlgorithm with the deleted task＊s parent to release associated resources.
+Emphasis & Caution: The parent task must be passed as the parameter.
+Things to Avoid: Do not skip resource cleanup."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,A dependency class contains a dependant task and a dependee task. It provides functions to get the dependant task and the dependee task. The dependency class also contains constraint to show the constraint of the dependency. ,"Definition: In this task, implement a Dependency class that stores dependant task, dependee task, and dependency constraint with getter methods.
+Emphasis & Caution: Both tasks and the constraint must be accessible.
+Things to Avoid: Do not omit any dependency component."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,The class for holidays provides functions to get the start date and the finish date. The class also provides a function to check if a special date is in holiday.,"Definition: In this task, implement a Holiday class with methods to get start date, finish date, and check if a date is within a holiday.
+Emphasis & Caution: Date checking must work for any special date.
+Things to Avoid: Do not exclude required holiday methods."
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,A GUI class of graphic area provides function to draw dependency. The function uses an object of task manager to add dependencies.,"Definition: In this task, implement a GUI graphic-area function to draw task dependencies using a task manager to add the dependencies.
+Emphasis & Caution: Ensure dependencies are added only through the task manager object.
+Things to Avoid: Do not create dependencies without the task manager."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,To add tasks as subtasks a method which indent the selected task nodes in GUI and change them to be subtasks is used. A manager of task hierarchy provides functions to update the relationship between tasks.,"Definition: In this task, implement a method to indent selected task nodes in the GUI to convert them into subtasks and update hierarchy via the task hierarchy manager.
+Emphasis & Caution: Update parent每child relationships consistently through the hierarchy manager.
+Things to Avoid: Do not modify task hierarchy directly in the GUI without the manager."
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,A GUI class of graphic area provides function to draw dependency. The function uses an object of task manager to add dependencies.,"Definition: In this task, implement a GUI graphic-area function to draw task dependencies using a task manager to add the dependencies.
+Emphasis & Caution: Ensure dependencies are added only through the task manager object.
+Things to Avoid: Do not create dependencies without the task manager."
+Delete Tasks; Delete an existing task and all its associated information such as links to other tasks or knowledge on what resources are supposed to work on them.,"To delete a task from the Calendar the GanttProject class call delete method and supplied TaskId paramenter. The adjustment of allocated resources and links to other tasks takes place through interfacing with the following classes DefaultMutableTreeNode, GanttTreeTableNode, TaskNode, and AdjustTaskBoundsAlgorithm.","Definition: In this task, delete a task from the calendar by calling the delete method with a TaskId and adjust resources and links via the specified classes.
+Emphasis & Caution: Ensure resource allocations and task links are recalculated using DefaultMutableTreeNode, GanttTreeTableNode, TaskNode, and AdjustTaskBoundsAlgorithm.
+Things to Avoid: Do not delete a task without updating related resources and links."
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability of a person on certain days.,A GUI class of task property provides interface and functions to add and remove human resource assignments.,"Definition: In this task, implement GUI task-property interfaces to add and remove human resource assignments.
+Emphasis & Caution: Keep assignment state synchronized with the underlying data model.
+Things to Avoid: Do not allow inconsistent or duplicate assignments."
+Delete Resources (person); Delete a person and all its associated information such as dependencies to all tasks the person is supposed to work on.,GUI needs to provide ability to delete resources from a project.,"Definition: In this task, provide GUI functionality to delete resources from a project.
+Emphasis & Caution: Confirm deletion affects project-wide data correctly.
+Things to Avoid: Do not remove resources only visually without data updates."
+Delete Resources (person); Delete a person and all its associated information such as dependencies to all tasks the person is supposed to work on.,"When a resource is removed, all the tasks where the resource is assigned need to be updated. ","Definition: In this task, update all tasks assigned to a resource when that resource is removed.
+Emphasis & Caution: Ensure no task retains references to the removed resource.
+Things to Avoid: Do not leave stale resource assignments."
+Prevent Circular Dependencies;Links among tasks may not be circular in that task 1 cannot depend on task 2 if task 2 already depends on task 1.,A human resource assignment class is used to represent the relationship between one task and one human resource. The class provides functions to get the task and the human resource. ,"Definition: In this task, implement a human resource assignment class representing the link between one task and one human resource with accessors for both.
+Emphasis & Caution: Maintain a one-to-one task每resource relationship per assignment instance.
+Things to Avoid: Do not mix multiple tasks or resources in a single assignment."
+Prevent Circular Dependencies;Links among tasks may not be circular in that task 1 cannot depend on task 2 if task 2 already depends on task 1.,The Task class provides a public method SetDuration() which allows to specify the duration of the task. As input argument the method takes an object of TaskLength class,"Definition: In this task, implement the Task.SetDuration() public method to set task duration using a TaskLength object.
+Emphasis & Caution: Accept only TaskLength objects as input.
+Things to Avoid: Do not set duration using primitive values or invalid types."
+Delete Resources (person); Delete a person and all its associated information such as dependencies to all tasks the person is supposed to work on.,Application needs to keep track of subtasks in a task.,"Definition: In this task, track and maintain subtasks within a task.
+Emphasis & Caution: Ensure subtask relationships remain consistent during updates.
+Things to Avoid: Do not lose or misassign subtasks during task changes."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,A human resource assignment class is used to represent the relationship between one task and one human resource. The class provides functions to get the task and the human resource. ,"Definition: In this task, implement a human resource assignment class that represents the link between one task and one human resource and provides getters for both.
+Emphasis & Caution: Ensure each assignment maps exactly one task to one resource.
+Things to Avoid: Do not allow multiple tasks or resources in a single assignment."
+Change Task Begin/End Times automatically with dependency changes; The start or end date should be changed automatically if one of its subtasks changes.,A dependency class contains a dependant task and a dependee task. It provides functions to get the dependant task and the dependee task. The dependency class also contains constraint to show the constraint of the dependency. ,"Definition: In this task, implement a dependency class that stores a dependant task, a dependee task, and the dependency constraint, with getters for each.
+Emphasis & Caution: Correctly distinguish dependant and dependee roles.
+Things to Avoid: Do not omit or misassign the constraint."
+"Maintain task properties;  Edit and update task properties including start and end date, name, or progress(% complete).",The class of dependency collection provides a function to check if the new dependency will cause a loop each time a object of dependency class is created. The function returns an exception if there is a loop. ,"Definition: In this task, implement a dependency collection check that detects loops when a new dependency is created and throws an exception if a loop exists.
+Emphasis & Caution: Always validate before adding the dependency.
+Things to Avoid: Do not allow circular dependencies."
+Prevent Circular Dependencies;Links among tasks may not be circular in that task 1 cannot depend on task 2 if task 2 already depends on task 1.,"Every time Start/End time for a subtask changes, the start/end time for the parent task need to change accordingly.","Definition: In this task, update the parent task＊s start and end time whenever a subtask＊s start or end time changes.
+Emphasis & Caution: Parent time must always reflect all subtasks.
+Things to Avoid: Do not update subtasks based on parent changes here."
+Delete Resources (person); Delete a person and all its associated information such as dependencies to all tasks the person is supposed to work on.,To add tasks as subtasks a method which indent the selected task nodes in GUI and change them to be subtasks is used. A manager of task hierarchy provides functions to update the relationship between tasks.,"Definition: In this task, implement a GUI method to indent selected task nodes to become subtasks and update relationships using the task hierarchy manager.
+Emphasis & Caution: Use the hierarchy manager for all relationship updates.
+Things to Avoid: Do not change hierarchy directly in the GUI."
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.","To delete a task from the Calendar the GanttProject class call delete method and supplied TaskId paramenter. The adjustment of allocated resources and links to other tasks takes place through interfacing with the following classes DefaultMutableTreeNode, GanttTreeTableNode, TaskNode, and AdjustTaskBoundsAlgorithm.","Definition: In this task, delete a task from the calendar by calling the GanttProject delete method with a TaskId and update resources and links via the specified classes.
+Emphasis & Caution: Ensure all related resources and links are adjusted.
+Things to Avoid: Do not delete a task without recalculating dependencies."
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,A GUI class uses an object of resource tree table model class to display the resource tree. The resource tree table model provides functions build subtrees based on dependencies.,"Definition: In this task, display the resource tree in the GUI using a resource tree table model that builds subtrees based on dependencies.
+Emphasis & Caution: Build subtrees strictly from dependency data.
+Things to Avoid: Do not hardcode the resource tree structure."
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.",A GUI of task property provides interface and functions to add and remove human resource assignments by using an object of the resource assignments collection class.,"Definition: In this task, implement GUI task-property functions to add and remove human resource assignments using the resource assignment collection object.
+Emphasis & Caution: Keep GUI actions synchronized with the collection.
+Things to Avoid: Do not modify assignments outside the collection."
+Create a new task which typically has a  start date and an end date. Tasks are activities that one or more persons resources are expected to complete in the specified time frame.,To create a new task an object of TaskManager class is passed to the class constructor. The TaskManager in its turn takes care of a resource allocation using ResourceAssignmentCollection class. ,"Definition: In this task, create new tasks by passing a TaskManager to the constructor, letting it handle resource allocation via ResourceAssignmentCollection.
+Emphasis & Caution: Always use TaskManager for allocation logic.
+Things to Avoid: Do not allocate resources directly in the task."
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,The load distribution class provides functions to calculate the distribution based on tasks and human resources. The functions uses the task manager.,"Definition: In this task, calculate load distribution based on tasks and human resources using the load distribution class and the task manager.
+Emphasis & Caution: Use task manager data as the single source of truth.
+Things to Avoid: Do not compute distribution without the task manager."
+"Maintain Resource Properties;A resource has a range of properties, including name and holidays",The task manager class uses an object of dependency collection class to manage dependencies.,"Definition: In this task, use a dependency collection object inside the task manager to manage task dependencies.
+Emphasis & Caution: Use the dependency collection as the single manager of dependencies.
+Things to Avoid: Do not manage dependencies outside the collection."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,A collection of resource assignments is used to manage the relationships between multiple human resources and a single task. It contains multiple objects of the human resource assignment class. The collection provides functions to add and remove human resource assignments.,"Definition: In this task, implement a resource assignment collection to manage multiple human resources for one task with add and remove functions.
+Emphasis & Caution: Store only human resource assignment objects in the collection.
+Things to Avoid: Do not link resources to tasks without the collection."
+Change Task Begin/End Times manually with user changes; Change the start or end date either by editing its properties or by dragging-and-dropping the bar in the GUI.,The class of task uses an object of the assignments collection class to manage its assignments.,"Definition: In this task, manage task assignments by using an assignments collection object inside the Task class.
+Emphasis & Caution: Keep all assignment logic within the collection.
+Things to Avoid: Do not store assignments directly in the Task class."
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,The Task class provides a public method SetEnd() which allows to specify starting date for the task. As input argument the method takes an object of GanttCalendar class.,"Definition: In this task, implement the Task.SetEnd() public method to set the task date using a GanttCalendar object.
+Emphasis & Caution: Accept only GanttCalendar as input.
+Things to Avoid: Do not use primitive date values."
+"Add/Remove Task links; Tasks can be linked with one another to indicate the sequence in which they have to be performed. For example, if there is a link from task 1 to task 2 then task 2 can only be started after task 1 is completed. The start date of task 2 must thus be after the end date of task 1.",The start and end dates for the graph can be either flexible or rigid for the purpose of adjusting and fixing potential collisions. ,"Definition: In this task, support flexible and rigid start and end dates for graph collision adjustment.
+Emphasis & Caution: Clearly distinguish flexible versus rigid behavior.
+Things to Avoid: Do not treat all dates as fixed."
+"Maintain task properties;  Edit and update task properties including start and end date, name, or progress(% complete).",A collection of resource assignments is used to manage the relationships between multiple human resources and a task. It contains multiple objects of the human resource assignment class. The collection provides functions to add and remove human resource assignments.,"Definition: In this task, implement a resource assignment collection to manage multiple human resources for a task with add and remove functions.
+Emphasis & Caution: Maintain consistency between the task and its assignments.
+Things to Avoid: Do not allow orphan assignments."
+Change Task Begin/End Times manually with user changes; Change the start or end date either by editing its properties or by dragging-and-dropping the bar in the GUI.,GUI needs to provide ability to change length of a task.,"Definition: In this task, provide GUI functionality to change the length of a task.
+Emphasis & Caution: Ensure GUI changes update the underlying task data.
+Things to Avoid: Do not change length only visually."
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,A GUI class of task property provides interface and functions to add and remove human resource assignments.,"Definition: In this task, implement GUI task-property interfaces to add and remove human resource assignments.
+Emphasis & Caution: Synchronize GUI actions with assignment data.
+Things to Avoid: Do not bypass assignment management logic."
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.",GUI needs to provide ability to show is a person is  underutilized and overbooked.,"Definition: In this task, display whether a person is underutilized or overbooked in the GUI.
+Emphasis & Caution: Base status on accurate workload data.
+Things to Avoid: Do not show status without calculation."
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability of a person on certain days.,"There is a class to represent holiday. The holiday class provides functions to set the begin date and the end date of the holiday, to check if a date is in the holiday, and to get the duration of the holiday.","Definition: In this task, implement a holiday class to set begin and end dates, check date inclusion, and return holiday duration.
+Emphasis & Caution: Ensure date range checks are inclusive as defined.
+Things to Avoid: Do not miscalculate holiday duration."
+"Add/Remove Tasks as Subtasks;A task can be made a subtask of another. For example, task 1.1 is a subtask of task 1.",The manager of task hierarchy provides a method to move a task node to a specific position.,"Definition: In this task, implement a method in the task hierarchy manager to move a task node to a specified position.
+Emphasis & Caution: Preserve hierarchy integrity after moving the node.
+Things to Avoid: Do not break parent每child relationships."
+"Add/Remove Tasks as Subtasks;A task can be made a subtask of another. For example, task 1.1 is a subtask of task 1.","There is a class to represent holiday. The holiday class provides functions to set the begin date and the end date of the holiday, to check if a date is in the holiday, and to get the duration of the holiday.","Definition: In this task, implement a holiday class to set begin and end dates, check date inclusion, and return holiday duration.
+Emphasis & Caution: Ensure correct date range calculations.
+Things to Avoid: Do not miscount days in the duration."
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,The system should be able to evaluate critical path in a project.,"Definition: In this task, implement functionality to evaluate the critical path of a project.
+Emphasis & Caution: Base evaluation on task dependencies and durations.
+Things to Avoid: Do not ignore dependencies."
+"Add/Remove Tasks as Subtasks;A task can be made a subtask of another. For example, task 1.1 is a subtask of task 1.","A collection of dependency class is used to manage dependencies. It contains objects of dependency classes and provides functions to create, delete, and get dependencies. ","Definition: In this task, implement a dependency collection to create, delete, and retrieve dependency objects.
+Emphasis & Caution: Store only valid dependency objects.
+Things to Avoid: Do not manage dependencies outside the collection."
+"Handle Milestones; A milestone is a special task. Whereas a task typically has a timeframe specified (the time needed to complete the task), a milestone is typically an event. For example, the release date of a software is an event rather than a timeframe.",Milestone should be displayed visually differently from regular tasks.,"Definition: In this task, display milestones visually differently from regular tasks.
+Emphasis & Caution: Ensure the visual distinction is clear.
+Things to Avoid: Do not render milestones like normal tasks."
+Delete Tasks; Delete an existing task and all its associated information such as links to other tasks or knowledge on what resources are supposed to work on them.,The class of task uses an object of the assignments collection class to manage its assignments.,"Definition: In this task, manage task assignments by using an assignments collection object inside the Task class.
+Emphasis & Caution: Centralize assignment logic in the collection.
+Things to Avoid: Do not handle assignments directly in the Task."
+"Add/Remove Tasks as Subtasks;A task can be made a subtask of another. For example, task 1.1 is a subtask of task 1.",Milestone is a task with no duration. It has only time point of occurrence.,"Definition: In this task, represent a milestone as a task with zero duration and a single time point.
+Emphasis & Caution: Enforce zero duration strictly.
+Things to Avoid: Do not assign duration to milestones."
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability of a person on certain days.,The human resource class provides a function to change the availability of the person based on holidays. ,"Definition: In this task, implement a function in the human resource class to update availability based on holidays.
+Emphasis & Caution: Reflect holiday periods accurately.
+Things to Avoid: Do not ignore defined holidays."
+Show Critical Path; The critical path indicates which tasks will cause project delays if they are delayed.,A GUI class of human resource load distribution uses objects of a load distribution class to capture the hours each person is supposed to work.,"Definition: In this task, use load distribution objects in the GUI to display each person＊s assigned working hours.
+Emphasis & Caution: Keep displayed hours consistent with distribution data.
+Things to Avoid: Do not calculate hours directly in the GUI."
+"Add/Remove Tasks as Subtasks;A task can be made a subtask of another. For example, task 1.1 is a subtask of task 1.",To add tasks as subtasks a method which indent the selected task nodes in GUI and change them to be subtasks is used. A manager of task hierarchy provides functions to update the relationship between tasks.,"Definition: In this task, implement a GUI method to indent selected task nodes into subtasks and update relationships using the task hierarchy manager.
+Emphasis & Caution: Update hierarchy only through the manager.
+Things to Avoid: Do not modify task relationships directly in the GUI."
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,The task manager class uses an object of dependency collection class to manage dependencies.,"Definition: In this task, manage task dependencies in the task manager using a dependency collection object.
+Emphasis & Caution: Use the dependency collection as the only dependency manager.
+Things to Avoid: Do not handle dependencies outside the collection."
+Create a new task which typically has a  start date and an end date. Tasks are activities that one or more persons resources are expected to complete in the specified time frame.,A collection of resource assignments is used to manage the relationships between multiple human resources and a single task. It contains multiple objects of the human resource assignment class. The collection provides functions to add and remove human resource assignments.,"Definition: In this task, implement a resource assignment collection to manage multiple human resources for one task with add and remove functions.
+Emphasis & Caution: Store only human resource assignment objects.
+Things to Avoid: Do not link resources to tasks without the collection."
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.","A collection of dependency class is used to manage dependencies. It contains objects of dependency classes and provides functions to create, delete, and get dependencies. ","Definition: In this task, implement a dependency collection to create, delete, and retrieve dependency objects.
+Emphasis & Caution: Maintain consistency of all dependency operations.
+Things to Avoid: Do not bypass the collection when managing dependencies."
+Prevent Circular Dependencies;Links among tasks may not be circular in that task 1 cannot depend on task 2 if task 2 already depends on task 1.,Milestone should be displayed visually differently from regular tasks.,"Definition: In this task, display milestones visually distinct from regular tasks.
+Emphasis & Caution: Ensure the distinction is clearly visible.
+Things to Avoid: Do not render milestones the same as normal tasks."
+Change Task Begin/End Times manually with user changes; Change the start or end date either by editing its properties or by dragging-and-dropping the bar in the GUI.,"The human resource class contains name, phone, email, and holidays. The class provides functions to set and get these properties. A class is used to represent the holidays. There can be multiple holidays. ","Definition: In this task, implement a human resource class with name, phone, email, and multiple holidays, including setters and getters.
+Emphasis & Caution: Use a dedicated holiday class for holidays.
+Things to Avoid: Do not store holiday data outside the holiday class."
+Change Task Begin/End Times automatically with dependency changes; The start or end date should be changed automatically if one of its subtasks changes.,"The human resource class contains name, phone, email, and holidays. The class provides functions to set and get these properties. A class is used to represent the holidays. There can be multiple holidays. ","Definition: In this task, implement a human resource class with name, phone, email, and multiple holidays, including setters and getters.
+Emphasis & Caution: Use a dedicated holiday class for holidays.
+Things to Avoid: Do not mix holiday data with other properties."
+"Add/Remove Tasks as Subtasks;A task can be made a subtask of another. For example, task 1.1 is a subtask of task 1.",To remove tasks as subtasks a method which dedent selected task nodes in GUI so that they will not be subtasks of their original parents tasks is used. The task tree model provides methods to remove relationship between selected tasks and their original parents and add relationship between selected tasks and their new parents.,"Definition: In this task, implement a GUI method to dedent selected task nodes to remove subtask relationships and reassign parent relationships using the task tree model.
+Emphasis & Caution: Update relationships through the task tree model only.
+Things to Avoid: Do not modify hierarchy directly in the GUI."
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.",GUI needs to provide ability to assign persons to tasks.,"Definition: In this task, provide GUI functionality to assign persons to tasks.
+Emphasis & Caution: Ensure assignments update the underlying data model.
+Things to Avoid: Do not assign persons only visually."
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.",GUI needs to provide ability to assign task to persons.,"Definition: In this task, provide GUI functionality to assign tasks to persons.
+Emphasis & Caution: Keep task每person assignments synchronized.
+Things to Avoid: Do not create duplicate or conflicting assignments."
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability of a person on certain days.,"Every time Start/End time for a task changes, the start/end time of one or more its subtasks need to change as well.","Definition: In this task, update start and end times of subtasks when a parent task＊s start or end time changes.
+Emphasis & Caution: Propagate changes to all affected subtasks.
+Things to Avoid: Do not leave subtasks with outdated times."
+"Maintain task properties;  Edit and update task properties including start and end date, name, or progress(% complete).",An object of the recalculating task schedule algorithm class is used to change the start or end date based on dependency changes. The algorithm class provides functions to fulfill the constraints and to modify the start or end date of the tasks.,"Definition: In this task, use a schedule recalculation algorithm object to update task start or end dates when dependencies change while enforcing constraints.
+Emphasis & Caution: Focus on dependency-driven date changes only.
+Things to Avoid: -"
+Prevent Circular Dependencies;Links among tasks may not be circular in that task 1 cannot depend on task 2 if task 2 already depends on task 1.,To remove tasks as subtasks a method which dedent selected task nodes in GUI so that they will not be subtasks of their original parents tasks is used. The task tree model provides methods to remove relationship between selected tasks and their original parents and add relationship between selected tasks and their new parents.,"Definition: In this task, dedent selected task nodes in the GUI to remove them as subtasks and reassign parent relationships in the task tree model.
+Emphasis & Caution: Ensure relationships are correctly removed and re-added.
+Things to Avoid: -"
+Create a new task which typically has a  start date and an end date. Tasks are activities that one or more persons resources are expected to complete in the specified time frame.,GUI needs to provide ability to link tasks in a project.,"Definition: In this task, enable the GUI to link tasks within a project.
+Emphasis & Caution: Links must be user-initiated in the GUI.
+Things to Avoid: -"
+"Add/Remove Task links; Tasks can be linked with one another to indicate the sequence in which they have to be performed. For example, if there is a link from task 1 to task 2 then task 2 can only be started after task 1 is completed. The start date of task 2 must thus be after the end date of task 1.",The fact of linking of one task to another should be captured as dependency between two tasks.,"Definition: In this task, record task linking as a dependency between two tasks.
+Emphasis & Caution: Capture dependencies accurately and consistently.
+Things to Avoid: -"
+Prevent Circular Dependencies;Links among tasks may not be circular in that task 1 cannot depend on task 2 if task 2 already depends on task 1.,The task manager class uses an object of dependency collection class to manage dependencies.,"Definition: In this task, use a dependency collection object within the task manager to manage task dependencies.
+Emphasis & Caution: Centralize all dependency management in the collection.
+Things to Avoid: -"
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.",A GUI class of task property provides interface and functions to add and remove dependencies by using an object of the dependency collection.,"Definition: In this task, provide GUI functions to add and remove dependencies using a dependency collection object.
+Emphasis & Caution: Ensure GUI actions update the collection correctly.
+Things to Avoid: -"
+Change Task Begin/End Times automatically with dependency changes; The start or end date should be changed automatically if one of its subtasks changes.,A class is used to represent the constraint that the start date of the dependee task should not be earlier than the end date of the dependent task.,"Definition: In this task, represent a constraint ensuring a dependee task starts no earlier than the dependent task ends.
+Emphasis & Caution: Enforce the start-after-end rule strictly.
+Things to Avoid: -"
+Delete Resources (person); Delete a person and all its associated information such as dependencies to all tasks the person is supposed to work on.,An object of the recalculating task schedule algorithm class is used to change the start or end date based on dependency changes. The algorithm class provides functions to fulfill the constraints and to modify the start or end date of the tasks.,"Definition: In this task, use a schedule recalculation algorithm object to update task start or end dates when dependencies change while enforcing constraints.
+Emphasis & Caution: Apply recalculation only after dependency updates.
+Things to Avoid: -"
+"Add/Remove Task links; Tasks can be linked with one another to indicate the sequence in which they have to be performed. For example, if there is a link from task 1 to task 2 then task 2 can only be started after task 1 is completed. The start date of task 2 must thus be after the end date of task 1.",A class is used to represent the constraint that the start date of the dependee task should not be earlier than the end date of the dependent task.,"Definition: In this task, represent a constraint ensuring a dependee task starts no earlier than the dependent task ends.
+Emphasis & Caution: Maintain correct dependency direction.
+Things to Avoid: -"
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,A GUI class uses an object of resource tree table model class to display the resource tree. The resource tree table model provides functions build subtrees based on dependencies.,"Definition: In this task, display the resource tree in a GUI using a resource tree table model that builds subtrees based on dependencies.
+Emphasis & Caution: Build subtrees strictly from dependency data.
+Things to Avoid: -"
+Change Task Begin/End Times manually with user changes; Change the start or end date either by editing its properties or by dragging-and-dropping the bar in the GUI.,"There is a class to represent holiday. The holiday class provides functions to set the begin date and the end date of the holiday, to check if a date is in the holiday, and to get the duration of the holiday.","Definition: In this task, implement a holiday class to set start/end dates, check if a date is within the holiday, and calculate duration.
+Emphasis & Caution: Ensure date range checks are accurate.
+Things to Avoid: -"
+Change Task Begin/End Times manually with user changes; Change the start or end date either by editing its properties or by dragging-and-dropping the bar in the GUI.,Using GUI user should be able to change the length of a task via date picker control.,"Definition: In this task, allow users to change task duration through a GUI date picker.
+Emphasis & Caution: Update task length immediately after selection.
+Things to Avoid: -"
+"Add/Remove Task links; Tasks can be linked with one another to indicate the sequence in which they have to be performed. For example, if there is a link from task 1 to task 2 then task 2 can only be started after task 1 is completed. The start date of task 2 must thus be after the end date of task 1.",To remove tasks as subtasks GanttTree2 class calls a method which dedent selected task nodes in GUI so that they will not be subtasks of their original parents tasks. An object of a class is used to remove relationship between selected tasks and their original parents and add relationship between selected tasks and their new parents.,"Definition: In this task, dedent selected tasks in the GUI to remove them as subtasks and update parent-child relationships.
+Emphasis & Caution: Correctly remove and reassign task relationships.
+Things to Avoid: -"
+Delete Tasks; Delete an existing task and all its associated information such as links to other tasks or knowledge on what resources are supposed to work on them.,When deleting a task the GanttProject class calls AdjustTaskBoundsAlgorithm and passes the parent of the deleted task as a parameter. The AdjustTaskBoundsAlgorithm takes care of handling and releasing resources associated with the deleted task. ,"Definition: In this task, call the task-bound adjustment algorithm when deleting a task to release related resources.
+Emphasis & Caution: Pass the deleted task＊s parent correctly.
+Things to Avoid: -"
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,A dependency class contains a dependant task and a dependee task. It provides functions to get the dependant task and the dependee task. The dependency class also contains constraint to show the constraint of the dependency. ,"Definition: In this task, represent a dependency containing a dependant task, a dependee task, and their constraint.
+Emphasis & Caution: Maintain correct task roles and constraint meaning.
+Things to Avoid: -"
+"Maintain Resource Properties;A resource has a range of properties, including name and holidays",The class for holidays provides functions to get the start date and the finish date. The class also provides function to check if a special date is in holiday.,"Definition: In this task, provide holiday functions to get start/end dates and check if a date falls within a holiday.
+Emphasis & Caution: Handle boundary dates correctly.
+Things to Avoid: -"
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.",Application needs to keep track of task's begin and end times.,"Definition: In this task, track and store each task＊s start time and end time.
+Emphasis & Caution: Keep times consistent and up to date.
+Things to Avoid: -"
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,A collection of resource assignments is used to manage the relationships between multiple human resources and a task. It contains multiple objects of the human resource assignment class. The collection provides functions to add and remove human resource assignments.,"Definition: In this task, manage task-to-resource relationships using a collection of human resource assignments.
+Emphasis & Caution: Support adding and removing assignments reliably.
+Things to Avoid: -"
+Change Task Begin/End Times manually with user changes; Change the start or end date either by editing its properties or by dragging-and-dropping the bar in the GUI.,"When a two or more tasks are link, there should be check conducted for potential collisions on the chart.","Definition: In this task, check for scheduling collisions when two or more tasks are linked.
+Emphasis & Caution: Detect conflicts before finalizing links.
+Things to Avoid: -"
+"Add/Remove Task links; Tasks can be linked with one another to indicate the sequence in which they have to be performed. For example, if there is a link from task 1 to task 2 then task 2 can only be started after task 1 is completed. The start date of task 2 must thus be after the end date of task 1.",User should be able to create milestones.,"Definition: In this task, allow users to create milestones.
+Emphasis & Caution: Milestones should have zero duration.
+Things to Avoid: -"
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability of a person on certain days.,GUI should able to provide ability to change task name. ,"Definition: In this task, enable the GUI to change a task＊s name.
+Emphasis & Caution: Update the name consistently across the UI.
+Things to Avoid: -"
+Delete Resources (person); Delete a person and all its associated information such as dependencies to all tasks the person is supposed to work on.,A GUI provides interface and functions to edit the properties of objects of the human resource class.,"Definition: In this task, provide GUI functions to edit properties of human resource objects.
+Emphasis & Caution: Ensure edits are saved correctly.
+Things to Avoid: -"
+"Handle Milestones; A milestone is a special task. Whereas a task typically has a timeframe specified (the time needed to complete the task), a milestone is typically an event. For example, the release date of a software is an event rather than a timeframe.",GUI needs to provide ability to show utilization of a person.,"Definition: In this task, display a person＊s resource utilization in the GUI.
+Emphasis & Caution: Reflect current assignment data.
+Things to Avoid: -"
+"Handle Milestones; A milestone is a special task. Whereas a task typically has a timeframe specified (the time needed to complete the task), a milestone is typically an event. For example, the release date of a software is an event rather than a timeframe.",User interface should be able to provide an ability to specify whether a specific task in a milestone.,"Definition: In this task, allow the user to specify whether a task is a milestone.
+Emphasis & Caution: Apply milestone status correctly.
+Things to Avoid: -"
+"Maintain task properties;  Edit and update task properties including start and end date, name, or progress(% complete).","When a two or more tasks are link, there should be check conducted for potential collisions on the chart.","Definition: In this task, check for chart collisions when two or more tasks are linked.
+Emphasis & Caution: Detect conflicts before confirming links.
+Things to Avoid: -"
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,A class is used to represent the constraint that the start date of the dependee task should not be earlier than the end date of the dependent task.,"Definition: In this task, represent a constraint that a dependee task starts no earlier than the dependent task ends.
+Emphasis & Caution: Enforce the constraint strictly.
+Things to Avoid: -"
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.",User interface should be able to provide an ability to specify whether a specific task in a milestone.,"Definition: In this task, allow the user to specify whether a task is a milestone.
+Emphasis & Caution: Do not allow duration for milestones.
+Things to Avoid: -"
+"Handle Milestones; A milestone is a special task. Whereas a task typically has a timeframe specified (the time needed to complete the task), a milestone is typically an event. For example, the release date of a software is an event rather than a timeframe.",GUI should able to provide ability to change task name. ,"Definition: In this task, enable the GUI to change a task＊s name.
+Emphasis & Caution: Prevent empty or invalid names.
+Things to Avoid: -"
+"Handle Milestones; A milestone is a special task. Whereas a task typically has a timeframe specified (the time needed to complete the task), a milestone is typically an event. For example, the release date of a software is an event rather than a timeframe.",Milestone is a task with no duration. It has only time point of occurrence.,"Definition: In this task, define a milestone as a task with zero duration and a single time point.
+Emphasis & Caution: Ensure duration is always zero.
+Things to Avoid: -"
+"Add/Remove Task links; Tasks can be linked with one another to indicate the sequence in which they have to be performed. For example, if there is a link from task 1 to task 2 then task 2 can only be started after task 1 is completed. The start date of task 2 must thus be after the end date of task 1.",The load distribution class provides functions to calculate the distribution based on tasks and human resources. The functions uses the task manager.,"Definition: In this task, calculate load distribution using tasks and human resources via the task manager.
+Emphasis & Caution: Base calculations on current data.
+Things to Avoid: -"
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,A GUI class of human resource load distribution uses objects of a load distribution class to capture the hours each person is supposed to work.,"Definition: In this task, use load distribution objects in the GUI to capture each person＊s assigned work hours.
+Emphasis & Caution: Ensure hours match load distribution results.
+Things to Avoid: -"
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability of a person on certain days.,To create a new task an object of TaskManager class is passed to the class constructor. The TaskManager in its turn takes care of a resource allocation using ResourceAssignmentCollection class. ,"Definition: In this task, create a new task by passing a TaskManager object to the constructor and let it handle resource allocation.
+Emphasis & Caution: Always use the TaskManager for allocations.
+Things to Avoid: -"
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,A class is used to represent the dependency between one task and one human resource. The dependency class provides functions to get the task and the human resource. ,"Definition: In this task, represent a dependency between a task and a human resource and provide access to both.
+Emphasis & Caution: Maintain correct task每resource pairing.
+Things to Avoid: -"
+Show Critical Path; The critical path indicates which tasks will cause project delays if they are delayed.,The human resource class can have multiple objects of resource assignments which assigns this resource to tasks. The class provides function to get the list of these objects.,"Definition: In this task, manage multiple resource assignments for a human resource and provide a method to list them.
+Emphasis & Caution: Return all current assignments.
+Things to Avoid: -"
+Prevent Circular Dependencies;Links among tasks may not be circular in that task 1 cannot depend on task 2 if task 2 already depends on task 1.,GUI needs to provide ability to assign task to persons.,"Definition: In this task, enable the GUI to assign tasks to people.
+Emphasis & Caution: Update assignments immediately.
+Things to Avoid: -"
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,To remove tasks as subtasks GanttTree2 class calls a method which dedent selected task nodes in GUI so that they will not be subtasks of their original parents tasks. An object of a class is used to remove relationship between selected tasks and their original parents and add relationship between selected tasks and their new parents.,"Definition: In this task, dedent selected tasks in the GUI to remove them as subtasks and update parent relationships.
+Emphasis & Caution: Correctly remove and add relationships.
+Things to Avoid: -"
+Prevent Circular Dependencies;Links among tasks may not be circular in that task 1 cannot depend on task 2 if task 2 already depends on task 1.,The start and end dates for the graph can be either flexible or rigid for the purpose of adjusting and fixing potential collisions. ,"Definition: In this task, support flexible or rigid graph start and end dates to handle collision adjustments.
+Emphasis & Caution: Apply the chosen mode consistently.
+Things to Avoid: -"
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability of a person on certain days.,A collection of resource assignments is used to manage the relationships between multiple human resources and a task. It contains multiple objects of the human resource assignment class. The collection provides functions to add and remove human resource assignments.,"Definition: In this task, manage task-to-resource links using a resource assignment collection with add and remove functions.
+Emphasis & Caution: Keep the collection synchronized.
+Things to Avoid: -"
+"Handle Milestones; A milestone is a special task. Whereas a task typically has a timeframe specified (the time needed to complete the task), a milestone is typically an event. For example, the release date of a software is an event rather than a timeframe.",The load distribution class provides functions to calculate the distribution based on tasks and human resources. The functions uses the task manager.,"Definition: In this task, calculate load distribution from tasks and human resources using the task manager.
+Emphasis & Caution: Use current task and resource data.
+Things to Avoid: -"
+"Handle Milestones; A milestone is a special task. Whereas a task typically has a timeframe specified (the time needed to complete the task), a milestone is typically an event. For example, the release date of a software is an event rather than a timeframe.",The Task class provides a public method SetDuration() which allows to specify the duration of the task. As input argument the method takes an object of TaskLength class,"Definition: In this task, set task duration using the SetDuration method with a TaskLength object.
+Emphasis & Caution: Pass a valid TaskLength instance.
+Things to Avoid: -"
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,Using GUI user should be able to change the length of a task via date picker control.,"Definition: In this task, allow users to change a task＊s length via a GUI date picker.
+Emphasis & Caution: Ensure start and end dates update correctly.
+Things to Avoid: -"
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,Using GUI user should be able to change the length of a task via date picker control.,"Definition: In this task, enable task length changes using a GUI date picker control.
+Emphasis & Caution: Apply changes immediately after selection.
+Things to Avoid: -"
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated if a person receives more tasks than he/she is able to handle (e.g., the person hours per  task for all tasks exceeds the allowed 8 hours a day) or if the person is not available due to holidays or vacation days. it should also be indicated if the person is under-utilized in that he/she is working less than the 8 hours a day.",User should be able to create milestones.,"Definition: In this task, allow users to create milestones.
+Emphasis & Caution: Milestones must have zero duration.
+Things to Avoid: -"
+"Maintain Resource Properties;A resource has a range of properties, including name and holidays",GUI needs to provide ability to change length of a task.,"Definition: In this task, provide GUI controls to change a task＊s length.
+Emphasis & Caution: Keep date changes consistent across views.
+Things to Avoid: -"
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,The fact of linking of one task to another should be captured as dependency between two tasks.,"Definition: In this task, record task linking as a dependency between two tasks.
+Emphasis & Caution: Preserve correct dependency direction.
+Things to Avoid: -"
+Change Task Begin/End Times automatically with dependency changes; The start or end date should be changed automatically if one of its subtasks changes.,Application needs to keep track of subtasks in a task.,"Definition: In this task, track and manage subtasks within a task.
+Emphasis & Caution: Maintain accurate parent每child relationships.
+Things to Avoid: -"
+Create Resources (person);GanttProject supports Persons as resources. Persons have names and holidays or vacation days. Persons can be assigned to work on tasks.,The class of task uses an object of the assignments collection class to manage its assignments.,"Definition: In this task, manage task assignments using an assignments collection object.
+Emphasis & Caution: Use the collection for all assignment operations.
+Things to Avoid: -"
+"Add/Remove Task links; Tasks can be linked with one another to indicate the sequence in which they have to be performed. For example, if there is a link from task 1 to task 2 then task 2 can only be started after task 1 is completed. The start date of task 2 must thus be after the end date of task 1.",An assignment of a resource to a task is captured as a relationship.,"Definition: In this task, capture resource-to-task assignment as a relationship.
+Emphasis & Caution: Ensure one assignment reflects one task-resource link.
+Things to Avoid: -"
+Change Task Begin/End Times automatically with dependency changes; The start or end date should be changed automatically if one of its subtasks changes.,"Every time Start/End time for a subtask changes, the start/end time for the parent task need to change accordingly.","Definition: In this task, update parent task start/end times when a subtask＊s times change.
+Emphasis & Caution: Recalculate immediately after subtask updates.
+Things to Avoid: -"
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are changed,"A collection of dependency class is used to manage dependencies. It contains objects of dependency classes and provides functions to create, delete, and get dependencies. ","Definition: In this task, manage dependencies using a dependency collection with create, delete, and get functions.
+Emphasis & Caution: Keep the collection synchronized with task links.
+Things to Avoid: -"
+"Handle Milestones; A milestone is a special task. Whereas a task typically has a timeframe specified (the time needed to complete the task), a milestone is typically an event. For example, the release date of a software is an event rather than a timeframe.",User should be able to create milestones.,"Definition: In this task, enable users to create milestones.
+Emphasis & Caution: -
+Things to Avoid: Do not restrict milestone creation without justification."
+Change Task Begin/End Times automatically with dependency changes; The start or end date should be changed automatically if one of its subtasks changes.,"Every time Start/End time for a task changes, the start/end time of one or more its subtasks need to change as well.","Definition: In this task, update subtask start/end times automatically when a parent task＊s start/end time changes.
+Emphasis & Caution: Ensure all affected subtasks are updated consistently.
+Things to Avoid: Do not leave any dependent subtask unchanged."
+Add/Remove Resources to Tasks Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple persons and each person could work on multiple tasks. Dependencies may also be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,The human resource class provides a function to change the availability of the person based on holidays. ,"Definition: In this task, implement a function to change a person＊s availability based on holidays.
+Emphasis & Caution: Holiday rules must be applied correctly.
+Things to Avoid: Do not ignore defined holidays."
+Create resources (people); GanttProject supports people as resources. People have names and holidays. People can be assigned to perform tasks.,The GUI of task attributes provides the interface and functionality to add and delete human resource assignments by using objects of the resource assignment collection class.,"Definition: In this task, provide GUI controls to add and delete human resource assignments using resource assignment collection objects.
+Emphasis & Caution: Use the specified collection objects only.
+Things to Avoid: Do not bypass the resource assignment collection."
+"Add/remove task links; tasks can be linked to each other to indicate the order in which they must be performed. For example, if there is a link from task 1 to task 2, task 2 can only start after task 1 completes. Therefore, Task 2&#39;s start date must be later than Task 1&#39;s end date.","When two or more tasks are linked, the diagram should be checked for potential conflicts.","Definition: In this task, check diagrams for potential conflicts when two or more tasks are linked.
+Emphasis & Caution: All linked-task conflicts must be detected.
+Things to Avoid: Do not skip conflict checks."
+Create resources (people); GanttProject supports people as resources. People have names and holidays. People can be assigned to perform tasks.,The GUI provides the interface and functionality to edit the properties of objects of the Human Resources class.,"Definition: In this task, provide a GUI to edit properties of Human Resources objects.
+Emphasis & Caution: Changes must persist to the underlying objects.
+Things to Avoid: Do not allow edits that are not saved."
+"Automatically change task start/end times via dependency changes; if one of its subtasks changes, the start or end date should automatically change.",The task manager class uses objects of the dependency collection class to manage dependencies.,"Definition: In this task, manage task dependencies using dependency collection class objects.
+Emphasis & Caution: Dependencies must be handled through the collection class.
+Things to Avoid: Do not manage dependencies outside the collection."
+Create resources (people); GanttProject supports people as resources. People have names and holidays. People can be assigned to perform tasks.,The fact that one task is linked to another should be considered a dependency between the two tasks.,"Definition: In this task, treat any link between two tasks as a dependency.
+Emphasis & Caution: All task links must imply dependencies.
+Things to Avoid: Do not treat linked tasks as independent."
+"Displays the critical path; the critical path indicates which tasks, if delayed, would delay the project.",The Holidays class provides functions to get the start date and end date. This class also provides functionality to check if a special date is a holiday.,"Definition: In this task, provide functions to get holiday start/end dates and to check whether a date is a holiday.
+Emphasis & Caution: Date checks must be accurate.
+Things to Avoid: Do not return incorrect holiday status."
+"Automatically change task start/end times as dependencies change; if links between tasks change, start or end dates should automatically change",The Human Resources load distribution GUI class uses objects of the load distribution class to capture the time each person should work.,"Definition: In this task, use load distribution objects in the GUI to capture each person＊s working time.
+Emphasis & Caution: Time captured must map correctly to each person.
+Things to Avoid: Do not record time without using load distribution objects."
+"Add/remove tasks as subtasks; a task can become a subtask of another task. For example, Task 1.1 is a subtask of Task 1.",Using the GUI the user should be able to change the length of the task by dragging and dropping the bars on the GUI.,"Definition: In this task, allow users to change task duration by dragging and dropping bars in the GUI.
+Emphasis & Caution: Ensure drag-and-drop updates the task length accurately.
+Things to Avoid: Do not require manual input instead of dragging."
+"Add/remove resources to task dependencies; dependencies between tasks and resources indicate the resources that should complete the task. Each task can be completed by multiple people, and each person can complete multiple tasks at the same time. Dependencies can also be annotated to capture how many hours each person should work on a task each day.","When a resource is deleted, all tasks assigned that resource need to be updated.","Definition: In this task, update all assigned tasks when a resource is deleted.
+Emphasis & Caution: All affected tasks must reflect the deletion.
+Things to Avoid: Do not leave stale resource assignments."
+"Maintain task properties; edit and update task properties, including start and end dates, name, or progress (percent complete).",The Human Resources class contains variable holidays. This class provides functionality to change and get holidays. Multiple holidays are allowed.,"Definition: In this task, enable setting and retrieving multiple variable holidays in the Human Resources class.
+Emphasis & Caution: Support multiple holidays correctly.
+Things to Avoid: Do not limit to a single holiday."
+"Automatically change task start/end times via dependency changes; if one of its subtasks changes, the start or end date should automatically change.",Task classes use objects of the allocation collection class to manage their allocations.,"Definition: In this task, manage task allocations using allocation collection class objects.
+Emphasis & Caution: Use only the allocation collection for management.
+Things to Avoid: Do not manage allocations outside the collection."
+exhibit Critical Path; The critical path indicates which tasks will cause protrude delays if they follow delayed.,GUI needs to provide power to video_display critical path and make the changes affecting critical path updated.,"Definition: In this task, display the critical path in the GUI and update it when changes occur.
+Emphasis & Caution: Critical path must refresh after every relevant change.
+Things to Avoid: Do not show outdated critical paths."
+"Add/Remove Task links; labor displace be linked with one another to indicate the sequence in which they suffer to be performed. For example, if in_that_location is a tie from project 1 to project 2 then project 2 displace only be started subsequently project 1 is completed. The start date of project 2 moldiness thus be subsequently the ending date of project 1.",graphical_user_interface needs to provide ability to show use of a person.,"Definition: In this task, provide a GUI view to show a person＊s usage.
+Emphasis & Caution: Usage data must be accurate.
+Things to Avoid: Do not omit assigned work."
+Change Task Begin/End Times manually with user changes; Change the start or end go_steady either by redact IT place or by dragging-and-dropping the prevention in the GUI.,"The human resource class contains name, phone, email, and holidays. The class provides functions to set and get these properties. vitamin_A class follow used to act the holidays. There can atomic_number_4 multiple holidays.","Definition: In this task, implement setters and getters for name, phone, email, and multiple holidays in the Human Resource class.
+Emphasis & Caution: Support multiple holidays consistently.
+Things to Avoid: Do not ignore any defined property."
+Add/Remove Resources to task Dependencies;Dependencies between tasks and resource indicate the resource WHO are supposed to complete deoxyadenosine_monophosphate task. to_each_one task could beryllium worked along by multiple persons and each person could work along multiple tasks. dependence may also beryllium annotated to capture how many hours each person personify supposed to work along deoxyadenosine_monophosphate task along deoxyadenosine_monophosphate daily basis.,The handler of task hierarchy provides group_A method_acting to move group_A task node to group_A specific position.,"Definition: In this task, enable moving a group task node to a specific position in the task hierarchy.
+Emphasis & Caution: Maintain correct hierarchy after moving.
+Things to Avoid: Do not break parent-child relationships."
+Change Task Begin/End clock_time automatically with dependence changes;The start or final_stage date should be changed automatically if links among tasks personify changed,The human_being resource class can have multiple aim of resource assignments which assign this resource to tasks. The class put_up function to get the list of these objects.,"Definition: In this task, return the list of all resource assignment objects for a human resource.
+Emphasis & Caution: Include all assignments.
+Things to Avoid: Do not return partial lists."
+Add/Remove Holidays and vacation Days;Holidays and vacation Clarence_Day represent properties of persons (resources). changing this information as_well modification the availability of a person on certain days.,group_A GUI class of graphic area provides function to draw dependency. The function utilise an object of project managing_director to add dependencies.,"Definition: In this task, draw dependencies in the GUI using a project manager object to add them.
+Emphasis & Caution: Dependencies must be added through the project manager object.
+Things to Avoid: Do not create dependencies directly without the object."
+Prevent Circular Dependencies;Links among tasks may not glucinium circular in that task 1 cannot depend along task 2 if task 2 already depends along task 1.,A graphical_user_interface class uses an object of resource tree table model class to display the resource tree. The resource tree table model ply subprogram build subtrees based on dependencies.,"Definition: In this task, display the resource tree in the GUI using a resource tree table model that builds subtrees from dependencies.
+Emphasis & Caution: Ensure subtrees reflect dependency relationships correctly.
+Things to Avoid: Do not display a static or incorrect tree."
+Change chore Begin/End clock_time manually with user changes; Change the bug_out or end date either by editing its belongings or by dragging-and-dropping the bar in the GUI.,A GUI of chore property provides interface and function to add_together and polish_off human_being resource assignments by using an object of the resource assignments collection class.,"Definition: In this task, add and remove human resource assignments via the GUI using the resource assignments collection object.
+Emphasis & Caution: Use the collection object for all changes.
+Things to Avoid: Do not modify assignments outside the collection."
+exchange undertaking Begin/End Times automatically with dependency changes;The go or end date should be changed automatically if links among tasks are changed,An objective of the recalculate task schedule algorithmic_program separate be used to change the protrude or end date based on addiction changes. The algorithmic_program separate furnish functions to fulfill the constraints and to modify the protrude or end date of the tasks.,"Definition: In this task, recalculate task start or end dates when dependency changes occur while enforcing constraints.
+Emphasis & Caution: All constraints must be satisfied after recalculation.
+Things to Avoid: Do not ignore dependency changes."
+"Show Resource Utilization (underused Beaver_State overuse person);Tasks whitethorn be assigned to individual and it should be designate if adenine somebody receives Sir_Thomas_More project than he/she is able to address (e.g., the somebody hr per labor for all project exceeds the appropriate 8 hr adenine day) Beaver_State if the somebody is not available due to holidays Beaver_State vacation days. it should too be designate if the somebody is under-utilized in that he/she is operative less than the 8 hr adenine day.",The human resource social_class provides a function to change the availability of the someone based on holidays.,"Definition: In this task, change a person＊s availability based on holidays in the Human Resource class.
+Emphasis & Caution: Holiday impact must be applied correctly.
+Things to Avoid: Do not overlook holidays."
+Create Resources (person);GanttProject supports person as resources. person deliver names and holidays or vacation days. person can glucinium put to work on tasks.,GUI needs to provide power to delegate persons to tasks.,"Definition: In this task, allow assigning people to tasks through the GUI.
+Emphasis & Caution: Assignments must be saved correctly.
+Things to Avoid: Do not allow untracked assignments."
+"Add/Remove Task links; Tasks behind equal associate with one another to argue the sequence in which they have to equal performed. For example, if at_that_place is a connectedness from tax 1 to tax II then tax II behind only equal set_off later_on tax 1 is completed. The bug_out date of tax II must thus equal later_on the end date of tax 1.",The class of dependency ingathering offer ampere function to check if the new dependency will drive ampere loop from_each_one fourth_dimension ampere object of dependency class is created. The function returns an exception if there is ampere loop.,"Definition: In this task, check whether a new dependency creates a loop and throw an exception if it does.
+Emphasis & Caution: Loop detection must run before creating the dependency.
+Things to Avoid: Do not allow cyclic dependencies."
+produce imagination (person);GanttProject supports Persons as resources. Persons have names and holidays or holiday days. Persons can be assigned to work on tasks.,Application require to keep track of task's begin and remainder times.,"Definition: In this task, track and store each task＊s start time and remaining time.
+Emphasis & Caution: Times must stay up to date.
+Things to Avoid: Do not lose or overwrite timing data incorrectly."
+Create Resources (person);GanttProject supports Persons a resources. Persons have key_out and holidays surgery vacation days. Persons can make_up assigned to work on tasks.,GUI call_for to provide ability to show is a someone is underutilized and overbooked.,"Definition: In this task, show in the GUI whether a person is underutilized or overbooked.
+Emphasis & Caution: Status must reflect actual workload.
+Things to Avoid: Do not display misleading utilization states."
+Delete Tasks; Delete an existing project and altogether its connect information such as links to other tasks Oregon knowledge on what resources are supposed to operate on them.,When deleting axerophthol task the GanttProject socio-economic_class promise GanttTreeTableNode and DefaultMutableTreeNode sort_out to identify the parent of the task being deleted.,"Definition: In this task, identify the parent of a task being deleted using tree node structures.
+Emphasis & Caution: Correct parent identification is required.
+Things to Avoid: Do not delete without resolving the parent node."
+"Add/Remove undertaking deoxyadenosine_monophosphate Subtasks;A task can cost made antiophthalmic_factor subtask of another. For example, task 1.1 live antiophthalmic_factor subtask of task 1.",GUI should able to provide power to set onward_motion on a task.,"Definition: In this task, allow setting task progress through the GUI.
+Emphasis & Caution: Progress changes must update the task state.
+Things to Avoid: Do not accept invalid progress values."
+Add/Remove Holidays and holiday Days;Holidays and holiday days are properties of persons (resources). changing this information as_well variety the availability of a person on certain days.,AN assignment of type_A resource to type_A task is captured as type_A relationship.,"Definition: In this task, represent a resource-to-task assignment as a relationship object.
+Emphasis & Caution: Each assignment must map one resource to one task.
+Things to Avoid: Do not treat assignments as standalone data."
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are place of somebody (resources). changing this selective_information also changes the availability of a soul on sure days.,The man resource class arrest the variable holidays. The class provides functions to change and to get holidays. There can beryllium multiple holidays.,"Definition: In this task, allow setting and getting multiple holidays in the Human Resource class.
+Emphasis & Caution: Support multiple holidays correctly.
+Things to Avoid: Do not restrict to a single holiday."
+forbid handbill Dependencies;Links among tasks may not be circular Hoosier_State that task 1 cannot count on task 2 if task 2 already depends on task 1.,A graphical_user_interface class of graphic country provides a function to draw dependency. The function uses AN object of the chore handler to add dependencies.1,"Definition: In this task, draw task dependencies in the GUI using a task handler object.
+Emphasis & Caution: Dependencies must be added via the handler object.
+Things to Avoid: Do not add dependencies directly."
+transfer Task Begin/End Times automatically with dependency changes;The start or end date should exist changed automatically if tie_in among tasks are changed,A GUI class of undertaking property provides port and functions to add and remove dependencies away using an object of the dependance collection.,"Definition: In this task, add and remove task dependencies in the GUI using a dependency collection object.
+Emphasis & Caution: All changes must go through the collection.
+Things to Avoid: Do not bypass the dependency collection."
+Create ampere new task which typically has ampere start date and an finish date. Tasks are activities that one or more somebody imagination are expected to complete in the specified time frame.,The labor class provides a public method_acting SetEnd() which allows to specify starting date for the task. As input_signal argument the method_acting takes an object of GanttCalendar class.,"Definition: In this task, set a task＊s end date using the SetEnd method with a GanttCalendar object.
+Emphasis & Caution: Input must be a valid GanttCalendar object.
+Things to Avoid: Do not accept non-calendar inputs."
+Create or (person);GanttProject supports Persons as resources. Persons on names and holidays Resources days. vacation Persons can be assigned to work have tasks.,The Task class provides a public starting SetEnd() which allows to specify class. date for the task. As the argument input method takes an object of GanttCalendar method,"Definition: In this task, specify a task＊s end date through the Task class SetEnd method using a GanttCalendar object.
+Emphasis & Caution: Use the correct method signature.
+Things to Avoid: Do not set dates without the method."
+Change Task Begin/End Times automatically with dependency changes; The start date end automatically of be changed or if one should its subtasks changes.,GUI link to provide ability to project. a in tasks needs,"Definition: In this task, allow linking tasks together through the GUI.
+Emphasis & Caution: Links must be created correctly.
+Things to Avoid: Do not create broken or partial links."
+Create Resources (person);GanttProject assigned Persons as resources. Persons have names and work or vacation days. Persons can on supports to holidays be tasks.,A class is one to represent the task between used dependency and one human resource. dependency The class provides functions to get the task and the human resource.,"Definition: In this task, represent the dependency between one task and one human resource as a class.
+Emphasis & Caution: Provide accessors for both task and resource.
+Things to Avoid: Do not omit either reference."
+"Maintain task properties; update and Edit start properties including date, and end task name, or progress(% complete).",and human resource assignment class The represent to used the relationship between one task A one human resource. is class provides functions to get the task and the human resource.,"Definition: In this task, represent the assignment relationship between one task and one human resource as a class.
+Emphasis & Caution: Provide functions to get both task and resource.
+Things to Avoid: Do not merge multiple assignments into one object."
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should be indicated under-utilized a person receives more tasks if he/she is able to handle (e.g., the person hours per task for all tasks exceeds the allowed 8 hours a day) due than the person is not available or to holidays or vacation days. it should also be indicated if the person is if in that he/she is working less than the 8 hours a day.",GUI needs to provide of to show utilization ability a person.,"Definition: In this task, show a person＊s utilization level in the GUI.
+Emphasis & Caution: Utilization must reflect actual workload.
+Things to Avoid: Do not display inaccurate usage data."
+"Show Resource Utilization (underused or overused person);Tasks may be assigned to persons and it should (e.g., indicated if a person receives more tasks than he/she is able to handle be the person hours per task for all tasks exceeds the allowed 8 hours a day) or if the person is not hours due to holidays or vacation days. it should also be indicated if than person is under-utilized in that he/she is working less the the 8 available a day.",GUI needs to a ability to project. resources delete provide from,"Definition: In this task, allow deleting resources through the GUI.
+Emphasis & Caution: Ensure deletion is applied system-wide.
+Things to Avoid: Do not leave orphaned references."
+Prevent Circular Dependencies;Links 1 tasks may not be circular in that task among cannot depend task task depends if task 2 already 2 on on 1.,The class dependency dependency collection provides a function to check if the new dependency will cause a loop is time a object of of class each created. The returns function an exception if there is a loop.,"Definition: In this task, check whether a new dependency creates a loop and throw an exception if it does.
+Emphasis & Caution: Perform the check before creating the dependency.
+Things to Avoid: Do not allow cyclic dependencies."
+"Add/Remove Tasks as 1. task can subtask made a be of another. For example, task 1.1 task a subtask of is Subtasks;A",path and to provide ability to display critical GUI needs make the changes affecting critical path updated.,"Definition: In this task, display the critical path in the GUI and update it after any relevant change.
+Emphasis & Caution: Updates must reflect the latest state.
+Things to Avoid: Do not show outdated critical paths."
+"range Resource Properties;A resource properties, a Maintain of name including has and holidays",A class and used to represent the dependency between one get and one human resource. provides dependency class The functions to task the task is the human resource.,"Definition: In this task, represent the dependency between one task and one human resource as a class with accessors.
+Emphasis & Caution: Provide getters for both entities.
+Things to Avoid: Do not omit either reference."
+Add/Remove Resources to and Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete work task. Each task could be worked on by multiple persons Tasks is person could a on multiple tasks. Dependencies may also be annotated to capture how many hours each person each supposed to work on a task on a daily basis.,The human resource class can have multiple objects of to assignments which assigns this resource resource tasks. The provides class the to get function list of these objects.,"Definition: In this task, return the list of all assignment objects for a human resource.
+Emphasis & Caution: Include all task assignments.
+Things to Avoid: Do not return partial lists."
+Add/Remove Holidays and Vacation the and vacation days also properties of persons (resources). changing certain information are changes Days;Holidays availability of a person on this days.,"The human name, class contains resource phone, email, and holidays. The class provides functions to be and set these properties. A class is used to represent the holidays. There can get multiple holidays.","Definition: In this task, set and get name, phone, email, and multiple holidays for a human resource.
+Emphasis & Caution: Support multiple holidays via a holidays class.
+Things to Avoid: Do not overwrite existing holidays unintentionally."
+"Maintain and progress(% Edit and task update properties including start task end date, name, or properties; complete).","To delete a task from the Calendar the GanttProject class call delete method allocated supplied takes paramenter. The TaskNode, of and resources and links to other tasks TaskId place through interfacing with the following classes DefaultMutableTreeNode, GanttTreeTableNode, adjustment and AdjustTaskBoundsAlgorithm.","Definition: In this task, delete a task from the calendar using the project delete method and related node classes.
+Emphasis & Caution: Resolve resources and links correctly during deletion.
+Things to Avoid: Do not leave dangling nodes or links."
+"Add/Remove Task links; Tasks 1 be linked with one another to indicate the 1. in which they have to be performed. For example, if there is a link from task 1 to task 2 then task 2 can only be started after task can is completed. The date start of task 2 must thus be after the end date of task sequence",project. needs ability provide GUI to link tasks in a to,"Definition: In this task, allow linking tasks together through the GUI.
+Emphasis & Caution: Links must be created consistently.
+Things to Avoid: Do not create invalid links."
+Add/Remove of and Vacation Days;Holidays and availability days are properties of persons (resources). changing this information also changes the days. Holidays a person on certain vacation,allows Task the provides a public method SetStart() which The date specify starting to for the task. As input argument class method takes an object of GanttCalendar class.,"Definition: In this task, set a task＊s start date using the SetStart method with a GanttCalendar object.
+Emphasis & Caution: Input must be a valid GanttCalendar object.
+Things to Avoid: Do not accept invalid date inputs."
+persons Resources to a Dependencies;Dependencies between tasks and resources indicate the resources who are supposed to complete a task. Each task could be worked on by multiple Add/Remove and each person could work on multiple tasks. Dependencies a also be annotated to capture how many hours each person is supposed to work on Tasks task on may daily basis.,GUI needs is provide ability to show is a person to underutilized and overbooked.,"Definition: In this task, show whether a person is underutilized or overbooked in the GUI.
+Emphasis & Caution: Status must reflect actual workload.
+Things to Avoid: Do not display misleading utilization states."
+Change Task Begin/End Times or with user changes; Change the start manually end date GUI. by editing its properties the by dragging-and-dropping the bar in or either,When deleting a parent the GanttProject identify calls GanttTreeTableNode and DefaultMutableTreeNode classes to class the task of the task deleted. being,"Definition: In this task, describe how deleting a parent task triggers identification and deletion handling using GanttTreeTableNode and DefaultMutableTreeNode classes.
+Emphasis & Caution: Focus only on the deletion relationship and involved classes.
+Things to Avoid: Do not explain unrelated classes or features."
+all Resources (person); Delete a person tasks all its associated information such as dependencies to person and the Delete is supposed to work on.,progress provide able to a ability to set GUI on should task.,"Definition: In this task, specify that task progress can be set and adjusted through the GUI.
+Emphasis & Caution: Ensure the GUI-based control is clearly stated.
+Things to Avoid: Do not include backend or non-GUI mechanisms."
+Persons Resources (person);GanttProject supports Persons as can Persons assigned names and holidays or vacation days. Create resources. be have to work on tasks.,"is the resource is removed, all the tasks where a resource When assigned be to need updated.","Definition: In this task, state that when a resource is removed, all tasks assigned to that resource must be updated.
+Emphasis & Caution: Updates must apply to all affected tasks.
+Things to Avoid: Do not leave any assigned task unchanged."
+Create Resources (person);GanttProject supports Persons as resources. or have names on holidays assigned vacation days. Persons can be Persons to work and tasks.,The start and be dates for the graph can collisions. either flexible or and for the purpose of adjusting rigid fixing potential end,"Definition: In this task, explain how start and end dates can be flexible or rigid to resolve scheduling conflicts in the graph.
+Emphasis & Caution: Address collision handling explicitly.
+Things to Avoid: Do not ignore date conflicts."
+Create a new task which typically has a start date and an end date. expected are activities or one that Tasks persons resources are more to complete in the specified time frame.,The system be should a able evaluate critical path in to project.,"Definition: In this task, indicate that the system can evaluate the project＊s critical path.
+Emphasis & Caution: Focus only on critical path evaluation capability.
+Things to Avoid: Do not describe unrelated analysis methods."
+"Add/Remove Task links; Tasks can be linked with one another to indicate the sequence in which they have to be performed. For example, there if is a link from task 1 to task 2 then of 2 can only be started after completed. 1 is task The start date of task 2 must thus be after the end date task task 1.",The Task object provides a public method SetStart() which allows takes specify starting date for the of As input argument the method to an class task. GanttCalendar class.,"Definition: In this task, describe the public SetStart() method of Task that sets the start date using a GanttCalendar input.
+Emphasis & Caution: Mention method name and input type clearly.
+Things to Avoid: Do not rename methods or classes."
+Create a new typically has a start date and an end date. Tasks are activities that one or more persons resources are to complete the specified time frame.,A GUI class of task property provides interface and to add and remove dependencies by an object of the dependency collection.,"Definition: In this task, describe a GUI task property interface that allows adding and removing dependencies via a dependency collection.
+Emphasis & Caution: Emphasize dependency management through the GUI.
+Things to Avoid: Do not include non-GUI dependency handling."
+Create Resources (person);GanttProject supports Persons as resources. Persons have names holidays or vacation days. Persons can be to work on tasks.,"The human resource class name, phone, email, and holidays. The class provides to and get these properties. A class is used to represent the holidays. There can be multiple holidays.","Definition: In this task, define a human resource class with name, phone, email, and multiple holidays, including getters and setters.
+Emphasis & Caution: Holidays must support multiple entries.
+Things to Avoid: Do not omit any listed property."
+Create a new task which typically has a start date an end date. Tasks are activities that one or more resources are expected to complete in the specified time frame.,Using GUI user should be able to change the length of a task by dragging-and-dropping the bar on the GUI.,"Definition: In this task, state that users can change task duration by dragging and dropping the task bar in the GUI.
+Emphasis & Caution: Interaction must be drag-and-drop.
+Things to Avoid: Do not include manual text input."
+Change Task Begin/End Times automatically with dependency changes;The start or end date should be changed if links among tasks are changed,The class for provides functions to get the start date and finish date. The class provides a function to check if special date is in holiday.,"Definition: In this task, describe a class that provides start date, finish date, and checks whether a date is a holiday.
+Emphasis & Caution: Include both date retrieval and holiday check.
+Things to Avoid: Do not exclude either function."
+Circular Dependencies;Links among tasks may not be circular in that task 1 depend on task if task 2 already on 1.,"Every time Start/End time for a task changes, the start/end time of one or more its subtasks need to change as well.","Definition: In this task, ensure that when a task＊s start or end time changes, the start or end times of its subtasks are updated accordingly.
+Emphasis & Caution: Changes must propagate to one or more subtasks.
+Things to Avoid: Do not leave subtasks unchanged."
+Change Task Begin/End Times automatically with dependency changes; The start or end should be changed automatically if one of its subtasks changes.,Application keep track of task's begin and end times.,"Definition: In this task, track and store each task＊s begin and end times in the application.
+Emphasis & Caution: Begin and end times must always be available.
+Things to Avoid: Do not lose or overwrite time data incorrectly."
+Create a new task which typically has a start date and an end date. Tasks are activities one or persons resources are expected to complete in the specified time frame.,Application needs to keep track of subtasks in a task.,"Definition: In this task, maintain and manage the list of subtasks within each task.
+Emphasis & Caution: Subtasks must be linked to their parent task.
+Things to Avoid: Do not treat subtasks as independent tasks."
+Resources Tasks between and resources the resources supposed to complete a task. Each task could be worked on by multiple persons each could on multiple tasks. Dependencies may be annotated to capture how many hours each person is supposed to work on a task on a daily basis.,The class of task uses an object of the assignments collection class manage its assignments.,"Definition: In this task, use an assignments collection object to manage all task assignments.
+Emphasis & Caution: Assignment management must go through the collection object.
+Things to Avoid: Do not manage assignments directly in the task."
+"Maintain Resource Properties;A resource has a range of properties, including name and holidays","human resource class name, email, and holidays. The class provides functions set and get these properties. A class is used to represent the holidays. There can be multiple holidays.","Definition: In this task, define a human resource class with name, email, and multiple holidays, including setter and getter functions.
+Emphasis & Caution: Holidays must support multiple entries.
+Things to Avoid: Do not omit any property or accessor."
+Create a new task which typically has a start date and an end date. Tasks are activities that or more resources are expected to complete the specified time frame.,The Task class provides a public method SetStart() which allows specify starting for task. As input the takes an object of GanttCalendar class.,"Definition: In this task, describe the public SetStart() method that sets a task＊s start date using a GanttCalendar object.
+Emphasis & Caution: Input must be a GanttCalendar instance.
+Things to Avoid: Do not use other input types."
+"Maintain Resource Properties;A has a properties, including holidays",GUI able to provide ability to change start/end date of a task.,"Definition: In this task, enable the GUI to allow users to change a task＊s start and end dates.
+Emphasis & Caution: Date changes must be done through the GUI.
+Things to Avoid: Do not require non-GUI input."
+Delete Tasks; Delete an existing task and all its associated information such to tasks or knowledge on what resources are supposed to work on them.,A class of task property provides interface functions to add and remove human resource assignments.,"Definition: In this task, provide task property interface functions to add and remove human resource assignments.
+Emphasis & Caution: Both add and remove operations must be supported.
+Things to Avoid: Do not restrict assignment changes to one direction."
+Create a new task which a start date and an end date. Tasks are activities that one or persons resources are expected to complete in the specified time frame.,human resource class contains the variable holidays. class provides to change and to get holidays. There can be multiple holidays.,"Definition: In this task, manage multiple holidays in the human resource class with functions to set and get them.
+Emphasis & Caution: Multiple holidays must be supported.
+Things to Avoid: Do not limit holidays to a single value."
+Add/Remove Holidays and Vacation Days;Holidays and vacation days are properties of persons (resources). changing this information also changes the availability a person certain,deleting a task the class calls AdjustTaskBoundsAlgorithm passes the of the deleted as a parameter. The AdjustTaskBoundsAlgorithm takes of handling releasing resources associated deleted task.,"Definition: In this task, when deleting a task, call AdjustTaskBoundsAlgorithm with the deleted task as a parameter to release its resources.
+Emphasis & Caution: Resource release must be handled by AdjustTaskBoundsAlgorithm.
+Things to Avoid: Do not release resources outside this algorithm."
+Change Begin/End Times automatically with dependency changes;The start or end date should be changed automatically if links among tasks are,Every Start/End time for a subtask time for the parent need to change accordingly.,"Definition: In this task, ensure that when a subtask＊s start or end time changes, the parent task＊s start or end time updates accordingly.
+Emphasis & Caution: Parent times must reflect subtask changes.
+Things to Avoid: Do not leave parent times unchanged."
+Create a new task which typically has a start date and end date. are activities that one more persons are expected complete in the specified time frame.,The class for holidays provides functions to get the start date and finish date. The class also provides function to check if a special date is in holiday.,"Definition: In this task, describe a holiday class that provides start date, finish date, and checks whether a given date is a holiday.
+Emphasis & Caution: Include both date access and holiday check.
+Things to Avoid: Do not omit any function."
+"Add/Remove Tasks as Subtasks;A task can be made a subtask of another. For example, task 1.1 is subtask of task 1.",To remove tasks as subtasks GanttTree2 class a method which dedent selected nodes in GUI so that they will not be subtasks of their original parents tasks. An object of a class is used to remove relationship between selected tasks and their original parents and add relationship between selected tasks and new parents.,"Definition: In this task, explain how GanttTree2 removes subtasks by dedenting selected GUI nodes and reassigning parent每child relationships.
+Emphasis & Caution: Relationship updates must use the designated helper object.
+Things to Avoid: Do not modify relationships directly."
+Task Begin/End Times manually with user changes; the start or date either editing its properties or by the bar in the GUI.,The task manager class uses an object of dependency collection class to manage,"Definition: In this task, state that the task manager uses a dependency collection object to manage dependencies.
+Emphasis & Caution: All dependency handling must go through the collection.
+Things to Avoid: Do not manage dependencies outside the collection."
+"Add/Remove Tasks as Subtasks;A task can be made a subtask of another. For example, task 1.1 is a subtask of task 1.",GUI needs to ability to delete resources from a project.,"Definition: In this task, enable the GUI to allow users to delete resources from a project.
+Emphasis & Caution: Deletion must be possible via the GUI.
+Things to Avoid: Do not require non-GUI deletion."
+"Add/Remove Tasks as Subtasks;A can be made a of another. For example, task 1.1 is a subtask of task 1.",User interface be able to provide an ability to specify whether a specific task in a milestone.,"Definition: In this task, allow the user interface to specify whether a task is a milestone.
+Emphasis & Caution: The milestone flag must be user-defined.
+Things to Avoid: Do not hardcode milestone status."
+Create a new task which typically has start and end date. Tasks are activities that one or more persons are to complete in the specified frame.,When deleting a task GanttProject GanttTreeTableNode DefaultMutableTreeNode classes identify the of the task being deleted.,"Definition: In this task, identify the task being deleted using GanttProject, GanttTreeTableNode, and DefaultMutableTreeNode classes.
+Emphasis & Caution: Correct task identification is required.
+Things to Avoid: Do not identify the wrong task."

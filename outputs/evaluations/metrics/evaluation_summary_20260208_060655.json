@@ -1,0 +1,10 @@
+{
+  "uml_expert_qwen2.5": {
+    "bleu": 0.04748871840617915,
+    "rouge_l": 0.2782399595326349,
+    "meteor": 0.20999462102726604,
+    "format_score": 1.0,
+    "valid_rate": 1.0,
+    "avg_length": 316.0
+  }
+}

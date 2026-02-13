@@ -1,0 +1,1057 @@
+High_Requirements,Low_Requirements,Instruction
+The system shall allow a user to foward notification to someone else at the site,The system shall allow the provider to redirect the notification concerning orders requiring signature to another provider,"Definition: In this task, describe how the system enables a provider to redirect order-signature notifications to another provider.
+Emphasis & Caution: Ensure the redirection applies only to orders requiring signature.
+Things to Avoid: Do not include non-signature notifications."
+The system shall allow a user to foward notification to someone else at the site,The system shall provide the ability to permit an ordering clinician to forward all (current and future) expiring order notifications to another clinician,"Definition: In this task, describe how the system allows an ordering clinician to forward all current and future expiring order notifications to another clinician.
+Emphasis & Caution: Include both existing and future notifications.
+Things to Avoid: Do not limit forwarding to a single order."
+The system shall allow complete order sets to be predefined and personalized,The system shall provide the ability to customize clinical templates,"Definition: In this task, describe how the system allows users to customize clinical templates.
+Emphasis & Caution: Customization must be user-configurable.
+Things to Avoid: Do not describe fixed or non-editable templates."
+The system shall allow complete order sets to be predefined and personalized,The system shall provide the ability to display for selection a secondary,"Definition: In this task, describe how the system displays a secondary option for user selection.
+Emphasis & Caution: The secondary option must be selectable.
+Things to Avoid: Do not assume the content of the secondary option."
+The system shall allow creation of personalized templates to fit the specific needs of individual practices,The system shall provide the ability to customize clinical templates,"Definition: In this task, describe how the system allows users to customize clinical templates.
+Emphasis & Caution: Customization must be flexible and repeatable.
+Things to Avoid: Do not duplicate system-wide defaults only."
+The system shall allow creation of personalized templates to fit the specific needs of individual practices,The system shall provide the ability to individualize alerts to address a patient's specific clinical situation,"Definition: In this task, describe how the system individualizes alerts for a patient¡¯s specific clinical situation.
+Emphasis & Caution: Alerts must be patient-specific.
+Things to Avoid: Do not describe generic, non-specific alerts."
+The system shall allow document types to inherit authorizations from a higher level when using classes to assign roles,The system shall provide the ability to create and assign tasks by user or user role,"Definition: In this task, describe how the system enables creating and assigning tasks by individual user or user role.
+Emphasis & Caution: Support both user-based and role-based assignment.
+Things to Avoid: Do not restrict assignment to a single method."
+The system shall allow document types to inherit authorizations from a higher level when using classes to assign roles,The system shall provide the ability to identify the identity of the cosigning author of a note and record the date and time of original author and identity of signature,"Definition: In this task, describe how the system identifies the cosigning author of a note and records authorship, signature identity, date, and time.
+Emphasis & Caution: Capture both original author and cosigner details with timestamps.
+Things to Avoid: Do not omit identity or time records."
+The system shall allow document types to inherit authorizations from a higher level when using classes to assign roles,The system shall provide the ability to index and retrieve scanned documents based on the document type,"Definition: In this task, describe how the system indexes and retrieves scanned documents by document type.
+Emphasis & Caution: Retrieval must be based on document type.
+Things to Avoid: Do not rely on manual searching only."
+The system shall allow infinite hierarchies of subclasses to be created in the User Hierarchy Class structure,The system shall provide the ability to export structured data which removes those identifiers listed in the HIPAA definition of a limited dataset. This export on hardcopy and electronic output shall leave the actual PHI data unmodified in the original record,"Definition: In this task, describe how the system exports structured data with HIPAA limited dataset identifiers removed while keeping original PHI unchanged.
+Emphasis & Caution: Remove only the specified identifiers and preserve original records.
+Things to Avoid: Do not modify or delete original PHI data."
+The system shall allow infinite hierarchies of subclasses to be created in the User Hierarchy Class structure,The system shall provide the ability to present a list of tasks by user or user role,"Definition: In this task, describe how the system presents a list of tasks by user or by user role.
+Emphasis & Caution: Ensure both user-based and role-based views are supported.
+Things to Avoid: Do not mix tasks without clear user or role distinction."
+The system shall allow infinite hierarchies of subclasses to be created in the User Hierarchy Class structure,The system shall support removal of a user?s privileges without deleting the user from the system. The purpose of the criteria is to provide the ability to remove a user?s privileges,"Definition: In this task, describe how the system removes a user¡¯s privileges without deleting the user account.
+Emphasis & Caution: The user record must remain intact.
+Things to Avoid: Do not delete or deactivate the user entirely."
+The system shall allow medication orders to be placed and filled from local stocks of medications while providing full auditing of all medication orders within the medication profile,The system shall provide the ability to maintain a discrete list of orderable medications,"Definition: In this task, describe how the system maintains a discrete list of orderable medications.
+Emphasis & Caution: The list must be clearly separated and manageable.
+Things to Avoid: Do not include non-orderable items."
+The system shall allow other VistA applications to access the user class file to determine the role of an employee,The system shall provide the ability to access reports outside the EHR application,"Definition: In this task, describe how the system allows access to reports outside the EHR application.
+Emphasis & Caution: Access must function independently of the EHR interface.
+Things to Avoid: Do not require opening the EHR application."
+The system shall allow other VistA applications to access the user class file to determine the role of an employee,The system will provide secure remote access to patient data without the need to pre-load an application,"Definition: In this task, describe how the system provides secure remote access to patient data without pre-loading an application.
+Emphasis & Caution: Access must be secure and browser-based or equivalent.
+Things to Avoid: Do not require prior installation."
+The system shall allow other VistA applications to access the user class file to determine the role of an employee,If role-based access control (RBAC) is supported,"Definition: In this task, describe how the system behaves when role-based access control (RBAC) is supported.
+Emphasis & Caution: Access must align strictly with assigned roles.
+Things to Avoid: Do not grant permissions outside defined roles."
+The system shall allow physician offices to use social security numbers or medical record numbers to identify patients,The system shall associate (store and link) key identifier information (e.g.,"Definition: In this task, describe how the system associates, stores, and links key identifier information.
+Emphasis & Caution: Identifiers must remain consistently linked.
+Things to Avoid: Do not store identifiers without linkage."
+The system shall allow several orders to be placed with the ability for a user to sign for them all at once,For each order type,"Definition: In this task, describe how the system handles requirements for each order type.
+Emphasis & Caution: Address order-type-specific behavior.
+Things to Avoid: Do not treat all order types identically if differences are required."
+The system shall allow user classes to be defined hospital-wide or more narrowly for a specific service,If the system archives health record information,"Definition: In this task, describe how the system archives health record information.
+Emphasis & Caution: Archived data must remain retrievable.
+Things to Avoid: Do not permanently delete archived records."
+The system shall allow user classes to be used across VistA to replace and/or complement security keys,The system shall associate (store and link) key identifier information (e.g.,"Definition: In this task, describe how the system associates, stores, and links key identifier information.
+Emphasis & Caution: Ensure accurate and consistent identifier linkage.
+Things to Avoid: Do not duplicate or mismatch identifiers."
+The system shall allow users to enter time in several different formats,The system shall have the ability to format for export recorded time stamps using UTC based on ISO 8601.? Example: 1994-11-05T08:15:30-05:00 corresponds to November 5,"Definition: In this task, describe how the system exports recorded timestamps formatted in UTC using ISO 8601.
+Emphasis & Caution: Use UTC and ISO 8601 format only.
+Things to Avoid: Do not use local time or non-ISO formats."
+The system shall allow users who hold any of the ORES/ORELSE/PROVIDER keys to be viewed as a clinical user and has full access privileges to all problem list options,If role-based access control (RBAC) is supported,"Definition: In this task, describe how the system enforces access when role-based access control (RBAC) is supported.
+Emphasis & Caution: Permissions must strictly follow roles.
+Things to Avoid: Do not allow role overrides."
+The system shall capture history of received immunizations,The system shall provide the ability to display CCD documents,"Definition: In this task, describe how the system displays CCD documents.
+Emphasis & Caution: Ensure documents are viewable.
+Things to Avoid: Do not require external tools to view."
+The system shall display a box listing possible matches if CPRS finds more than one patient with the same last name and same last four digits of the social security numbers,The system shall provide the ability to query for a patient by more than one form of identification,"Definition: In this task, describe how the system allows querying a patient using multiple identifiers.
+Emphasis & Caution: Support more than one identifier type.
+Things to Avoid: Do not limit search to a single identifier."
+The system shall display a box listing possible matches if CPRS finds more than one patient with the same last name and same last four digits of the social security numbers,The system shall provide the ability to send a query to coordinate patient identification,"Definition: In this task, describe how the system sends queries to coordinate patient identification.
+Emphasis & Caution: Queries must support identification matching.
+Things to Avoid: Do not perform local-only identification."
+The system shall display a message indicating the patient?s ability to pay for medical services must be evaluated,The system shall have the ability to provide assistance with selecting an appropriate CPT Evaluation and Management billing code based on codified clinical information in the encounter,"Definition: In this task, describe how the system assists in selecting appropriate CPT E&M billing codes based on coded encounter data.
+Emphasis & Caution: Use codified clinical information only.
+Things to Avoid: Do not rely on free-text input."
+The system shall have pre-defined progress note templates,The system shall provide the ability to customize clinical templates,"Definition: In this task, describe how the system allows customization of clinical templates.
+Emphasis & Caution: Customization must be user-configurable.
+Things to Avoid: Do not restrict templates to fixed formats."
+The system shall implement a user class hierarchy to identify the roles that different users fulfill within the hospital,The system shall allow authorized users to update the directory,"Definition: In this task, describe how authorized users update the directory.
+Emphasis & Caution: Only authorized users may update.
+Things to Avoid: Do not allow unauthorized changes."
+The system shall implement a user class hierarchy to identify the roles that different users fulfill within the hospital,The system shall provide the ability to create and assign tasks by user or user role,"Definition: In this task, describe how the system creates and assigns tasks by user or by user role.
+Emphasis & Caution: Support both assignment methods.
+Things to Avoid: Do not restrict to one assignment type."
+The system shall implement a user class hierarchy to identify the roles that different users fulfill within the hospital,The system shall provide the ability to identify all users who have accessed an individual's chart over a given time period,"Definition: In this task, describe how the system identifies all users who accessed an individual¡¯s chart within a specified time period.
+Emphasis & Caution: Include user identity and time range.
+Things to Avoid: Do not omit access records."
+The system shall improve accessibility of online clinical information and results,The system shall provide protection to maintain the integrity of clinical data during concurrent access,"Definition: In this task, describe how the system protects clinical data integrity during concurrent access.
+Emphasis & Caution: Prevent data conflicts or overwrites.
+Things to Avoid: Do not allow uncontrolled simultaneous edits."
+The system shall improve accessibility of online clinical information and results,The system shall provide the ability for a user to whom a result is presented to acknowledge the result,"Definition: In this task, describe how a user can acknowledge a presented result.
+Emphasis & Caution: Acknowledgment must be explicitly recorded.
+Things to Avoid: Do not assume automatic acknowledgment."
+The system shall improve accessibility of online clinical information and results,The system shall provide the ability to receive and store general laboratory results (includes ability to differentiate preliminary results and final results and the ability to process a corrected result),"Definition: In this task, describe how the system receives and stores laboratory results, including preliminary, final, and corrected results.
+Emphasis & Caution: Clearly differentiate result statuses.
+Things to Avoid: Do not overwrite prior results without status tracking."
+The system shall improve accessibility of online clinical information and results,The HIE shall support the ability of consumers to request and receive access and disclosure reports which identify HIE users who have viewed ,"Definition: In this task, describe how consumers can request and receive access and disclosure reports identifying HIE users who viewed records.
+Emphasis & Caution: Reports must list viewing users.
+Things to Avoid: Do not omit user identities."
+The system shall include Standard Laboratory and Medication orderable files,The system shall provide the ability to maintain medication ordering dates,"Definition: In this task, describe how the system maintains medication ordering dates.
+Emphasis & Caution: Dates must be accurate and preserved.
+Things to Avoid: Do not auto-change original order dates."
+The system shall include Standard Laboratory and Medication orderable files,The system shall provide the ability to send an order for a laboratory test,"Definition: In this task, describe how the system sends laboratory test orders.
+Emphasis & Caution: Ensure the order is transmitted successfully.
+Things to Avoid: Do not store orders without sending."
+The system shall include Standard Laboratory and Medication orderable files,The system shall provide a means to document a description of a medication and medication purpose when the medication name is unknown,"Definition: In this task, describe how the system documents medication description and purpose when the medication name is unknown.
+Emphasis & Caution: Capture both description and purpose.
+Things to Avoid: Do not require a known medication name."
+The system shall include Standard Laboratory and Medication orderable files,The system shall relate medication allergies to medications to facilitate allergy checking decision support for medication orders,"Definition: In this task, describe how the system links medication allergies to medications for allergy checking decision support.
+Emphasis & Caution: Ensure linkage supports alerting.
+Things to Avoid: Do not treat allergies as unlinked data."
+The system shall include Standard Laboratory and Medication orderable files,The system shall update the appropriate medication list with the prescribed medications,"Definition: In this task, describe how the system updates the medication list with prescribed medications.
+Emphasis & Caution: Keep the list current.
+Things to Avoid: Do not leave prescribed medications unrecorded."
+The system shall include Standard Laboratory and Medication orderable files,The system shall have the ability to report on the ordering of nonformulary medications,"Definition: In this task, describe how the system reports on nonformulary medication orders.
+Emphasis & Caution: Identify nonformulary status clearly.
+Things to Avoid: Do not mix formulary and nonformulary data."
+The system shall include Standard Laboratory and Medication orderable files,The system shall provide the ability to configure orders within order sets with default order details,"Definition: In this task, describe how the system configures orders within order sets using default order details.
+Emphasis & Caution: Default details must auto-populate.
+Things to Avoid: Do not require manual entry for defaults."
+The system shall include Standard Laboratory and Medication orderable files,The system shall provide the ability to document complex medication orders that include dosing based on either physical status or laboratory values,"Definition: In this task, describe how the system documents complex medication orders with dosing based on physical status or lab values.
+Emphasis & Caution: Support both physical and laboratory-based dosing.
+Things to Avoid: Do not limit dosing to fixed amounts only."
+The system shall include Standard Laboratory and Medication orderable files,The system shall provide the ability to include in an order set order types including but not limited to medications,"Definition: In this task, describe how the system includes multiple order types within an order set, including medications.
+Emphasis & Caution: Support diverse order types.
+Things to Avoid: Do not restrict order sets to a single type."
+The system shall include a graphing feature to allow users to view lab test results and vital signs in a graph,The system shall provide the ability to create hardcopy and electronic report summary information (procedures,"Definition: In this task, describe how the system creates hardcopy and electronic report summary information.
+Emphasis & Caution: Support both output formats.
+Things to Avoid: Do not generate summaries in only one format."
+The system shall include capabilities for ordering laboratory tests and reviewing results,The system shall provide the ability to display non-numeric current and historical test results as textual data,"Definition: In this task, describe how the system displays non-numeric current and historical test results as text.
+Emphasis & Caution: Preserve textual results accurately.
+Things to Avoid: Do not force numeric formatting."
+The system shall include capabilities for ordering laboratory tests and reviewing results,The system shall provide the ability to display user created instructions and/or prompts when ordering diagnostic tests or procedures,"Definition: In this task, describe how the system displays user-created instructions or prompts during diagnostic test or procedure ordering.
+Emphasis & Caution: Instructions must appear at order time.
+Things to Avoid: Do not hide or omit user-defined prompts."
+The system shall include capabilities for ordering laboratory tests and reviewing results,The system shall provide the ability to filter or sort results by type of test and test date,"Definition: In this task, describe how the system filters or sorts results by test type and test date.
+Emphasis & Caution: Support both filtering and sorting.
+Things to Avoid: Do not lock results in a fixed order."
+The system shall include capabilities for ordering laboratory tests and reviewing results,The system shall provide the ability to order diagnostic tests,"Definition: In this task, describe how the system allows users to order diagnostic tests.
+Emphasis & Caution: Ensure orders are properly captured.
+Things to Avoid: Do not restrict ordering capability."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall have the ability to provide electronic communication between prescribers and pharmacies or other intended recipients of the medication order,"Definition: In this task, describe how the system provides electronic communication for medication orders between prescribers and pharmacies or other recipients.
+Emphasis & Caution: Communication must be electronic and secure.
+Things to Avoid: Do not rely on manual or paper-only methods."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall provide the ability to allow the user to configure prescriptions to incorporate fixed text according to the user's specifications and to customize the printed output of the prescription,"Definition: In this task, describe how the system lets users configure prescriptions with fixed text and customize printed prescription output.
+Emphasis & Caution: Allow user-defined text and layout.
+Things to Avoid: Do not lock prescription text or format."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall provide the ability to create prescription or other medication orders with sufficient information for correct filling and dispensing by a pharmacy,"Definition: In this task, create a prescription or medication order that includes all information required for accurate pharmacy filling and dispensing.
+Emphasis & Caution: Ensure completeness and clarity of medication details.
+Things to Avoid: Missing required prescription fields."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall provide the ability to display the associated problem or diagnosis (indication) on the printed prescription,"Definition: In this task, display the related problem or diagnosis on the printed prescription.
+Emphasis & Caution: Match the indication correctly to the prescription.
+Things to Avoid: Displaying unrelated or incorrect diagnoses."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall provide the ability to identify pharmacies that can receive prescriptions electronically,"Definition: In this task, identify pharmacies capable of receiving electronic prescriptions.
+Emphasis & Caution: Confirm electronic receipt capability.
+Things to Avoid: Listing pharmacies without e-prescribing support."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall provide the ability to print and electronically fax prescriptions,"Definition: In this task, generate prescriptions that can be printed and sent via electronic fax.
+Emphasis & Caution: Ensure print and fax outputs are readable.
+Things to Avoid: Creating formats incompatible with printing or faxing."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall provide the ability to receive and display information received through electronic prescription eligibility checking,"Definition: In this task, receive and display data returned from electronic prescription eligibility checks.
+Emphasis & Caution: Show received information accurately and completely.
+Things to Avoid: Omitting or altering returned eligibility data."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall provide the ability to re-print and re-fax prescriptions,"Definition: In this task, re-print and re-fax existing prescriptions as needed.
+Emphasis & Caution: Use the original prescription content without changes.
+Things to Avoid: Modifying prescription details during reprint or refax."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall provide the ability to send an electronic prescription to pharmacy,"Definition: In this task, send an electronic prescription directly to a pharmacy.
+Emphasis & Caution: Verify the correct pharmacy is selected.
+Things to Avoid: Sending prescriptions to unintended recipients."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall provide the ability to send electronic prescription to pharmacy including structured and coded SIG instructions,"Definition: In this task, send an electronic prescription including structured and coded SIG instructions.
+Emphasis & Caution: Use standardized and coded SIG formats.
+Things to Avoid: Free-text or unstructured SIG instructions."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall provide the ability to submit prescriptions electronically,"Definition: In this task, submit prescriptions electronically through the system.
+Emphasis & Caution: Confirm successful electronic submission.
+Things to Avoid: Leaving submissions incomplete or unconfirmed."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall capture user and date stamp for all prescription related events,"Definition: In this task, record the user identity and date for every prescription-related action.
+Emphasis & Caution: Capture both user and timestamp for all events.
+Things to Avoid: Missing or inaccurate audit records."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall provide a means to create outpatient prescriptions for durable items and equipment that require prescriptions,"Definition: In this task, create an outpatient prescription for durable medical items or equipment that require a prescription.
+Emphasis & Caution: Include item details required for dispensing.
+Things to Avoid: Creating prescriptions for items that do not require one."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The HIE SHALL have the ability to Respond to a request for a prescription change from a pharmacy using NCPDP Script 8.1 (RXCHG,"Definition: In this task, respond to a pharmacy request for a prescription change using NCPDP Script 8.1 (RXCHG).
+Emphasis & Caution: Use the correct NCPDP Script 8.1 format.
+Things to Avoid: Responding with unsupported standards."
+The system shall indicate problems with inactive codes have the ?#? symbol in the status column,The system shall provide the ability to display inactive and/or resolved problems,"Definition: In this task, display problems that are inactive and/or resolved.
+Emphasis & Caution: Clearly distinguish inactive or resolved status.
+Things to Avoid: Showing them as active problems."
+The system shall indicate problems with inactive codes have the ?#? symbol in the status column,The system shall provide for the ability to identify patients by status e.g. active,"Definition: In this task, identify patients by status such as active.
+Emphasis & Caution: Use the correct patient status label.
+Things to Avoid: Mislabeling patient status."
+The system shall indicate that the record is sensitive and may only be viewed by authorized users,System should have the ability to prevent sensitive diagnoses from being viewed,"Definition: In this task, restrict viewing of sensitive diagnoses.
+Emphasis & Caution: Ensure access controls are enforced.
+Things to Avoid: Displaying sensitive diagnoses to unauthorized users."
+The system shall integrate all components of the patient record to provide comprehensive and intelligent clinical information access and reporting,The system shall provide the ability to create hardcopy and electronic report summary information (procedures,"Definition: In this task, generate hardcopy and electronic summary reports for procedures.
+Emphasis & Caution: Ensure summaries are complete and readable.
+Things to Avoid: Omitting required report information."
+The system shall only auto-select(highlights in blue and places that entry in the field) a patient name if the user types enough characters to uniquely identify a name in the list,When sending user identity information between HIEs,"Definition: In this task, transmit user identity information between HIEs.
+Emphasis & Caution: Maintain accuracy and security of identity data.
+Things to Avoid: Sending incomplete or incorrect identity information."
+The system shall provide a platform for building interfaces to external lab services enabling automated order entry and results reporting,The system shall provide the ability to accept,"Definition: In this task, accept incoming data as supported by the system.
+Emphasis & Caution: Validate accepted data before use.
+Things to Avoid: Accepting unsupported or invalid data."
+The system shall provide a way for user to quickly click on the specifications that he or she wants for each order placed,The system shall provide the ability for a user to select an order for a medication and exit the process of creating the order at some point prior to completion such that another user can access the order for subsequent review and completion,"Definition: In this task, allow a user to save an incomplete medication order so another user can later review and complete it.
+Emphasis & Caution: Preserve the order state without loss.
+Things to Avoid: Forcing completion or deleting the order."
+The system shall provide a way for user to quickly click on the specifications that he or she wants for each order placed,The system shall provide end-users the ability to browse or search for medications by therapeutic class when ordering a medication,"Definition: In this task, browse or search medications by therapeutic class during ordering.
+Emphasis & Caution: Ensure correct therapeutic class grouping.
+Things to Avoid: Listing medications under incorrect classes."
+The system shall provide a way for user to quickly click on the specifications that he or she wants for each order placed,The system shall provide end-users with the ability to browse or search for a drug by therapeutic class when ordering a medication,"Definition: In this task, browse or search for a medication by therapeutic class during medication ordering.
+Emphasis & Caution: Select the correct therapeutic class.
+Things to Avoid: Searching outside therapeutic class categories."
+The system shall provide a way for user to quickly click on the specifications that he or she wants for each order placed,The system shall provide the ability to present medications to be administered over a selectable date/time range,"Definition: In this task, present medications scheduled for administration within a selected date and time range.
+Emphasis & Caution: Apply the correct date/time range.
+Things to Avoid: Displaying medications outside the selected range."
+The system shall provide a way for user to quickly click on the specifications that he or she wants for each order placed,The system shall provide the ability to select order details including strength,"Definition: In this task, select medication order details such as strength.
+Emphasis & Caution: Ensure the selected strength is accurate.
+Things to Avoid: Leaving required order details unselected."
+The system shall provide a way to limit the users or sites that have access to remote retrievable data,The system shall enforce a limit of (configurable) consecutive invalid access attempts by a user,"Definition: In this task, enforce a configurable limit on consecutive invalid user access attempts.
+Emphasis & Caution: Trigger enforcement after the set limit is reached.
+Things to Avoid: Allowing unlimited invalid attempts."
+The system shall provide a way to limit the users or sites that have access to remote retrievable data,The HIE shall have remote access controls,"Definition: In this task, apply remote access controls for HIE system access.
+Emphasis & Caution: Restrict access based on defined rules.
+Things to Avoid: Allowing unauthorized remote access."
+The system shall provide an open source integration platform to build interfaces to Billing/Practice Management systems,The system shall provide the ability to receive patient registration data from an internal practice management system,"Definition: In this task, receive patient registration data from an internal practice management system.
+Emphasis & Caution: Ensure data is correctly mapped and complete.
+Things to Avoid: Dropping or misaligning patient data fields."
+The system shall provide an open source integration platform to build interfaces to Billing/Practice Management systems,The system shall provide the ability to receive,"Definition: In this task, receive incoming data supported by the system.
+Emphasis & Caution: Validate received data before use.
+Things to Avoid: Accepting unsupported or malformed data."
+The system shall provide an option to so a user can quickly set up orders for frequently placed orders,The system shall provide the ability for a clinician to save frequently used,"Definition: In this task, allow a clinician to save frequently used items for reuse.
+Emphasis & Caution: Save items exactly as selected.
+Things to Avoid: Altering saved items automatically."
+The system shall provide tools for creating business rules that apply to documents used by members of such groups,The system shall provide the ability to display CCD documents,"Definition: In this task, display CCD documents to the user.
+Emphasis & Caution: Ensure the document is fully readable.
+Things to Avoid: Displaying incomplete or corrupted CCDs."
+The system shall require a user to review and sign changed if a user has just entered orders or documents that are unsigned,At each change in level of care (to ICU,"Definition: In this task, record actions at each change in level of care.
+Emphasis & Caution: Capture each level change event.
+Things to Avoid: Missing or skipping level-of-care changes."
+The system shall require handwritten signatures for outpatient medication orders of schedule 2 and schedule 2n controlled substances due to DEA policy,The system shall provide the ability to cosign a note and record the date and time of signature,"Definition: In this task, co-sign a note and record the signature date and time.
+Emphasis & Caution: Ensure both signer and timestamp are captured.
+Things to Avoid: Saving a co-sign without date or time."
+The system shall require handwritten signatures for outpatient medication orders of schedule 2 and schedule 2n controlled substances due to DEA policy,The system shall provide a means to create outpatient prescriptions for durable items and equipment that require prescriptions,"Definition: In this task, create an outpatient prescription for durable items or equipment that require a prescription.
+Emphasis & Caution: Include required item and prescription details.
+Things to Avoid: Creating prescriptions for non-prescription items."
+The system shall require handwritten signatures for outpatient medication orders of schedule 2 and schedule 2n controlled substances due to DEA policy,The system shall provide a means to create outpatient prescriptions with detail adequate for correct filling and administration,"Definition: In this task, create an outpatient prescription with sufficient detail for correct filling and administration.
+Emphasis & Caution: Ensure dosage, route, and instructions are complete.
+Things to Avoid: Submitting incomplete prescriptions."
+The system shall require handwritten signatures for outpatient medication orders of schedule 2 and schedule 2n controlled substances due to DEA policy,The system shall send Current Medication List and Discharge Medications (patient home medications and medications prescribed upon discharge) to outpatient documentation sources (e.g.,"Definition: In this task, send the current medication list and discharge medications to outpatient documentation systems.
+Emphasis & Caution: Include both home and discharge medications.
+Things to Avoid: Sending partial medication lists."
+The system shall require the entry of an access code and a verify code to gain access to the system,If role-based access control (RBAC) is supported,"Definition: In this task, enforce role-based access control if RBAC is enabled.
+Emphasis & Caution: Apply permissions based on user role.
+Things to Avoid: Granting access beyond assigned roles."
+The system shall stored the names of users who view remote data in the remote site's database,The HIE shall have remote access controls,"Definition: In this task, apply remote access controls for HIE access.
+Emphasis & Caution: Enforce security rules for remote users.
+Things to Avoid: Allowing unrestricted remote access."
+The system shall support audit capability,The system shall provide the ability to audit the date/time and user of each instance when a patient chart is printed by the system,"Definition: In this task, audit and record the user and date/time each time a patient chart is printed.
+Emphasis & Caution: Log every print event.
+Things to Avoid: Missing or incomplete audit entries."
+The system shall support audit capability,The system shall provide the ability to log outgoing information exchange in an auditable form,"Definition: In this task, log all outgoing information exchanges in an auditable format.
+Emphasis & Caution: Ensure logs are complete and traceable.
+Things to Avoid: Sending data without audit logging."
+The system shall support audit capability,When access to a chart is restricted and the break the glass has occurred,"Definition: In this task, record access events when restricted chart access is overridden using break-the-glass.
+Emphasis & Caution: Capture user, time, and reason.
+Things to Avoid: Allowing undocumented break-the-glass access."
+The system shall support the requirements for codified data specified by the DOQ-IT quality improvement measures,The system shall have the capacity to retain all recorded data in the production data base or archive for the minimum required per law,"Definition: In this task, retain all recorded data in production or archive storage for the legally required period.
+Emphasis & Caution: Meet minimum legal retention requirements.
+Things to Avoid: Deleting data before the required retention period."
+The system shall support the requirements for codified data specified by the DOQ-IT quality improvement measures,The system shall provide an administrative function allowing an administrator to set rules for data retention,"Definition: In this task, configure administrative rules for data retention.
+Emphasis & Caution: Ensure rules meet legal requirements.
+Things to Avoid: Setting undefined or conflicting rules."
+The system shall timeout after a period of inactivity,The system shall be able to detect security-relevant events that it mediates and generate audit records for them. At a minimum the events shall include: start/stop,"Definition: In this task, detect security-relevant system events and generate audit records for them.
+Emphasis & Caution: At minimum, capture system start and stop events.
+Things to Avoid: Failing to log required security events."
+The system shall update diagnostic and procedure codes used for billing purposes so codes are applicable at the time the service was provided,The system shall provide the ability to link procedure data with patient diagnosis,"Definition: In this task, link procedure data to the correct patient diagnosis.
+Emphasis & Caution: Ensure accurate patient and diagnosis matching.
+Things to Avoid: Linking procedures to incorrect diagnoses."
+The system shall use patient lists allow a person to quickly locate patients without going through all the patients in the list,The system shall be able to identify all patients on a specific medication,"Definition: In this task, identify all patients who are taking a specific medication.
+Emphasis & Caution: Use up-to-date medication data.
+Things to Avoid: Including patients not on the medication."
+The system will abort when the user tries to login if tabs are not assigned to the user in their NEW PERSON file or if the RESTRICT PATIENT SELECTION prompt does not contain a Yes or No,The system shall protect against further,"Definition: In this task, protect the system from further unauthorized or harmful actions.
+Emphasis & Caution: Apply appropriate protective controls.
+Things to Avoid: Leaving vulnerabilities unaddressed."
+The system will provide the ability to register patients of all types,The system shall provide the ability to send data to register a patient in a clinical trial,"Definition: In this task, send required data to register a patient for a clinical trial.
+Emphasis & Caution: Ensure patient data is complete and accurate.
+Things to Avoid: Sending incomplete or incorrect registration data."
+The system will provide the ability to register patients of all types,The system shall capture demographic information as part of the patient record. Demographic information,"Definition: In this task, capture demographic information as part of the patient record.
+Emphasis & Caution: Record required demographic fields accurately.
+Things to Avoid: Leaving mandatory demographic fields blank."
+The system's design shall follow hospital work flow patterns and allow local site and individual customization to make it fit specific needs,The system shall have the ability to provide access to patient-specific test and procedure instructions that can be customized by the physician or health organization these instructions are to be given to the filler of the order. These instructions may reside within the system or be provided through links to external sources,"Definition: In this task, provide access to customizable patient-specific test and procedure instructions for order fillers.
+Emphasis & Caution: Ensure instructions match the specific order.
+Things to Avoid: Showing incorrect or generic instructions."
+The system's design shall follow hospital work flow patterns and allow local site and individual customization to make it fit specific needs,The system shall have the ability to provide access to patient-specific test and procedure instructions that can be customized by the physician or health organization these instructions are to be given to the patient. These instructions may reside within the system or be provided through links to external sources,"Definition: In this task, provide access to customizable patient-specific test and procedure instructions for patients.
+Emphasis & Caution: Ensure instructions are clear and patient-appropriate.
+Things to Avoid: Exposing filler-only instructions to patients."
+The system's design shall follow hospital work flow patterns and allow local site and individual customization to make it fit specific needs,The system shall have the ability to provide access to test and procedure instructions that can be customized by the physician or health organization. These instructions may reside within the system or be provided through links to external sources,"Definition: In this task, provide access to customizable test and procedure instructions.
+Emphasis & Caution: Keep instructions current and relevant.
+Things to Avoid: Using outdated or broken instruction sources."
+The system's design shall follow hospital work flow patterns and allow local site and individual customization to make it fit specific needs,The system shall provide the ability to create site-specific care plan,"Definition: In this task, verify that the system can create site-specific care plans.
+Emphasis & Caution: -
+Things to Avoid: -"
+The system shall allow users who hold any of the ORES/ORELSE/PROVIDER keys to be viewed as a clinical user and has full access privileges to all problem list options,The system shall protect against further,"Definition: In this task, verify that the system protects against further issues as specified.
+Emphasis & Caution: -
+Things to Avoid: -"
+The system shall provide a way for user to quickly click on the specifications that he or she wants for each order placed,The system shall provide a means to document a description of a medication and medication purpose when the medication name is unknown,"Definition: In this task, verify that the system can document a medication description and purpose when the medication name is unknown.
+Emphasis & Caution: Ensure the medication name is treated as unknown.
+Things to Avoid: Assuming or inventing a medication name."
+The system shall allow document types to inherit authorizations from a higher level when using classes to assign roles,The system shall allow the provider to redirect the notification concerning orders requiring signature to another provider,"Definition: In this task, verify that a provider can redirect order-signature notifications to another provider.
+Emphasis & Caution: -
+Things to Avoid: -"
+The system shall provide an option to so a user can quickly set up orders for frequently placed orders,If role-based access control (RBAC) is supported,"Definition: In this task, verify the system behavior when role-based access control (RBAC) is supported.
+Emphasis & Caution: Only evaluate scenarios where RBAC is supported.
+Things to Avoid: Evaluating non-RBAC scenarios."
+The system shall include a graphing feature to allow users to view lab test results and vital signs in a graph,The system shall provide the ability to log outgoing information exchange in an auditable form,"Definition: In this task, verify that the system logs outgoing information exchanges in an auditable form.
+Emphasis & Caution: Logs must be auditable.
+Things to Avoid: Ignoring audit requirements."
+The system shall only auto-select(highlights in blue and places that entry in the field) a patient name if the user types enough characters to uniquely identify a name in the list,The system shall provide the ability to present medications to be administered over a selectable date/time range,"Definition: In this task, verify that the system can present medications to be administered over a selectable date/time range.
+Emphasis & Caution: Date/time range must be user-selectable.
+Things to Avoid: Using a fixed or default range only."
+The system shall allow users to enter time in several different formats,The system shall provide the ability to filter or sort results by type of test and test date,"Definition: In this task, verify that results can be filtered or sorted by test type and test date.
+Emphasis & Caution: Support both filter and sort functions.
+Things to Avoid: Limiting to only one criterion."
+The system shall indicate problems with inactive codes have the ?#? symbol in the status column,When access to a chart is restricted and the break the glass has occurred,"Definition: In this task, verify system behavior when chart access is restricted and a break-the-glass event has occurred.
+Emphasis & Caution: Confirm the break-the-glass condition is applied.
+Things to Avoid: Ignoring access restriction context."
+The system shall capture history of received immunizations,The system shall provide the ability to send data to register a patient in a clinical trial,"Definition: In this task, verify that the system can send data to register a patient in a clinical trial.
+Emphasis & Caution: Data must be sent successfully for registration.
+Things to Avoid: Partial or incomplete data submission."
+The system shall only auto-select(highlights in blue and places that entry in the field) a patient name if the user types enough characters to uniquely identify a name in the list,The system shall provide the ability to present a list of tasks by user or user role,"Definition: In this task, verify that the system can present a task list by user or by user role.
+Emphasis & Caution: Ensure both user-based and role-based views work.
+Things to Avoid: Mixing users or roles incorrectly."
+The system shall implement a user class hierarchy to identify the roles that different users fulfill within the hospital,The system shall provide the ability to create site-specific care plan,"Definition: In this task, verify that the system can create site-specific care plans.
+Emphasis & Caution: Confirm the plan is specific to a site.
+Things to Avoid: Using generic or non-site-specific plans."
+The system will abort when the user tries to login if tabs are not assigned to the user in their NEW PERSON file or if the RESTRICT PATIENT SELECTION prompt does not contain a Yes or No,The system shall provide the ability to display CCD documents,"Definition: In this task, verify that the system can display CCD documents.
+Emphasis & Caution: Ensure the document content is viewable.
+Things to Avoid: Failing to load or open the document."
+The system shall require the entry of an access code and a verify code to gain access to the system,The system shall provide the ability to select order details including strength,"Definition: In this task, verify that the system allows selection of order details including strength.
+Emphasis & Caution: Strength must be selectable.
+Things to Avoid: Omitting required order details."
+The system shall allow infinite hierarchies of subclasses to be created in the User Hierarchy Class structure,The system shall allow the provider to redirect the notification concerning orders requiring signature to another provider,"Definition: In this task, verify that a provider can redirect signature-required order notifications to another provider.
+Emphasis & Caution: Confirm the notification is reassigned correctly.
+Things to Avoid: Sending the notification to the wrong provider."
+The system shall allow medication orders to be placed and filled from local stocks of medications while providing full auditing of all medication orders within the medication profile,The system shall provide the ability to cosign a note and record the date and time of signature,"Definition: In this task, verify that the system supports cosigning a note and records the date and time.
+Emphasis & Caution: Date and time must be recorded accurately.
+Things to Avoid: Missing or incorrect timestamps."
+The system shall improve accessibility of online clinical information and results,The system shall provide the ability to index and retrieve scanned documents based on the document type,"Definition: In this task, verify that the system can index and retrieve scanned documents by document type.
+Emphasis & Caution: Document type must control retrieval.
+Things to Avoid: Retrieving documents by unrelated criteria."
+The system shall provide an option to so a user can quickly set up orders for frequently placed orders,The HIE shall have remote access controls,"Definition: In this task, verify that the HIE enforces remote access controls.
+Emphasis & Caution: Access controls must apply to remote access.
+Things to Avoid: Allowing unrestricted remote access."
+The system shall support the requirements for codified data specified by the DOQ-IT quality improvement measures,The system shall provide the ability to create prescription or other medication orders with sufficient information for correct filling and dispensing by a pharmacy,"Definition: In this task, verify that the system can create medication orders with sufficient details for pharmacy filling and dispensing.
+Emphasis & Caution: Information must be sufficient for correct dispensing.
+Things to Avoid: Creating incomplete medication orders."
+The system shall allow document types to inherit authorizations from a higher level when using classes to assign roles,The system shall provide the ability to maintain medication ordering dates,"Definition: In this task, verify that the system can maintain medication ordering dates.
+Emphasis & Caution: Dates must be stored and retrievable.
+Things to Avoid: Losing or overwriting order dates."
+The system shall allow a user to foward notification to someone else at the site,The system shall provide an administrative function allowing an administrator to set rules for data retention,"Definition: In this task, verify that an administrator can set and manage data retention rules.
+Emphasis & Caution: Use an administrator account only.
+Things to Avoid: Changing retention rules as a non-admin."
+The system shall require handwritten signatures for outpatient medication orders of schedule 2 and schedule 2n controlled substances due to DEA policy,The system shall have the ability to provide access to patient-specific test and procedure instructions that can be customized by the physician or health organization these instructions are to be given to the filler of the order. These instructions may reside within the system or be provided through links to external sources,"Definition: In this task, verify access to patient-specific test and procedure instructions that can be customized and provided to the order filler.
+Emphasis & Caution: Instructions may be internal or linked externally.
+Things to Avoid: Testing non-patient-specific instructions."
+The system shall use patient lists allow a person to quickly locate patients without going through all the patients in the list,The system shall provide the ability to print and electronically fax prescriptions,"Definition: In this task, verify that prescriptions can be printed and sent by electronic fax.
+Emphasis & Caution: Confirm both print and e-fax functions work.
+Things to Avoid: Testing only one delivery method."
+The system shall allow users to enter time in several different formats,The system shall provide the ability to accept,"Definition: In this task, verify that the system can accept the required input or data as specified.
+Emphasis & Caution: Follow the acceptance condition exactly.
+Things to Avoid: Assuming unspecified acceptance criteria."
+The system shall allow document types to inherit authorizations from a higher level when using classes to assign roles,The system shall provide the ability to display for selection a secondary,"Definition: In this task, verify that the system can display a secondary option for user selection.
+Emphasis & Caution: Ensure the secondary option is selectable.
+Things to Avoid: Selecting only primary options."
+The system shall include capabilities for ordering laboratory tests and reviewing results,The system shall provide the ability to configure orders within order sets with default order details,"Definition: In this task, verify that orders in order sets can be configured with default order details.
+Emphasis & Caution: Defaults must auto-populate correctly.
+Things to Avoid: Manually entering values meant to be defaults."
+The system shall support the requirements for codified data specified by the DOQ-IT quality improvement measures,If role-based access control (RBAC) is supported,"Definition: In this task, verify system behavior when role-based access control (RBAC) is supported.
+Emphasis & Caution: Test only RBAC-enabled scenarios.
+Things to Avoid: Including non-RBAC cases."
+The system shall require a user to review and sign changed if a user has just entered orders or documents that are unsigned,The system shall provide the ability to send a query to coordinate patient identification,"Definition: In this task, verify that the system can send a query to coordinate patient identification.
+Emphasis & Caution: Ensure the query is successfully sent.
+Things to Avoid: Verifying only local identification."
+The system shall allow complete order sets to be predefined and personalized,The system shall provide the ability to send an electronic prescription to pharmacy,"Definition: In this task, verify that the system can send an electronic prescription to a pharmacy.
+Emphasis & Caution: Confirm successful electronic transmission.
+Things to Avoid: Printing or faxing instead."
+The system shall support audit capability,The system shall provide the ability for a user to select an order for a medication and exit the process of creating the order at some point prior to completion such that another user can access the order for subsequent review and completion,"Definition: In this task, verify that a user can exit medication order creation before completion and allow another user to review and complete it.
+Emphasis & Caution: The incomplete order must remain accessible.
+Things to Avoid: Completing or deleting the order before handoff."
+The system shall allow users who hold any of the ORES/ORELSE/PROVIDER keys to be viewed as a clinical user and has full access privileges to all problem list options,System should have the ability to prevent sensitive diagnoses from being viewed,"Definition: In this task, verify that the system prevents viewing of sensitive diagnoses.
+Emphasis & Caution: Confirm access is blocked for unauthorized users.
+Things to Avoid: Using authorized roles to bypass restrictions."
+The system shall allow user classes to be used across VistA to replace and/or complement security keys,The HIE shall have remote access controls,"Definition: In this task, verify that the HIE enforces remote access controls.
+Emphasis & Caution: Controls must apply to remote access only.
+Things to Avoid: Testing local access scenarios."
+The system will abort when the user tries to login if tabs are not assigned to the user in their NEW PERSON file or if the RESTRICT PATIENT SELECTION prompt does not contain a Yes or No,The system shall provide the ability to send a query to coordinate patient identification,"Definition: In this task, verify that the system can send a query to coordinate patient identification.
+Emphasis & Caution: Ensure the query is successfully transmitted.
+Things to Avoid: Verifying identification without sending a query."
+The system shall timeout after a period of inactivity,The system shall enforce a limit of (configurable) consecutive invalid access attempts by a user,"Definition: In this task, verify that the system enforces a configurable limit on consecutive invalid access attempts.
+Emphasis & Caution: Use multiple invalid attempts to trigger the limit.
+Things to Avoid: Using valid credentials during testing."
+The system shall provide an open source integration platform to build interfaces to Billing/Practice Management systems,The system shall provide the ability to cosign a note and record the date and time of signature,"Definition: In this task, verify that the system supports cosigning a note and records the date and time.
+Emphasis & Caution: Timestamp must be accurate and saved.
+Things to Avoid: Ignoring date or time recording."
+The system shall allow a user to foward notification to someone else at the site,The system shall provide the ability to access reports outside the EHR application,"Definition: In this task, verify that reports can be accessed outside the EHR application.
+Emphasis & Caution: Access must occur externally to the EHR.
+Things to Avoid: Accessing reports only within the EHR."
+The system shall stored the names of users who view remote data in the remote site's database,The system shall provide the ability to send an electronic prescription to pharmacy,"Definition: In this task, verify that the system can send an electronic prescription to a pharmacy.
+Emphasis & Caution: Confirm successful electronic delivery.
+Things to Avoid: Printing or faxing prescriptions."
+The system shall include capabilities for ordering laboratory tests and reviewing results,The system shall allow the provider to redirect the notification concerning orders requiring signature to another provider,"Definition: In this task, verify that a provider can redirect signature-required order notifications to another provider.
+Emphasis & Caution: Ensure the notification reaches the correct provider.
+Things to Avoid: Redirecting to an incorrect recipient."
+The system shall indicate that the record is sensitive and may only be viewed by authorized users,The system shall provide the ability to create prescription or other medication orders with sufficient information for correct filling and dispensing by a pharmacy,"Definition: In this task, verify that the system can create medication orders with sufficient details for pharmacy dispensing.
+Emphasis & Caution: Information must be complete for dispensing.
+Things to Avoid: Submitting incomplete orders."
+The system's design shall follow hospital work flow patterns and allow local site and individual customization to make it fit specific needs,The system shall capture demographic information as part of the patient record. Demographic information,"Definition: In this task, verify that the system captures demographic information in the patient record.
+Emphasis & Caution: Demographic data must be stored with the patient record.
+Things to Avoid: Saving demographic data outside the patient record."
+The system shall provide a way for user to quickly click on the specifications that he or she wants for each order placed,The system shall provide the ability to re-print and re-fax prescriptions,"Definition: In this task, verify that prescriptions can be re-printed and re-faxed.
+Emphasis & Caution: Confirm both actions work on existing prescriptions.
+Things to Avoid: Creating a new prescription instead."
+The system shall provide an option to so a user can quickly set up orders for frequently placed orders,The system shall provide the ability to export structured data which removes those identifiers listed in the HIPAA definition of a limited dataset. This export on hardcopy and electronic output shall leave the actual PHI data unmodified in the original record,"Definition: In this task, verify that the system can export structured data with HIPAA limited dataset identifiers removed while keeping original PHI unchanged.
+Emphasis & Caution: Original records must remain unmodified.
+Things to Avoid: Altering original PHI data."
+The system shall implement a user class hierarchy to identify the roles that different users fulfill within the hospital,The system shall provide the ability for a clinician to save frequently used,"Definition: In this task, verify that a clinician can save frequently used items.
+Emphasis & Caution: Ensure saved items can be reused.
+Things to Avoid: Saving items that cannot be retrieved."
+The system shall only auto-select(highlights in blue and places that entry in the field) a patient name if the user types enough characters to uniquely identify a name in the list,The system shall provide the ability to maintain medication ordering dates,"Definition: In this task, verify that the system maintains medication ordering dates.
+Emphasis & Caution: Dates must persist correctly.
+Things to Avoid: Overwriting or losing dates."
+The system shall include capabilities for ordering laboratory tests and reviewing results,When sending user identity information between HIEs,"Definition: In this task, verify correct handling when sending user identity information between HIEs.
+Emphasis & Caution: Ensure identity information is transmitted securely.
+Things to Avoid: Sending incomplete identity data."
+The system shall indicate that the record is sensitive and may only be viewed by authorized users,The system shall have the ability to provide electronic communication between prescribers and pharmacies or other intended recipients of the medication order,"Definition: In this task, verify that the system supports electronic communication of medication orders between prescribers and pharmacies or other recipients.
+Emphasis & Caution: Communication must be electronic.
+Things to Avoid: Using non-electronic methods."
+The system shall provide a way for user to quickly click on the specifications that he or she wants for each order placed,The system shall provide the ability to maintain medication ordering dates,"Definition: In this task, verify that the system maintains medication ordering dates.
+Emphasis & Caution: Dates must be accurate and retrievable.
+Things to Avoid: Inconsistent date records."
+The system will provide the ability to register patients of all types,The system shall provide the ability for a user to whom a result is presented to acknowledge the result,"Definition: In this task, verify that a user can acknowledge a presented result.
+Emphasis & Caution: Acknowledgment must be recorded.
+Things to Avoid: Viewing results without acknowledgment."
+The system shall support audit capability,The system shall provide the ability to document complex medication orders that include dosing based on either physical status or laboratory values,"Definition: In this task, verify that the system can document complex medication orders based on physical status or lab values.
+Emphasis & Caution: Dosing logic must reflect status or lab values.
+Things to Avoid: Recording simple orders only."
+The system shall use patient lists allow a person to quickly locate patients without going through all the patients in the list,The system shall relate medication allergies to medications to facilitate allergy checking decision support for medication orders,"Definition: In this task, verify that medication allergies are linked to medications for allergy checking decision support.
+Emphasis & Caution: Allergy checks must trigger correctly.
+Things to Avoid: Leaving allergies unlinked."
+The system shall allow several orders to be placed with the ability for a user to sign for them all at once,The system shall have the ability to provide electronic communication between prescribers and pharmacies or other intended recipients of the medication order,"Definition: In this task, enable electronic communication of medication orders between prescribers and pharmacies or other intended recipients.
+Emphasis & Caution: Ensure secure and accurate transmission.
+Things to Avoid: Do not send incomplete or unverified orders."
+The system shall include capabilities for ordering laboratory tests and reviewing results,The system shall provide the ability to access reports outside the EHR application,"Definition: In this task, allow users to access reports outside the EHR application.
+Emphasis & Caution: Maintain access controls.
+Things to Avoid: Do not expose restricted reports."
+The system shall include a graphing feature to allow users to view lab test results and vital signs in a graph,The system shall provide the ability to create and assign tasks by user or user role,"Definition: In this task, allow creation and assignment of tasks by individual user or user role.
+Emphasis & Caution: Assignments must reflect correct roles.
+Things to Avoid: Do not assign tasks to unauthorized users."
+The system shall include capabilities for ordering laboratory tests and reviewing results,The system shall provide the ability to create hardcopy and electronic report summary information (procedures,"Definition: In this task, generate report summary information in both hardcopy and electronic formats.
+Emphasis & Caution: Ensure summaries are complete and readable.
+Things to Avoid: Do not omit required summary content."
+The system shall indicate that the record is sensitive and may only be viewed by authorized users,The system shall provide the ability for a user to select an order for a medication and exit the process of creating the order at some point prior to completion such that another user can access the order for subsequent review and completion,"Definition: In this task, allow a user to start a medication order, exit before completion, and enable another user to review and complete it.
+Emphasis & Caution: Preserve order state and ownership history.
+Things to Avoid: Do not lose or overwrite partial orders."
+The system shall indicate that the record is sensitive and may only be viewed by authorized users,When access to a chart is restricted and the break the glass has occurred,"Definition: In this task, handle restricted chart access events when break-the-glass access has occurred.
+Emphasis & Caution: Ensure the event is clearly indicated and auditable.
+Things to Avoid: Do not bypass logging or alerts."
+The system shall have pre-defined progress note templates,The system shall provide the ability to present medications to be administered over a selectable date/time range,"Definition: In this task, present medications to be administered within a user-selected date and time range.
+Emphasis & Caution: Respect the selected range exactly.
+Things to Avoid: Do not display medications outside the range."
+The system's design shall follow hospital work flow patterns and allow local site and individual customization to make it fit specific needs,The system shall provide the ability to index and retrieve scanned documents based on the document type,"Definition: In this task, index and retrieve scanned documents based on document type.
+Emphasis & Caution: Use correct document type classification.
+Things to Avoid: Do not mislabel or misfile documents."
+The system shall allow users to enter time in several different formats,The system shall provide the ability to accept,"Definition: In this task, accept required inputs or data as specified by the system.
+Emphasis & Caution: Validate inputs before acceptance.
+Things to Avoid: Do not accept invalid or unsupported data."
+The system shall implement a user class hierarchy to identify the roles that different users fulfill within the hospital,The system shall provide a means to create outpatient prescriptions for durable items and equipment that require prescriptions,"Definition: In this task, create outpatient prescriptions for durable medical items and equipment that require prescriptions.
+Emphasis & Caution: Ensure prescription requirements are met.
+Things to Avoid: Do not create prescriptions without required authorization."
+The system shall require a user to review and sign changed if a user has just entered orders or documents that are unsigned,The system shall update the appropriate medication list with the prescribed medications,"Definition: In this task, update the correct medication list with newly prescribed medications.
+Emphasis & Caution: Ensure the correct patient and medication list.
+Things to Avoid: Do not update the wrong patient record."
+The system shall have pre-defined progress note templates,The system will provide secure remote access to patient data without the need to pre-load an application,"Definition: In this task, provide secure remote access to patient data without requiring application pre-installation.
+Emphasis & Caution: Security and authentication must be enforced.
+Things to Avoid: Do not allow unsecured access."
+The system shall improve accessibility of online clinical information and results,The system shall provide the ability to receive patient registration data from an internal practice management system,"Definition: In this task, receive patient registration data from an internal practice management system.
+Emphasis & Caution: Ensure data is accurately mapped.
+Things to Avoid: Do not duplicate or overwrite valid records."
+The system shall allow user classes to be defined hospital-wide or more narrowly for a specific service,The system shall provide the ability to display the associated problem or diagnosis (indication) on the printed prescription,"Definition: In this task, display the associated problem or diagnosis on printed prescriptions.
+Emphasis & Caution: Match the diagnosis to the correct prescription.
+Things to Avoid: Do not print incorrect or unrelated diagnoses."
+The system shall allow other VistA applications to access the user class file to determine the role of an employee,The system shall send Current Medication List and Discharge Medications (patient home medications and medications prescribed upon discharge) to outpatient documentation sources (e.g.,"Definition: In this task, send current and discharge medication lists to outpatient documentation systems.
+Emphasis & Caution: Include both home and discharge medications.
+Things to Avoid: Do not omit required medication lists."
+The system shall allow physician offices to use social security numbers or medical record numbers to identify patients,The system shall have the ability to provide access to test and procedure instructions that can be customized by the physician or health organization. These instructions may reside within the system or be provided through links to external sources,"Definition: In this task, provide access to customizable test and procedure instructions from internal or external sources.
+Emphasis & Caution: Ensure links and instructions are valid.
+Things to Avoid: Do not display outdated or broken instructions."
+The system shall implement a user class hierarchy to identify the roles that different users fulfill within the hospital,The system shall provide a means to document a description of a medication and medication purpose when the medication name is unknown,"Definition: In this task, document a medication description and purpose when the medication name is unknown.
+Emphasis & Caution: Description must be clear and specific.
+Things to Avoid: Do not leave description fields blank."
+The system shall allow a user to foward notification to someone else at the site,The system shall associate (store and link) key identifier information (e.g.,"Definition: In this task, store and link key identifier information correctly across records.
+Emphasis & Caution: Maintain accurate associations.
+Things to Avoid: Do not mismatch identifiers."
+The system shall allow infinite hierarchies of subclasses to be created in the User Hierarchy Class structure,The system shall relate medication allergies to medications to facilitate allergy checking decision support for medication orders,"Definition: In this task, link medication allergies to medications to support allergy checking.
+Emphasis & Caution: Ensure allergy data is current.
+Things to Avoid: Do not ignore known allergies."
+The system shall include a graphing feature to allow users to view lab test results and vital signs in a graph,The system shall provide the ability to display user created instructions and/or prompts when ordering diagnostic tests or procedures,"Definition: In this task, display user-created instructions or prompts during diagnostic test or procedure ordering.
+Emphasis & Caution: Show instructions at the correct step.
+Things to Avoid: Do not hide or suppress user instructions."
+The system shall allow a user to foward notification to someone else at the site,The system shall provide the ability to present medications to be administered over a selectable date/time range,"Definition: In this task, display medications scheduled within a user-selected date and time range.
+Emphasis & Caution: Match the exact selected range.
+Things to Avoid: Do not show medications outside the range."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall have the ability to provide access to patient-specific test and procedure instructions that can be customized by the physician or health organization these instructions are to be given to the filler of the order. These instructions may reside within the system or be provided through links to external sources,"Definition: In this task, provide patient-specific, customizable test and procedure instructions to the order filler.
+Emphasis & Caution: Ensure instructions match the correct patient and order.
+Things to Avoid: Do not show generic or wrong-patient instructions."
+The system shall require handwritten signatures for outpatient medication orders of schedule 2 and schedule 2n controlled substances due to DEA policy,The system shall provide the ability to log outgoing information exchange in an auditable form,"Definition: In this task, log all outgoing information exchanges in an auditable format.
+Emphasis & Caution: Logs must be complete and traceable.
+Things to Avoid: Do not allow unlogged transmissions."
+The system shall indicate problems with inactive codes have the ?#? symbol in the status column,The system shall provide the ability to receive patient registration data from an internal practice management system,"Definition: In this task, receive patient registration data from an internal practice management system.
+Emphasis & Caution: Validate and map data correctly.
+Things to Avoid: Do not create duplicate patient records."
+The system will abort when the user tries to login if tabs are not assigned to the user in their NEW PERSON file or if the RESTRICT PATIENT SELECTION prompt does not contain a Yes or No,The system shall provide the ability to display CCD documents,"Definition: In this task, display CCD documents for user review.
+Emphasis & Caution: Ensure correct document rendering.
+Things to Avoid: Do not display corrupted or incomplete documents."
+The system shall provide an option to so a user can quickly set up orders for frequently placed orders,The system shall provide the ability for a user to select an order for a medication and exit the process of creating the order at some point prior to completion such that another user can access the order for subsequent review and completion,"Definition: In this task, allow a medication order to be saved incomplete and completed later by another user.
+Emphasis & Caution: Preserve order data and history.
+Things to Avoid: Do not lose or overwrite partial orders."
+The system shall allow medication orders to be placed and filled from local stocks of medications while providing full auditing of all medication orders within the medication profile,The system shall have the ability to provide assistance with selecting an appropriate CPT Evaluation and Management billing code based on codified clinical information in the encounter,"Definition: In this task, assist in selecting the appropriate CPT E&M billing code using encounter data.
+Emphasis & Caution: Base suggestions only on coded clinical information.
+Things to Avoid: Do not suggest unsupported codes."
+The system shall allow a user to foward notification to someone else at the site,The system shall provide the ability to send data to register a patient in a clinical trial,"Definition: In this task, send required data to register a patient in a clinical trial.
+Emphasis & Caution: Ensure data accuracy and consent requirements.
+Things to Avoid: Do not send incomplete or unauthorized data."
+The system shall implement a user class hierarchy to identify the roles that different users fulfill within the hospital,The system shall support removal of a user?s privileges without deleting the user from the system. The purpose of the criteria is to provide the ability to remove a user?s privileges,"Definition: In this task, remove a user¡¯s privileges without deleting the user account.
+Emphasis & Caution: Privileges must be fully revoked.
+Things to Avoid: Do not delete the user record."
+The system shall include capabilities for ordering laboratory tests and reviewing results,When access to a chart is restricted and the break the glass has occurred,"Definition: In this task, handle restricted chart access when break-the-glass access is triggered.
+Emphasis & Caution: Clearly indicate and log the event.
+Things to Avoid: Do not bypass auditing or alerts."
+The system shall allow users who hold any of the ORES/ORELSE/PROVIDER keys to be viewed as a clinical user and has full access privileges to all problem list options,The system shall provide the ability to identify all users who have accessed an individual's chart over a given time period,"Definition: In this task, identify all users who accessed a specific patient chart within a given time period.
+Emphasis & Caution: Ensure the time range is applied correctly.
+Things to Avoid: Do not miss or merge access records."
+The system shall allow a user to foward notification to someone else at the site,The system shall provide the ability to identify all users who have accessed an individual's chart over a given time period,"Definition: In this task, identify all users who accessed a specific patient chart within a given time period.
+Emphasis & Caution: Results must be complete and accurate.
+Things to Avoid: Do not include access outside the period."
+The system shall capture history of received immunizations,The system shall provide the ability to configure orders within order sets with default order details,"Definition: In this task, configure orders within order sets using default order details.
+Emphasis & Caution: Defaults must match the order set definition.
+Things to Avoid: Do not apply incorrect defaults."
+The system shall provide an open source integration platform to build interfaces to Billing/Practice Management systems,The system shall be able to identify all patients on a specific medication,"Definition: In this task, identify all patients currently on a specified medication.
+Emphasis & Caution: Use the correct medication criteria.
+Things to Avoid: Do not include patients not on the medication."
+The system shall allow complete order sets to be predefined and personalized,The system shall provide the ability to print and electronically fax prescriptions,"Definition: In this task, print prescriptions and send prescriptions via electronic fax.
+Emphasis & Caution: Ensure correct destination and format.
+Things to Avoid: Do not send to the wrong recipient."
+The system shall provide an option to so a user can quickly set up orders for frequently placed orders,The system shall provide the ability to audit the date/time and user of each instance when a patient chart is printed by the system,"Definition: In this task, audit and record the date, time, and user each time a patient chart is printed.
+Emphasis & Caution: Every print event must be logged.
+Things to Avoid: Do not allow unlogged prints."
+The system shall allow users to enter time in several different formats,The HIE SHALL have the ability to Respond to a request for a prescription change from a pharmacy using NCPDP Script 8.1 (RXCHG,"Definition: In this task, respond to pharmacy requests for prescription changes using NCPDP Script 8.1 RXCHG.
+Emphasis & Caution: Use the correct standard and message type.
+Things to Avoid: Do not respond using an incorrect format."
+The system shall include Standard Laboratory and Medication orderable files,The system shall provide the ability to identify the identity of the cosigning author of a note and record the date and time of original author and identity of signature,"Definition: In this task, record the cosigning author of a note and the date and time of original authoring and signatures.
+Emphasis & Caution: Preserve accurate authorship and timestamps.
+Things to Avoid: Do not overwrite signature history."
+The system shall require a user to review and sign changed if a user has just entered orders or documents that are unsigned,The system shall have the ability to provide access to patient-specific test and procedure instructions that can be customized by the physician or health organization these instructions are to be given to the patient. These instructions may reside within the system or be provided through links to external sources,"Definition: In this task, provide patient-specific test and procedure instructions customized by the physician or organization.
+Emphasis & Caution: Instructions must match the correct patient.
+Things to Avoid: Do not show generic or wrong-patient instructions."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall allow authorized users to update the directory,"Definition: In this task, allow authorized users to update the directory.
+Emphasis & Caution: Verify user authorization.
+Things to Avoid: Do not allow unauthorized updates."
+The system shall update diagnostic and procedure codes used for billing purposes so codes are applicable at the time the service was provided,The system shall provide the ability to display the associated problem or diagnosis (indication) on the printed prescription,"Definition: In this task, display the associated problem or diagnosis on printed prescriptions.
+Emphasis & Caution: Ensure the diagnosis matches the prescription.
+Things to Avoid: Do not print incorrect indications."
+The system shall use patient lists allow a person to quickly locate patients without going through all the patients in the list,The system shall provide the ability to query for a patient by more than one form of identification,"Definition: In this task, search for a patient using multiple forms of identification.
+Emphasis & Caution: Confirm identifiers belong to the same patient.
+Things to Avoid: Do not merge different patients."
+The system shall only auto-select(highlights in blue and places that entry in the field) a patient name if the user types enough characters to uniquely identify a name in the list,The system shall provide the ability to permit an ordering clinician to forward all (current and future) expiring order notifications to another clinician,"Definition: In this task, allow an ordering clinician to forward all expiring order notifications to another clinician.
+Emphasis & Caution: Apply forwarding to both current and future notifications.
+Things to Avoid: Do not forward to unauthorized clinicians."
+The system shall improve accessibility of online clinical information and results,The system shall provide the ability to configure orders within order sets with default order details,"Definition: In this task, configure orders in order sets with predefined default details.
+Emphasis & Caution: Defaults must align with the order set.
+Things to Avoid: Do not apply incorrect defaults."
+The system will provide the ability to register patients of all types,The system shall relate medication allergies to medications to facilitate allergy checking decision support for medication orders,"Definition: In this task, link medication allergies to medications for allergy checking support.
+Emphasis & Caution: Allergy data must be accurate.
+Things to Avoid: Do not ignore known allergies."
+The system shall provide an open source integration platform to build interfaces to Billing/Practice Management systems,The system shall provide the ability to re-print and re-fax prescriptions,"Definition: In this task, re-print and re-fax existing prescriptions.
+Emphasis & Caution: Use the original prescription details.
+Things to Avoid: Do not alter prescription content."
+The system shall indicate that the record is sensitive and may only be viewed by authorized users,The system shall provide the ability to receive,"Definition: In this task, receive required data as specified by the system.
+Emphasis & Caution: Validate received data.
+Things to Avoid: Do not accept incomplete data."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall provide the ability to identify the identity of the cosigning author of a note and record the date and time of original author and identity of signature,"Definition: In this task, record the cosigning author and the date, time, and identity of original signatures.
+Emphasis & Caution: Preserve complete signature history.
+Things to Avoid: Do not overwrite signature records."
+The system shall use patient lists allow a person to quickly locate patients without going through all the patients in the list,The system shall provide the ability to send a query to coordinate patient identification,"Definition: In this task, send a query to coordinate patient identification.
+Emphasis & Caution: Use correct patient identifiers.
+Things to Avoid: Do not send mismatched identifiers."
+The system shall allow creation of personalized templates to fit the specific needs of individual practices,The system shall relate medication allergies to medications to facilitate allergy checking decision support for medication orders,"Definition: In this task, link medication allergies to medications for allergy checking support.
+Emphasis & Caution: Keep allergy links up to date.
+Things to Avoid: Do not bypass allergy checks."
+The system shall allow a user to foward notification to someone else at the site,The system shall provide the ability to select order details including strength,"Definition: In this task, identify whether the system allows users to select order details, including strength.
+Emphasis & Caution: Confirm that strength selection is explicitly supported.
+Things to Avoid: Do not assume selection without clear evidence."
+The system shall allow document types to inherit authorizations from a higher level when using classes to assign roles,The system shall provide the ability to filter or sort results by type of test and test date,"Definition: In this task, verify that the system can filter or sort results by test type and test date.
+Emphasis & Caution: Both filtering and sorting must be supported.
+Things to Avoid: Do not include unrelated sorting criteria."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall capture demographic information as part of the patient record. Demographic information,"Definition: In this task, determine whether the system captures demographic information within the patient record.
+Emphasis & Caution: Demographic data must be part of the official patient record.
+Things to Avoid: Do not count external or temporary data capture."
+The system shall indicate problems with inactive codes have the ?#? symbol in the status column,The system shall send Current Medication List and Discharge Medications (patient home medications and medications prescribed upon discharge) to outpatient documentation sources (e.g.,"Definition: In this task, check if the system sends current and discharge medication lists to outpatient documentation sources.
+Emphasis & Caution: Include both home medications and discharge prescriptions.
+Things to Avoid: Do not include inpatient-only medication data."
+The system shall allow document types to inherit authorizations from a higher level when using classes to assign roles,The system shall provide the ability for a clinician to save frequently used,"Definition: In this task, confirm that clinicians can save frequently used items in the system.
+Emphasis & Caution: Saving must be reusable for future actions.
+Things to Avoid: Do not count one-time or temporary saves."
+The system shall stored the names of users who view remote data in the remote site's database,When access to a chart is restricted and the break the glass has occurred,"Definition: In this task, assess system behavior after restricted chart access is overridden using break-the-glass.
+Emphasis & Caution: Focus only on scenarios where break-the-glass has occurred.
+Things to Avoid: Do not evaluate normal unrestricted access."
+The system shall support audit capability,The system shall provide the ability to receive and store general laboratory results (includes ability to differentiate preliminary results and final results and the ability to process a corrected result),"Definition: In this task, verify that the system can receive and store lab results, including preliminary, final, and corrected results.
+Emphasis & Caution: All three result types must be distinguishable.
+Things to Avoid: Do not merge different result statuses."
+The system shall require handwritten signatures for outpatient medication orders of schedule 2 and schedule 2n controlled substances due to DEA policy,The system shall support removal of a user?s privileges without deleting the user from the system. The purpose of the criteria is to provide the ability to remove a user?s privileges,"Definition: In this task, confirm that user privileges can be removed without deleting the user account.
+Emphasis & Caution: The user record must remain intact.
+Things to Avoid: Do not consider full user deletion."
+The system will abort when the user tries to login if tabs are not assigned to the user in their NEW PERSON file or if the RESTRICT PATIENT SELECTION prompt does not contain a Yes or No,The system shall provide the ability to send data to register a patient in a clinical trial,"Definition: In this task, check whether the system can send data to register a patient for a clinical trial.
+Emphasis & Caution: Data must be suitable for clinical trial registration.
+Things to Avoid: Do not include non-trial data exchanges."
+The system will provide the ability to register patients of all types,The system shall provide the ability to permit an ordering clinician to forward all (current and future) expiring order notifications to another clinician,"Definition: In this task, verify that an ordering clinician can forward all current and future expiring order notifications to another clinician.
+Emphasis & Caution: Forwarding must include future notifications automatically.
+Things to Avoid: Do not limit forwarding to single or current notifications only."
+The system shall require handwritten signatures for outpatient medication orders of schedule 2 and schedule 2n controlled substances due to DEA policy,The system shall provide the ability to display CCD documents,"Definition: In this task, verify that the system can display CCD documents.
+Emphasis & Caution: Ensure the document is viewable, not just stored.
+Things to Avoid: Do not count download-only access."
+The system shall timeout after a period of inactivity,The system shall provide for the ability to identify patients by status e.g. active,"Definition: In this task, confirm that the system can identify patients by status (e.g., active).
+Emphasis & Caution: Status must be clearly defined and selectable.
+Things to Avoid: Do not infer status without explicit labels."
+The system shall provide an option to so a user can quickly set up orders for frequently placed orders,The system shall provide the ability to include in an order set order types including but not limited to medications,"Definition: In this task, check that order sets can include multiple order types, including medications.
+Emphasis & Caution: Medications must be explicitly supported.
+Things to Avoid: Do not limit to a single order type."
+The system shall display a message indicating the patient?s ability to pay for medical services must be evaluated,The system shall provide the ability for a clinician to save frequently used,"Definition: In this task, confirm that clinicians can save frequently used items.
+Emphasis & Caution: Saved items must be reusable.
+Things to Avoid: Do not count temporary or session-only saves."
+The system shall allow other VistA applications to access the user class file to determine the role of an employee,The system shall provide the ability to filter or sort results by type of test and test date,"Definition: In this task, verify that results can be filtered or sorted by test type and test date.
+Emphasis & Caution: Both criteria must be supported.
+Things to Avoid: Do not include unrelated filters."
+The system will abort when the user tries to login if tabs are not assigned to the user in their NEW PERSON file or if the RESTRICT PATIENT SELECTION prompt does not contain a Yes or No,For each order type,"Definition: In this task, verify that the system supports handling for each order type.
+Emphasis & Caution: Coverage must apply to all defined order types.
+Things to Avoid: Do not evaluate only a single order type."
+The system shall provide a platform for building interfaces to external lab services enabling automated order entry and results reporting,The system shall allow the provider to redirect the notification concerning orders requiring signature to another provider,"Definition: In this task, confirm that providers can redirect order-signature notifications to another provider.
+Emphasis & Caution: Redirection must apply to signature-required orders.
+Things to Avoid: Do not include non-signature notifications."
+The system shall display a message indicating the patient?s ability to pay for medical services must be evaluated,The system shall provide the ability to identify pharmacies that can receive prescriptions electronically,"Definition: In this task, check that the system can identify pharmacies able to receive electronic prescriptions.
+Emphasis & Caution: Electronic receipt capability must be explicit.
+Things to Avoid: Do not include pharmacies without e-prescribing support."
+The system shall allow document types to inherit authorizations from a higher level when using classes to assign roles,The system shall provide the ability to maintain medication ordering dates,"Definition: In this task, verify that medication ordering dates are maintained by the system.
+Emphasis & Caution: Dates must persist accurately over time.
+Things to Avoid: Do not allow date overwriting without intent."
+The system shall indicate that the record is sensitive and may only be viewed by authorized users,The system shall provide the ability to display user created instructions and/or prompts when ordering diagnostic tests or procedures,"Definition: In this task, confirm that user-created instructions or prompts are displayed when ordering diagnostic tests or procedures.
+Emphasis & Caution: Instructions must appear during the ordering process.
+Things to Avoid: Do not show unrelated or generic prompts."
+The system shall allow complete order sets to be predefined and personalized,The system shall provide the ability to print and electronically fax prescriptions,"Definition: In this task, verify that the system can print and electronically fax prescriptions.
+Emphasis & Caution: Both printing and e-faxing must be supported.
+Things to Avoid: Do not count e-prescribing to pharmacies only."
+The system shall support audit capability,When sending user identity information between HIEs,"Definition: In this task, confirm correct handling when sending user identity information between HIEs.
+Emphasis & Caution: Identity data must remain accurate and consistent.
+Things to Avoid: Do not allow data mismatch or loss."
+The system shall allow other VistA applications to access the user class file to determine the role of an employee,The system shall provide the ability to customize clinical templates,"Definition: In this task, verify that clinical templates can be customized.
+Emphasis & Caution: Customization must be user-controlled.
+Things to Avoid: Do not count read-only templates."
+The system shall have pre-defined progress note templates,The system shall send Current Medication List and Discharge Medications (patient home medications and medications prescribed upon discharge) to outpatient documentation sources (e.g.,"Definition: In this task, check that current and discharge medication lists are sent to outpatient documentation sources.
+Emphasis & Caution: Include both home and discharge medications.
+Things to Avoid: Do not omit either medication list."
+The system shall update diagnostic and procedure codes used for billing purposes so codes are applicable at the time the service was provided,The system shall provide the ability to receive and store general laboratory results (includes ability to differentiate preliminary results and final results and the ability to process a corrected result),"Definition: In this task, verify that lab results can be received, stored, and differentiated by status.
+Emphasis & Caution: Preliminary, final, and corrected results must be distinct.
+Things to Avoid: Do not overwrite results improperly."
+The system shall allow user classes to be used across VistA to replace and/or complement security keys,The system shall provide the ability to receive patient registration data from an internal practice management system,"Definition: In this task, confirm that patient registration data can be received from an internal practice management system.
+Emphasis & Caution: Data must integrate correctly into the system.
+Things to Avoid: Do not require manual re-entry."
+The system shall allow document types to inherit authorizations from a higher level when using classes to assign roles,The system shall provide the ability to receive and display information received through electronic prescription eligibility checking,"Definition: In this task, verify that eligibility information from electronic prescription checks is received and displayed.
+Emphasis & Caution: Information must be viewable to users.
+Things to Avoid: Do not store data without display."
+The system shall capture history of received immunizations,The system shall provide the ability to display user created instructions and/or prompts when ordering diagnostic tests or procedures,"Definition: In this task, confirm that user-created instructions or prompts display during diagnostic or procedure ordering.
+Emphasis & Caution: Display must occur at order time.
+Things to Avoid: Do not show instructions outside the ordering workflow."
+The system shall allow medication orders to be placed and filled from local stocks of medications while providing full auditing of all medication orders within the medication profile,The system shall provide the ability for a clinician to save frequently used,"Definition: In this task, verify that clinicians can save frequently used items.
+Emphasis & Caution: Saved items must be reusable later.
+Things to Avoid: Do not count temporary saves."
+The system shall provide a way for user to quickly click on the specifications that he or she wants for each order placed,If role-based access control (RBAC) is supported,"Definition: In this task, verify system behavior if role-based access control is supported.
+Emphasis & Caution: Access must align with assigned roles.
+Things to Avoid: Do not grant permissions outside defined roles."
+The system shall allow user classes to be used across VistA to replace and/or complement security keys,The system shall provide protection to maintain the integrity of clinical data during concurrent access,"Definition: In this task, verify that clinical data integrity is protected during concurrent access.
+Emphasis & Caution: Changes must not conflict or overwrite improperly.
+Things to Avoid: Do not allow data corruption."
+The system shall require the entry of an access code and a verify code to gain access to the system,The system shall provide protection to maintain the integrity of clinical data during concurrent access,"Definition: In this task, verify that clinical data integrity is protected during concurrent access.
+Emphasis & Caution: Multiple users must be handled safely.
+Things to Avoid: Do not ignore simultaneous access scenarios."
+The system shall timeout after a period of inactivity,The system shall provide the ability to customize clinical templates,"Definition: In this task, confirm that clinical templates can be customized.
+Emphasis & Caution: Customization must be user-editable.
+Things to Avoid: Do not count fixed templates."
+The system shall provide tools for creating business rules that apply to documents used by members of such groups,The system shall provide the ability to audit the date/time and user of each instance when a patient chart is printed by the system,"Definition: In this task, verify that the system audits date, time, and user for each patient chart print event.
+Emphasis & Caution: All three audit elements must be recorded.
+Things to Avoid: Do not log partial audit data."
+The system shall support audit capability,The system shall provide the ability to re-print and re-fax prescriptions,"Definition: In this task, confirm that prescriptions can be re-printed and re-faxed.
+Emphasis & Caution: Both actions must be repeatable.
+Things to Avoid: Do not limit to first-time actions."
+The system shall indicate problems with inactive codes have the ?#? symbol in the status column,The system shall provide the ability to display non-numeric current and historical test results as textual data,"Definition: In this task, verify that non-numeric test results are displayed as text for current and historical data.
+Emphasis & Caution: Textual results must be readable.
+Things to Avoid: Do not force numeric formats."
+The system shall improve accessibility of online clinical information and results,The system shall provide an administrative function allowing an administrator to set rules for data retention,"Definition: In this task, verify that administrators can set data retention rules.
+Emphasis & Caution: Rules must be configurable.
+Things to Avoid: Do not hard-code retention periods."
+The system shall allow physician offices to use social security numbers or medical record numbers to identify patients,The system shall provide the ability to query for a patient by more than one form of identification,"Definition: In this task, confirm that patients can be queried using more than one identifier.
+Emphasis & Caution: Multiple identifiers must work together.
+Things to Avoid: Do not restrict search to a single ID."
+The system will abort when the user tries to login if tabs are not assigned to the user in their NEW PERSON file or if the RESTRICT PATIENT SELECTION prompt does not contain a Yes or No,The system shall provide a means to document a description of a medication and medication purpose when the medication name is unknown,"Definition: In this task, verify that medication description and purpose can be documented when the name is unknown.
+Emphasis & Caution: Name omission must be allowed.
+Things to Avoid: Do not require a medication name."
+The system shall allow medication orders to be placed and filled from local stocks of medications while providing full auditing of all medication orders within the medication profile,The system shall provide the ability to create site-specific care plan,"Definition: In this task, confirm that site-specific care plans can be created.
+Emphasis & Caution: Care plans must be configurable per site.
+Things to Avoid: Do not enforce a single global plan."
+The system shall display a message indicating the patient?s ability to pay for medical services must be evaluated,The HIE SHALL have the ability to Respond to a request for a prescription change from a pharmacy using NCPDP Script 8.1 (RXCHG,"Definition: In this task, verify that the HIE can respond to pharmacy prescription change requests using NCPDP Script 8.1 (RXCHG).
+Emphasis & Caution: Use the correct standard and transaction type.
+Things to Avoid: Do not accept non-NCPDP responses."
+The system shall allow user classes to be used across VistA to replace and/or complement security keys,The system shall have the ability to report on the ordering of nonformulary medications,"Definition: In this task, confirm that the system can report on orders of nonformulary medications.
+Emphasis & Caution: Nonformulary status must be identifiable.
+Things to Avoid: Do not include formulary-only reports."
+The system shall support audit capability,The system shall provide the ability to receive and store general laboratory results (includes ability to differentiate preliminary results and final results and the ability to process a corrected result),"Definition: In this task, verify that lab results can be received, stored, and differentiated by status.
+Emphasis & Caution: Preliminary, final, and corrected results must be distinct.
+Things to Avoid: Do not overwrite result history."
+The system shall provide an option to so a user can quickly set up orders for frequently placed orders,The system shall provide the ability to query for a patient by more than one form of identification,"Definition: In this task, confirm that patients can be queried using more than one identifier.
+Emphasis & Caution: Multiple identifiers must be supported together.
+Things to Avoid: Do not restrict to a single ID."
+The system shall have pre-defined progress note templates,The system shall provide the ability to maintain medication ordering dates,"Definition: In this task, verify that medication ordering dates are maintained by the system.
+Emphasis & Caution: Dates must persist accurately.
+Things to Avoid: Do not auto-change dates without action."
+The system shall include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature,The system shall provide the ability to permit an ordering clinician to forward all (current and future) expiring order notifications to another clinician,"Definition: In this task, confirm that an ordering clinician can forward all current and future expiring order notifications to another clinician.
+Emphasis & Caution: Forwarding must include future notifications automatically.
+Things to Avoid: Do not limit to one-time forwarding."
+The system shall timeout after a period of inactivity,The system shall capture user and date stamp for all prescription related events,"Definition: In this task, verify that all prescription-related events capture user and date stamps.
+Emphasis & Caution: Both user and timestamp are required.
+Things to Avoid: Do not allow unstamped events."
+The system shall support audit capability,The system shall provide the ability to create site-specific care plan,"Definition: In this task, confirm that site-specific care plans can be created.
+Emphasis & Caution: Care plans must vary by site.
+Things to Avoid: Do not enforce a single global plan."
+The system shall provide an open source integration platform to build interfaces to Billing/Practice Management systems,The system shall provide the ability to receive and display information received through electronic prescription eligibility checking,"Definition: In this task, verify that eligibility information from electronic prescription checks is received and displayed.
+Emphasis & Caution: Information must be visible to users.
+Things to Avoid: Do not store without display."
+The system shall allow users to enter time in several different formats,The system shall provide the ability to re-print and re-fax prescriptions,"Definition: In this task, confirm that prescriptions can be re-printed and re-faxed.
+Emphasis & Caution: Both actions must be repeatable.
+Things to Avoid: Do not restrict to first-time actions."
+The system will abort when the user tries to login if tabs are not assigned to the user in their NEW PERSON file or if the RESTRICT PATIENT SELECTION prompt does not contain a Yes or No,The system shall provide the ability to export structured data which removes those identifiers listed in the HIPAA definition of a limited dataset. This export on hardcopy and electronic output shall leave the actual PHI data unmodified in the original record,"Definition: In this task, verify that the system can export structured data with HIPAA limited dataset identifiers removed while keeping original PHI unchanged.
+Emphasis & Caution: Ensure identifiers listed under HIPAA limited dataset are removed only in the export.
+Things to Avoid: Modifying or deleting PHI in the original record."
+The system shall capture history of received immunizations,The system shall provide end-users with the ability to browse or search for a drug by therapeutic class when ordering a medication,"Definition: In this task, confirm that end-users can browse or search drugs by therapeutic class during medication ordering.
+Emphasis & Caution: The search must be usable at the point of ordering.
+Things to Avoid: Testing drug search without therapeutic class filtering."
+The system must require entry of a passcode and verification code to access the system.,Whether role-based access control (RBAC) is supported,"Definition: In this task, determine whether the system supports role-based access control (RBAC).
+Emphasis & Caution: Check role-based permission differentiation.
+Things to Avoid: Confusing RBAC with general user authentication."
+The system must include the ability to print prescriptions for signature and fax prescriptions to a local pharmacy with an electronic signature.,The system must provide the ability to reprint and refax prescriptions.,"Definition: In this task, verify that the system allows prescriptions to be reprinted and refaxed.
+Emphasis & Caution: Both print and fax functions must be supported.
+Things to Avoid: Testing only initial prescription transmission."
+The system should only automatically select (highlight in blue and place that entry in the field) a patient name if the user enters enough characters to uniquely identify a name in the list.,When sending user identity information between HIE,"Definition: In this task, verify how the system sends user identity information between HIEs.
+Emphasis & Caution: Focus on identity data exchange behavior.
+Things to Avoid: Evaluating non-identity data transmission."
+The system must provide a platform to create interfaces with external laboratory services enabling automated order entry and results reporting.,The system must be able to accept,"Definition: In this task, confirm that the system is able to accept required inputs or data as specified.
+Emphasis & Caution: Acceptance must occur without system errors.
+Things to Avoid: Assuming acceptance without validation."
+The system must include capabilities to order laboratory tests and review the results.,The system must provide the ability to display user-created instructions and/or prompts when ordering diagnostic tests or procedures.,"Definition: In this task, verify that user-created instructions or prompts are displayed when ordering diagnostic tests or procedures.
+Emphasis & Caution: Instructions must be visible during ordering.
+Things to Avoid: Checking instruction storage without display."
+The system must include standard laboratory and orderable drug files.,The system must have the capacity to account for off-formulary drug orders.,"Definition: In this task, confirm that the system can account for off-formulary drug orders.
+Emphasis & Caution: Off-formulary handling must be explicit.
+Things to Avoid: Testing only formulary drugs."
+The system must capture the history of vaccinations received,The system must provide the ability to display CCD documents,"Definition: In this task, verify that the system can display CCD documents.
+Emphasis & Caution: CCD content must be readable and complete.
+Things to Avoid: Evaluating only document storage."
+The system must include capabilities to order laboratory tests and review the results.,The system must provide the ability to display current and historical non-numeric test results as textual data.,"Definition: In this task, verify that the system can display current and historical non-numeric test results as text.
+Emphasis & Caution: Both current and historical results must be included.
+Things to Avoid: Checking numeric results only."
+The system must allow infinite hierarchies of subclasses to be created within the users&#39; hierarchical class structure.,The system must provide the ability to present a task list by user or user role.,"Definition: In this task, verify that the system can display task lists by individual user or by user role.
+Emphasis & Caution: Ensure both user-based and role-based views exist.
+Things to Avoid: Checking only a single user view."
+The system must allow a user to forward a notification to someone else on the site.,The system will allow the provider to redirect notification regarding orders requiring a signature to another provider.,"Definition: In this task, verify that a provider can redirect order signature notifications to another provider.
+Emphasis & Caution: Redirection must occur before signature completion.
+Things to Avoid: Testing notification viewing without redirection."
+The system must allow a user to forward a notification to someone else on the site.,The system must provide the ability to send data to register a patient in a clinical trial,"Definition: In this task, verify that the system can send data to register a patient in a clinical trial.
+Emphasis & Caution: Data transmission must be successful.
+Things to Avoid: Reviewing trial data without sending it."
+The system must allow document types to inherit higher-level permissions when using classes to assign roles.,The system must allow medication order dates to be kept.,"Definition: In this task, verify that medication order dates are stored and retained by the system.
+Emphasis & Caution: Dates must persist after saving.
+Things to Avoid: Checking temporary or unsaved orders."
+The system must provide an open source integration platform to create interfaces with billing/practice management systems.,The system must be able to identify all patients taking a specific medication.,"Definition: In this task, verify that the system can identify all patients taking a specific medication.
+Emphasis & Caution: Results must include all matching patients.
+Things to Avoid: Searching by patient instead of medication."
+The system must capture the history of vaccinations received,The system must provide the ability to configure orders within order sets with default order details.,"Definition: In this task, verify that orders in order sets can be configured with default order details.
+Emphasis & Caution: Defaults must auto-populate.
+Things to Avoid: Manually entering all order details."
+The system must have predefined progress note templates,The system must allow medication order dates to be kept.,"Definition: In this task, verify that medication order dates are stored and retained by the system.
+Emphasis & Caution: Dates must be viewable after order creation.
+Things to Avoid: Ignoring previously created orders."
+The system will shut down when the user attempts to log in if the user is not assigned tabs in their NEW PERSON file or if the RESTRICT PATIENT SELECTION prompt does not contain a Yes or No response.,The system must offer the possibility of sending a request to coordinate the identification of the patient,"Definition: In this task, verify that the system can send a request to coordinate patient identification.
+Emphasis & Caution: The request must be clearly transmitted.
+Things to Avoid: Confirming identification without sending a request."
+The system must include capabilities to order laboratory tests and review the results.,When access to a card is restricted and the glass has broken,"Definition: In this task, verify that restricted card access can be overridden using a break-glass mechanism.
+Emphasis & Caution: Access must be logged after break-glass use.
+Things to Avoid: Bypassing restrictions without break-glass."
+The system must allow doctors&#39; offices to use Social Security numbers or medical record numbers to identify patients.,The system must have the capability to provide access to test and procedure instructions that can be customized by the physician or healthcare organization. These instructions may reside within the system or be provided via links to external sources,"Definition: In this task, verify that customizable test and procedure instructions are accessible to users.
+Emphasis & Caution: Instructions may be internal or external links.
+Things to Avoid: Checking non-customizable instructions only."
+The system must have predefined progress note templates,The system must provide the ability to present medications to be administered over a selectable date/time range.,"Definition: In this task, verify that the system can display medications to be administered within a selectable date and time range.
+Emphasis & Caution: The date/time range must be user-selectable.
+Things to Avoid: Using fixed or default ranges only."
+The system must allow users to enter time in several different formats,The HIE MUST have the capability to respond to a prescription change request from a pharmacy using the NCPDP 8.1 script (RXCHG,"Definition: In this task, verify that the HIE can respond to pharmacy prescription change requests using NCPDP 8.1 RXCHG.
+Emphasis & Caution: Response must use the NCPDP 8.1 RXCHG standard.
+Things to Avoid: Testing non-NCPDP or other script versions."
+The system should allow the user to quickly click on the specifications they want for each order placed.,The system must allow medication order dates to be kept.,"Definition: In this task, verify that the system keeps and stores medication order dates.
+Emphasis & Caution: Dates must persist after saving.
+Things to Avoid: Checking unsaved or draft orders."
+The system must require entry of a passcode and verification code to access the system.,"The system must provide the ability to select order details, including strength","Definition: In this task, verify that order details, including strength, can be selected.
+Emphasis & Caution: Strength selection must be available.
+Things to Avoid: Accepting default values without selection."
+The system must include capabilities to order laboratory tests and review the results.,The system will allow the provider to redirect notification regarding orders requiring a signature to another provider.,"Definition: In this task, verify that providers can redirect signature-required order notifications to another provider.
+Emphasis & Caution: Redirection must change the notification recipient.
+Things to Avoid: Viewing notifications without redirecting."
+The system should only automatically select (highlight in blue and place that entry in the field) a patient name if the user enters enough characters to uniquely identify a name in the list.,The system must provide the ability to present a task list by user or user role.,"Definition: In this task, verify that task lists can be presented by user or by user role.
+Emphasis & Caution: Both user and role views must be supported.
+Things to Avoid: Checking only one view type."
+The system must allow a user to forward a notification to someone else on the site.,The system must provide an administrative function allowing an administrator to define data retention rules.,"Definition: In this task, verify that administrators can define data retention rules.
+Emphasis & Caution: Function must be restricted to administrators.
+Things to Avoid: Editing retention rules as a non-admin."
+The system shall require the entry of an access code and angstrom verify code to increase access to the system,If role-based entree control (RBAC) is supported,"Definition: In this task, determine whether role-based access control (RBAC) is supported.
+Emphasis & Caution: Permissions must vary by role.
+Things to Avoid: Confusing RBAC with login authentication."
+The system shall admit the ability to impress prescription_medicine for signature and facsimile_machine prescription_medicine to a local pharmacy with an electronic signature,The organisation shall provide the power to re-print and re-fax prescriptions,"Definition: In this task, verify that prescriptions can be re-printed and re-faxed.
+Emphasis & Caution: Both re-print and re-fax must work.
+Things to Avoid: Testing only initial transmission."
+The system shall only auto-select(highlights in blue_angel and places that entry in the field) vitamin_A patient name if the user character enough characters to uniquely distinguish vitamin_A name in the lean,When place user identity information between HIEs,"Definition: In this task, verify that user identity information can be exchanged between HIEs.
+Emphasis & Caution: Focus only on identity information exchange.
+Things to Avoid: Evaluating non-identity data transfer."
+The system shall provide a platform for work_up interfaces to outside lab services enabling automated order entry and ensue reporting,The scheme shall provide the ability to accept,"Definition: In this task, verify that the system can accept required inputs or data.
+Emphasis & Caution: Acceptance must complete without errors.
+Things to Avoid: Assuming acceptance without confirmation."
+The organisation shall include capabilities for ordering laboratory tests and reviewing lead,The organization shall provide the ability to display user created instructions and/or prompts when ordering symptomatic examination or subprogram,"Definition: In this task, verify that user-created instructions or prompts are displayed when ordering examinations or subprograms.
+Emphasis & Caution: Instructions must appear during ordering.
+Things to Avoid: Checking storage without display."
+The system shall include measure Laboratory and Medication orderable lodge,The system shall have the ability to report on the regularise of nonformulary medications,"Definition: In this task, verify that the system can report on the use of non-formulary medications.
+Emphasis & Caution: Reports must clearly identify non-formulary items.
+Things to Avoid: Reviewing formulary-only data."
+The system_of_rules shall capture history of received immunizations,The organisation shall cater the ability to display CCD documents,"Definition: In this task, verify that CCD documents can be displayed.
+Emphasis & Caution: Content must be readable.
+Things to Avoid: Checking document storage only."
+The system shall include potentiality for ordering testing_ground tests and reviewing results,The organisation shall provide the ability to video_display non-numeric current and historical test results as textual data,"Definition: In this task, verify that current and historical non-numeric test results are displayed as text.
+Emphasis & Caution: Include both current and historical results.
+Things to Avoid: Checking numeric results only."
+The system shall admit infinite hierarchies of subclass to be created in the User power_structure Class structure,The system shall provide the ability to confront a list of tasks past user Beaver_State user role,"Definition: In this task, verify that task lists can be presented by user or by user role.
+Emphasis & Caution: Both user and role views must exist.
+Things to Avoid: Testing a single view only."
+The system shall appropriate a user to foward notice to someone else at the internet_site,The system shall allow the provider to airt the notification concerning orders ask signature to some_other provider,"Definition: In this task, verify that providers can redirect signature-required order notifications to another provider.
+Emphasis & Caution: Notification recipient must change.
+Things to Avoid: Viewing notifications without redirecting."
+The system shall allow axerophthol user to foward notice to soul else at the site,The system shall provide the ability to send data to register deoxyadenosine_monophosphate patient Indiana deoxyadenosine_monophosphate clinical trial,"Definition: In this task, verify that the system can send data to register a patient in a clinical trial.
+Emphasis & Caution: Data must be successfully sent.
+Things to Avoid: Reviewing trial data without transmission."
+The system shall set_aside document types to inherit authorizations from type_A high level when using classes to assign roles,The system shall ply the ability to maintain medication say dates,"Definition: In this task, verify that medication order dates are maintained by the system.
+Emphasis & Caution: Dates must persist after saving.
+Things to Avoid: Checking unsaved orders."
+The system shall provide an open seed integration platform to habitus interfaces to Billing/Practice management systems,The organization shall be able to identify all patients on a specific medication,"Definition: In this task, verify that the organization can identify all patients taking a specific medication.
+Emphasis & Caution: Results must include all matching patients.
+Things to Avoid: Searching by patient instead of medication."
+The system shall capture history of received immunisation,The system shall provide the ability to configure orders inside grade sets with default grade detail,"Definition: In this task, verify that orders within order sets can be configured with default order details.
+Emphasis & Caution: Defaults must auto-populate correctly.
+Things to Avoid: Manually setting all details."
+The system shall have pre-defined progress banker's_bill templates,The system shall provide the ability to maintain medicinal_drug ordering appointment,"Definition: In this task, verify that the system can maintain medication ordering dates.
+Emphasis & Caution: Dates must be saved and retrievable.
+Things to Avoid: Checking unsaved orders."
+The system leave abort when the user attempt to login if tabs ar not attribute to the user in their NEW PERSON charge or if the RESTRICT PATIENT SELECTION prompt does not contain type_A Yes or atomic_number_102,The system shall provide the ability to send a query to coordinate patient identification,"Definition: In this task, verify that the system can send a query to coordinate patient identification.
+Emphasis & Caution: The query must be successfully transmitted.
+Things to Avoid: Confirming identification without sending a query."
+The system shall include capabilities for regulate research_lab tests and reviewing results,When access to a chart is confine and the break the glass let occurred,"Definition: In this task, verify that restricted chart access can be overridden using a break-glass function.
+Emphasis & Caution: Break-glass access must be logged.
+Things to Avoid: Bypassing restrictions without break-glass."
+The system shall allow physician authority to use social security numbers operating_room medical show numbers to identify patients,The system shall have the ability to bring_home_the_bacon access to screen and procedure instructions that can be customize by the physician operating_theater wellness organization. These instructions may reside within the system operating_theater be leave through links to external sources,"Definition: In this task, verify that customizable test and procedure instructions are accessible.
+Emphasis & Caution: Instructions may be internal or external links.
+Things to Avoid: Checking non-customizable instructions only."
+The system shall have pre-defined progress note template,The organization shall provide the ability to demo medications to represent administered over a selectable date/time range,"Definition: In this task, verify that medications administered can be displayed over a selectable date and time range.
+Emphasis & Caution: The range must be user-selectable.
+Things to Avoid: Using fixed date/time ranges only."
+The system shall allow_for users to introduce time in several different formats,The cannonball_along SHALL have the ability to Respond to type_A request for type_A prescription_drug change from type_A pharmacy using NCPDP Script 8.1 (RXCHG,"Definition: In this task, verify that the system can respond to pharmacy prescription change requests using NCPDP Script 8.1 RXCHG.
+Emphasis & Caution: Response must follow NCPDP 8.1 RXCHG.
+Things to Avoid: Testing other standards or versions."
+The system shall bring_home_the_bacon angstrom way for user to quickly click on the stipulation that he or she privation for each order placed,The system shall provide the ability to defend medication ordering date,"Definition: In this task, verify that medication ordering dates are preserved by the system.
+Emphasis & Caution: Dates must persist after saving.
+Things to Avoid: Ignoring historical orders."
+The organization shall require the entry of Associate_in_Nursing access encrypt and a verify encrypt to gain access to the organization,The organisation shall provide the ability to quality order details including strength,"Definition: In this task, verify that order details, including strength, can be selected.
+Emphasis & Caution: Strength selection must be available.
+Things to Avoid: Accepting defaults without validation."
+The system shall include capabilities for rank laboratory tests and reviewing resultant,The system shall appropriate the provider to airt the notification concerning orders requiring signature to another provider,"Definition: In this task, verify that providers can redirect signature-required order notifications to another provider.
+Emphasis & Caution: Notification recipient must change successfully.
+Things to Avoid: Viewing notifications without redirecting."
+The system shall only auto-select(highlights in racy and places that entrance in the field) a affected_role name if the user type enough fiber to unambiguously identify a name in the list,The system_of_rules shall offer the ability to present a list of tasks by user or user character,"Definition: In this task, verify that the system can present a list of tasks filtered by user or user role/character.
+Emphasis & Caution: Ensure filtering works correctly for different users or roles.
+Things to Avoid: Do not assume default or unfiltered task lists."
+The organisation shall allow a user to foward notification to someone else atomic_number_85 the website,The system shall provide an administrative function allowing an administrator to gear_up rules for information retention,"Definition: In this task, confirm that an administrator can configure rules for information retention.
+Emphasis & Caution: Only administrative access should allow this configuration.
+Things to Avoid: Do not test with non-admin accounts."
+The system shall require code entry of an access code and to gain the a verify access to the system,If access supported role-based (RBAC) is control,"Definition: In this task, check whether the system enforces role-based access control (RBAC).
+Emphasis & Caution: Validate access differences between roles.
+Things to Avoid: Do not ignore permission boundaries."
+an prescriptions shall include the ability to print system for The and fax prescriptions to a local pharmacy with signature electronic signature,The system shall provide re-print to the ability and re-fax prescriptions,"Definition: In this task, verify that the system supports re-printing and re-faxing prescriptions.
+Emphasis & Caution: Both functions must be available and distinct.
+Things to Avoid: Do not test only one of the two actions."
+The system shall only auto-select(highlights in blue and to that entry in the field) a the name if the user types enough name places uniquely identify a characters in patient list,information user sending between When identity HIEs,"Definition: In this task, confirm that user information is correctly sent between HIEs with identity matching.
+Emphasis & Caution: Identity consistency must be maintained.
+Things to Avoid: Do not overlook identity mismatches."
+reporting system shall order a platform for building interfaces to external lab services enabling entry provide automated and results The,The provide shall system ability to the accept,"Definition: In this task, verify that the system can accept required inputs or data as intended.
+Emphasis & Caution: Check acceptance without errors.
+Things to Avoid: Do not test incomplete or invalid inputs unless specified."
+The system ordering include reviewing for shall laboratory tests and results capabilities,The display shall tests the provide to system user created instructions and/or prompts when ordering diagnostic ability or procedures,"Definition: In this task, check that the system displays user-created instructions or prompts when ordering diagnostic tests or procedures.
+Emphasis & Caution: Instructions must appear at the time of ordering.
+Things to Avoid: Do not test outside the ordering workflow."
+Standard and system include The Laboratory shall Medication orderable files,The system shall have the ability ordering to on report the of nonformulary medications,"Definition: In this task, verify that the system can order and report non-formulary medications.
+Emphasis & Caution: Ensure non-formulary status is clearly indicated.
+Things to Avoid: Do not include formulary medications."
+The history shall system of capture received immunizations,to system the provide shall ability The documents CCD display,"Definition: In this task, confirm that the system can display CCD documents.
+Emphasis & Caution: The document content must be readable.
+Things to Avoid: Do not test unsupported document formats."
+The system shall include ordering for tests laboratory reviewing and capabilities results,The system shall provide to ability the current non-numeric as and historical test results display textual data,"Definition: In this task, verify that the system displays current and historical non-numeric (textual) test results.
+Emphasis & Caution: Both current and past results must be shown.
+Things to Avoid: Do not include numeric-only test results."
+shall system The allow infinite hierarchies be subclasses to of created in the User Class Hierarchy structure,The user shall provide to ability the present system list of tasks by user or a role,"Definition: In this task, verify that the system can display a list of tasks by user or role.
+Emphasis & Caution: Ensure correct filtering by user and role.
+Things to Avoid: Do not use unfiltered task views."
+allow system shall a The user to foward notification to site else at the someone,The system the allow shall provider to redirect the another concerning requiring orders signature to notification provider,"Definition: In this task, confirm that the system can redirect orders requiring signatures to a notification provider.
+Emphasis & Caution: Only unsigned orders should be redirected.
+Things to Avoid: Do not redirect already signed orders."
+The user the allow a system notification foward to to someone else at shall site,The clinical shall provide patient ability to send data to register a the trial a system in,"Definition: In this task, verify that patients can send clinical data to register in a trial system.
+Emphasis & Caution: Data submission must complete successfully.
+Things to Avoid: Do not submit incomplete registration data."
+assign system shall allow document types to inherit authorizations from a higher level roles using classes to The when,the system ordering provide ability The to maintain medication shall dates,"Definition: In this task, check that the system maintains medication ordering dates.
+Emphasis & Caution: Dates must be accurate and persistent.
+Things to Avoid: Do not modify dates manually."
+The interfaces Billing/Practice open an provide source integration platform to build system to shall Management systems,The a shall be able system to all patients on identify specific medication,"Definition: In this task, verify that the system can identify all patients on a specific medication.
+Emphasis & Caution: Results must include all matching patients.
+Things to Avoid: Do not include patients on other medications."
+system shall capture The history of received immunizations,The configure shall provide the ability order system to within orders sets with default order details,"Definition: In this task, confirm that the system allows configuration of order sets with default order details.
+Emphasis & Caution: Default details must auto-populate.
+Things to Avoid: Do not change defaults during testing."
+The progress note pre-defined have system shall templates,The maintain shall provide to ability medication system the ordering dates,"Definition: In this task, verify that the system maintains medication ordering dates consistently.
+Emphasis & Caution: Ordering dates must remain unchanged over time.
+Things to Avoid: Do not overwrite existing dates."
+The system will NEW when the user tries to login if tabs PERSON RESTRICT assigned to the user in their abort are file or if the not PATIENT SELECTION prompt does not contain a Yes or No,The system shall query the to to send a provide patient coordinate ability identification,"Definition: In this task, check that the system can query and send patient identification and coordination data.
+Emphasis & Caution: Patient identity must be correctly matched.
+Things to Avoid: Do not send data for the wrong patient."
+The system shall reviewing capabilities include ordering laboratory for and tests results,When access to a the and restricted the chart break is glass has occurred,"Definition: In this task, verify that the system records and indicates when break-glass access to a restricted chart occurs.
+Emphasis & Caution: The access event must be clearly logged.
+Things to Avoid: Do not access charts without triggering break-glass."
+The system allow record physician offices to patients social security numbers or medical shall numbers to identify use,The system shall have the external through provide access to test and procedure instructions These can be customized by the physician or health organization. that instructions may reside within the system or be provided to links to ability sources,"Definition: In this task, confirm that the system provides external access to test and procedure instructions, customizable by physicians or organizations.
+Emphasis & Caution: Instructions may be internal or linked externally.
+Things to Avoid: Do not use non-customizable instructions."
+The have shall system pre-defined progress note templates,The system shall selectable the a range present medications to be administered over ability provide date/time to,"Definition: In this task, verify that the system allows selecting medications to be administered over a specified date/time range.
+Emphasis & Caution: Ensure both date and time selection work.
+Things to Avoid: Do not select a single time point only."
+The formats shall allow users several enter time in system different to,The HIE SHALL have the ability Respond to to a request for a prescription pharmacy from a change using NCPDP 8.1 Script (RXCHG,"Definition: In this task, confirm that the HIE can respond to prescription change requests using NCPDP 8.1 Script (RXCHG).
+Emphasis & Caution: Use the correct NCPDP 8.1 RXCHG format.
+Things to Avoid: Do not use other message standards."
+way user a provide shall The for system to quickly click on the specifications that he or she wants for each order placed,maintain dates shall provide the ability to system medication ordering The,"Definition: In this task, verify that the system maintains medication ordering dates.
+Emphasis & Caution: Dates must persist accurately.
+Things to Avoid: Do not alter stored dates."
+The system shall require the entry to of access code and a verify system to gain access an the code,The select shall provide the ability to system including order details strength,"Definition: In this task, check that the system allows selecting order details including medication strength.
+Emphasis & Caution: Strength must be selectable and visible.
+Things to Avoid: Do not omit strength details."
+capabilities system shall include The and ordering for tests laboratory reviewing results,shall system The the the provider to redirect allow notification concerning orders requiring another to signature provider,"Definition: In this task, confirm that the system can redirect notifications for orders requiring signatures to another provider.
+Emphasis & Caution: Only orders needing signatures should be redirected.
+Things to Avoid: Do not redirect signed orders."
+The system entry only auto-select(highlights in blue and field) that shall in identify places a patient name if the user types enough characters to uniquely the a name in the list,tasks the shall provide The ability to present a list of system by user or user role,"Definition: In this task, verify that the system can present a list of tasks by user or user role.
+Emphasis & Caution: Filtering must be accurate.
+Things to Avoid: Do not use unfiltered task lists."
+The shall system allow the user to foward notification to someone else site a at,provide function shall The an administrative system allowing an administrator for set rules to data retention,"Definition: In this task, confirm that administrators can set data retention rules in the system.
+Emphasis & Caution: Admin-only access is required.
+Things to Avoid: Do not use non-admin accounts."
+The system shall require the entry of an access code and verify code to gain access to the system,If role-based access control (RBAC) is supported,"Definition: In this task, verify that the system enforces role-based access control (RBAC) if supported.
+Emphasis & Caution: Access must differ by role.
+Things to Avoid: Do not bypass role restrictions."
+The system shall ability to print for signature and fax to a local pharmacy with an electronic signature,The system shall provide the ability to re-print re-fax prescriptions,"Definition: In this task, verify that the system supports re-printing and re-faxing prescriptions.
+Emphasis & Caution: Both actions must be available.
+Things to Avoid: Do not test only one action."
+system shall only auto-select(highlights blue and places entry in the field) a patient if the user types enough characters a name in the list,sending user identity between HIEs,"Definition: In this task, confirm that user identity information can be sent between HIEs.
+Emphasis & Caution: Identity matching must be correct.
+Things to Avoid: Do not send mismatched identities."
+The system shall provide a platform for building interfaces to external lab services enabling automated order entry and results reporting,The system shall provide the ability to accept,"Definition: In this task, verify that the system can accept required inputs or data.
+Emphasis & Caution: Ensure acceptance completes without errors.
+Things to Avoid: Do not submit invalid data."
+The shall include capabilities for ordering laboratory tests and reviewing results,The system shall provide the ability display user created instructions and/or prompts when ordering diagnostic tests or procedures,"Definition: In this task, verify that user-created instructions or prompts are displayed when ordering diagnostic tests or procedures.
+Emphasis & Caution: Instructions must appear during the ordering step.
+Things to Avoid: Do not check outside the ordering flow."
+The system shall Standard and Medication orderable files,The system shall have the ability report on the ordering of nonformulary medications,"Definition: In this task, verify that the system can report on orders of non-formulary medications.
+Emphasis & Caution: Non-formulary status must be clearly indicated.
+Things to Avoid: Do not include formulary medications."
+The shall capture history of received immunizations,The system ability display CCD documents,"Definition: In this task, verify that the system can display CCD documents.
+Emphasis & Caution: Document content must be readable.
+Things to Avoid: Do not use unsupported formats."
+The system shall include capabilities for ordering laboratory tests and reviewing results,system shall provide the ability to non-numeric current and historical test results as textual,"Definition: In this task, verify that the system displays current and historical non-numeric test results as text.
+Emphasis & Caution: Both current and past results must be shown.
+Things to Avoid: Do not include numeric-only results."
+The system shall allow hierarchies of subclasses to be in the User Hierarchy Class structure,The system shall provide the ability to present a list of tasks by or user,"Definition: In this task, verify that the system can present a list of tasks by user.
+Emphasis & Caution: Task filtering must be accurate.
+Things to Avoid: Do not use unfiltered task lists."
+The system shall allow a user to foward notification to someone else the site,The shall allow the provider to redirect the notification concerning orders requiring signature to another,"Definition: In this task, verify that notifications for orders requiring signatures can be redirected to another provider.
+Emphasis & Caution: Only unsigned orders should be redirected.
+Things to Avoid: Do not redirect signed orders."
+The system shall allow a user to foward notification to else at the site,The system shall provide the ability to send data to register a patient in a clinical trial,"Definition: In this task, verify that the system can send data to register a patient in a clinical trial.
+Emphasis & Caution: Registration data must transmit successfully.
+Things to Avoid: Do not send incomplete data."
+system shall allow document to inherit authorizations from a higher when using classes to assign roles,The system shall provide the ability to medication ordering dates,"Definition: In this task, verify that the system maintains medication ordering dates.
+Emphasis & Caution: Dates must persist correctly.
+Things to Avoid: Do not alter stored dates."
+The system shall an open integration platform to build interfaces to Billing/Practice Management,The system shall be able to all patients on specific medication,"Definition: In this task, verify that the system can identify all patients on a specific medication.
+Emphasis & Caution: All matching patients must be included.
+Things to Avoid: Do not include patients on other medications."
+The system shall capture history of received immunizations,The shall provide the ability to configure orders within order sets default order details,"Definition: In this task, verify that the system allows configuring orders within order sets with default order details.
+Emphasis & Caution: Default details must auto-populate.
+Things to Avoid: Do not manually override defaults."
+The system shall have pre-defined progress note,The system shall provide the ability to maintain ordering dates,"Definition: In this task, verify that the system maintains ordering dates.
+Emphasis & Caution: Dates must remain accurate and unchanged.
+Things to Avoid: Do not edit stored dates."
+The system will abort when the user tries to login if are assigned to the in their NEW PERSON file or if the RESTRICT PATIENT SELECTION prompt does not contain Yes or No,The system shall provide the ability to send a to coordinate patient identification,"Definition: In this task, verify that the system can send data to coordinate patient identification.
+Emphasis & Caution: Patient identity must match correctly.
+Things to Avoid: Do not send mismatched patient data."
+The shall include capabilities for ordering laboratory tests and reviewing results,When access to a chart is restricted and the break the glass has occurred,"Definition: In this task, verify that the system records and indicates break-glass access when a restricted chart is accessed.
+Emphasis & Caution: The break-glass event must be clearly logged.
+Things to Avoid: Do not access charts without triggering break-glass."
+The system shall physician offices to use social security numbers or medical record numbers to identify patients,The system have the ability to provide access test and procedure instructions that can be customized by the physician or health organization. These instructions reside the system or be provided through links to external sources,"Definition: In this task, verify that the system provides access to test and procedure instructions customizable by physicians or organizations.
+Emphasis & Caution: Instructions may be internal or external links.
+Things to Avoid: Do not use non-customizable instructions."
+The system shall have pre-defined progress note templates,The shall provide the ability to present medications to be administered over a range,"Definition: In this task, verify that the system can present medications to be administered over a specified range.
+Emphasis & Caution: The range must be clearly defined.
+Things to Avoid: Do not select a single point only."
+The shall allow users to enter time in several different formats,HIE SHALL have the ability to Respond to a for a prescription change from pharmacy using NCPDP Script 8.1 (RXCHG,"Definition: In this task, verify that the HIE responds to prescription change requests using NCPDP Script 8.1 (RXCHG).
+Emphasis & Caution: Use the correct RXCHG standard.
+Things to Avoid: Do not use other message formats."
+The system shall provide way for quickly click on the specifications that he or she wants for each order placed,The system shall the ability to maintain ordering dates,"Definition: In this task, verify that the system maintains ordering dates consistently.
+Emphasis & Caution: Dates must persist across views.
+Things to Avoid: Do not overwrite existing dates."
+The system shall require the an access code a verify code to access the system,The system shall provide the to select order details including strength,"Definition: In this task, verify that the system allows selecting order details including strength.
+Emphasis & Caution: Strength must be selectable and visible.
+Things to Avoid: Do not omit strength information."
+The system shall capabilities for ordering laboratory tests and reviewing,The system shall allow the provider to redirect the notification concerning orders requiring signature to another provider,"Definition: In this task, verify that notifications for orders requiring signatures can be redirected to another provider.
+Emphasis & Caution: Only orders needing signatures should be redirected.
+Things to Avoid: Do not redirect signed orders."
+The shall only auto-select(highlights in blue and places that entry the field) patient name if the user enough characters to uniquely identify a name list,The shall provide the ability to present a list of tasks by user or user role,"Definition: In this task, present a list of tasks filtered by a specific user or by user role.
+Emphasis & Caution: Ensure correct filtering based on the selected user or role.
+Things to Avoid: Do not mix tasks from unrelated users or roles."
+The system shall allow a user to foward notification to someone else at the,The system shall provide administrative function allowing an to set for data retention,"Definition: In this task, provide an administrative function that allows an administrator to set data retention rules.
+Emphasis & Caution: Only administrators should be able to change data retention settings.
+Things to Avoid: Do not allow non-admin users to access or modify data retention settings."

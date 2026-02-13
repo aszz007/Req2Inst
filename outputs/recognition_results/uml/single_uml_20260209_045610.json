@@ -1,0 +1,7 @@
+{
+  "description": "{\"actors\": [{\"name\": \"Customer\", \"position\": \"left\"}, {\"name\": \"Bank\", \"position\": \"right\"}], \"use_cases\": [{\"name\": \"Withdraw current\", \"description\": \"Customer withdraws money from current account.\"}, {\"name\": \"Withdraw deposit\", \"description\": \"Customer withdraws money from deposit account.\"}, {\"name\": \"Withdraw foreign\", \"description\": \"Customer withdraws foreign currency.\"}, {\"name\": \"Withdraw cash\", \"description\": \"General use case for withdrawing cash, extended by specific withdrawal types.\"}, {\"name\": \"Check funds sufficient\", \"description\": \"System checks if customer's account has sufficient funds for withdrawal.\"}, {\"name\": \"Valid customer\", \"description\": \"System verifies if the customer is valid (authorized user).\"}, {\"name\": \"Deposit\", \"description\": \"Customer deposits money into their account.\"}, {\"name\": \"Transfer cash\", \"description\": \"Customer transfers money to another account or entity.\"}], \"system_boundary\": {\"name\": \"ATM system\", \"is_present\": true}, \"relationships\": [], \"overall_description\": \"\", \"success\": true}",
+  "success": true,
+  "image_path": "data\\raw\\uml\\mdpi_uml\\3bbkL-copia.png",
+  "image_name": "3bbkL-copia.png",
+  "model_version": "qwen3"
+}

@@ -444,7 +444,7 @@ class UMLDatasetLoader:
     """
     UML数据集加载器
 
-    使用单一数据集：uml_dataset_qwen3_v3.csv（1500条数据）
+    使用单一数据集：uml_dataset.csv（1500条数据）
     """
 
     def __init__(self):

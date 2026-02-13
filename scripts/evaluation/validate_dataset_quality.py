@@ -829,7 +829,7 @@ def main():
 
     parser = argparse.ArgumentParser(description='验证UML数据集质量')
     parser.add_argument('--dataset', type=str,
-                       default='dataset/uml/uml_dataset_qwen3_v3.csv',
+                       default='dataset/uml/uml_dataset.csv',
                        help='数据集CSV文件路径')
     parser.add_argument('--enable-period-check', action='store_true',
                        help='启用句子结尾句号检查')

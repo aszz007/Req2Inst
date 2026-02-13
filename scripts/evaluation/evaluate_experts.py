@@ -289,7 +289,7 @@ class ExpertEvaluator:
         logger.info("评估UML专家")
         logger.info("=" * 80)
 
-        # 加载数据集（只有一个版本：uml_dataset_qwen3_v3.csv）
+        # 加载数据集（只有一个版本：uml_dataset.csv）
         loader = UMLDatasetLoader()
         data = loader.load_csv_file()
         _, _, test_data = split_dataset_for_expert(data, 'uml')

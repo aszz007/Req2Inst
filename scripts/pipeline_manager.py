@@ -122,7 +122,7 @@ class Pipeline:
         # ==================== 阶段1: 数据预处理 ====================
         stages.append(PipelineStage(
             name='preprocess_image',
-            script='scripts/image_raw_recognize_interim.py',
+            script='scripts/recognize_image.py',
             env=vision_env,
             args=['--version', self.version],
             description='批量识别图像内容'
@@ -130,7 +130,7 @@ class Pipeline:
 
         stages.append(PipelineStage(
             name='preprocess_uml',
-            script='scripts/uml_raw_recognize_interim_en_local.py',
+            script='scripts/recognize_uml.py',
             env=vision_env,
             args=['--version', self.version],
             description='批量识别UML用例图'
@@ -139,14 +139,14 @@ class Pipeline:
         # ==================== 阶段2: 数据集构建 ====================
         stages.append(PipelineStage(
             name='build_dataset_image',
-            script='scripts/interim_generate_dataset/image/image_interim_generate_dataset.py',
+            script='scripts/build_final_dataset/image/generate_instructions.py',
             env='text',  # 不需要特殊模型
             description='构建图像数据集'
         ))
 
         stages.append(PipelineStage(
             name='build_dataset_uml',
-            script='scripts/interim_generate_dataset/uml/uml_interim_generate_dataset.py',
+            script='scripts/build_final_dataset/uml/generate_instructions.py',
             env='text',
             description='构建UML数据集'
         ))

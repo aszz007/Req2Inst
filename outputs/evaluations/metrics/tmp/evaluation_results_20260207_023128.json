@@ -1,0 +1,309 @@
+{
+  "general_expert_qwen235B": {
+    "expert_name": "general_expert_dataset_qwen235B",
+    "timestamp": "2026-02-07 02:31:28",
+    "total_samples": 20,
+    "valid_samples": 20,
+    "generation_quality": {
+      "bleu": 0.2875259549130785,
+      "rouge1": 0.34921237987813264,
+      "rouge2": 0.2108345163482382,
+      "rougeL": 0.3261228089646762,
+      "meteor": 0.45973901903717146
+    },
+    "format_metrics": {
+      "total_samples": 20,
+      "valid_count": 20,
+      "valid_rate": 1.0,
+      "definition_present": 1.0,
+      "definition_has_content": 1.0,
+      "definition_in_this_task": 1.0,
+      "emphasis_present": 1.0,
+      "emphasis_valid": 1.0,
+      "avoid_present": 1.0,
+      "avoid_valid": 1.0,
+      "avg_format_score": 1.0,
+      "detailed_results": [
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        }
+      ]
+    },
+    "statistical_metrics": {
+      "char_length": {
+        "mean": 224.95,
+        "min": 167,
+        "max": 363,
+        "median": 225
+      },
+      "word_count": {
+        "mean": 31.7,
+        "min": 24,
+        "max": 56,
+        "median": 31
+      },
+      "line_count": {
+        "mean": 3.0,
+        "min": 3,
+        "max": 3,
+        "median": 3
+      }
+    },
+    "validation_summary": {
+      "total": 20,
+      "passed": 20,
+      "failed": 0,
+      "pass_rate": 1.0,
+      "definition_present_rate": 1.0,
+      "definition_has_content_rate": 1.0,
+      "definition_starts_with_in_this_task_rate": 1.0,
+      "emphasis_present_rate": 1.0,
+      "emphasis_valid_rate": 1.0,
+      "avoid_present_rate": 1.0,
+      "avoid_valid_rate": 1.0,
+      "avg_format_score": 1.0,
+      "min_format_score": 1.0,
+      "max_format_score": 1.0,
+      "total_errors": 0,
+      "total_warnings": 0,
+      "common_errors": {}
+    }
+  }
+}

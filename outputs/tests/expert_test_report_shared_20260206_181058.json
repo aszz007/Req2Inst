@@ -1,0 +1,32 @@
+{
+  "mode": "shared",
+  "total_time": 17.07677936553955,
+  "experts_tested": 4,
+  "all_passed": true,
+  "results": [
+    {
+      "expert": "text",
+      "valid": true,
+      "instruction": "Definition: Definition\nEmphasis & Caution: -\nThings to Avoid: -",
+      "time": 0.8575456142425537
+    },
+    {
+      "expert": "image",
+      "valid": true,
+      "instruction": "Definition: In this task, draw bounding boxes around all visible objects in the image.\nEmphasis & Caution: Focus on accurately identifying and labeling all foreground objects.\nThings to Avoid: Do not annotate background elements or partial objects.",
+      "time": 0.44459962844848633
+    },
+    {
+      "expert": "uml",
+      "valid": true,
+      "instruction": "Definition: In this task, implement the system workflow with specified actors interacting with defined use cases.\nEmphasis & Caution: Ensure all mandatory steps and conditional extensions are properly implemented.\nThings to Avoid: Do not focus on UI positioning or visual layout. Avoid implementing frontend styling.",
+      "time": 0.5193467140197754
+    },
+    {
+      "expert": "general",
+      "valid": true,
+      "instruction": "Definition: Definition\nEmphasis & Caution: -\nThings to Avoid: -",
+      "time": 0.3936440944671631
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "image_expert": {
+    "bleu": 0.5061644210807607,
+    "rouge_l": 0.7003393370713477,
+    "meteor": 0.6625065448064295,
+    "format_score": 1.0,
+    "valid_rate": 1.0,
+    "avg_length": 206.98
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "mode": "shared",
+  "total_time": 15.252256631851196,
+  "experts_tested": 4,
+  "all_passed": true,
+  "results": [
+    {
+      "expert": "text",
+      "valid": true,
+      "instruction": "Definition: In this task, implement and test the specified requirement.\nEmphasis & Caution: Ensure thorough testing and validation of all functionality.\nThings to Avoid: Do not skip error handling or edge case testing.",
+      "time": 0.07820677757263184
+    },
+    {
+      "expert": "image",
+      "valid": true,
+      "instruction": "Definition: In this task, draw bounding boxes around all visible objects in the image.\nEmphasis & Caution: Focus on accurately identifying and labeling all foreground objects.\nThings to Avoid: Do not annotate background elements or partial objects.",
+      "time": 0.07203960418701172
+    },
+    {
+      "expert": "uml",
+      "valid": true,
+      "instruction": "Definition: In this task, implement the system workflow with specified actors interacting with defined use cases.\nEmphasis & Caution: Ensure all mandatory steps and conditional extensions are properly implemented.\nThings to Avoid: Do not focus on UI positioning or visual layout. Avoid implementing frontend styling.",
+      "time": 0.07679009437561035
+    },
+    {
+      "expert": "general",
+      "valid": true,
+      "instruction": "Definition: In this task, implement or test the specified requirement.\nEmphasis & Caution: Ensure comprehensive testing and validation of all functionality.\nThings to Avoid: Do not skip error handling or edge case validation.",
+      "time": 0.07835912704467773
+    }
+  ]
+}

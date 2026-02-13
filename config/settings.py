@@ -160,7 +160,7 @@ class PathConfig:
         self.IMAGE_DATASET_CSV = self.IMAGE_DATASET_DIR / "image_dataset.csv"
 
         # UML数据集（单一版本 - 1500条数据）
-        self.UML_DATASET_CSV = self.UML_DATASET_DIR / "uml_dataset_qwen3_v3.csv"
+        self.UML_DATASET_CSV = self.UML_DATASET_DIR / "uml_dataset.csv"
 
         # General数据集（不需要单独文件，动态加载text+image+uml）
         # self.GENERAL_DATASET_CSV - 已移除，General专家直接从三个数据源加载

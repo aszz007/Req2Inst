@@ -1,0 +1,129 @@
+{
+  "uml_expert_qwen3": {
+    "expert_name": "uml_expert_dataset_qwen3",
+    "timestamp": "2026-02-08 06:09:47",
+    "total_samples": 5,
+    "valid_samples": 5,
+    "generation_quality": {
+      "bleu": 0.014521065263740628,
+      "rouge1": 0.24482918630194442,
+      "rouge2": 0.11964223664629407,
+      "rougeL": 0.19935664634743588,
+      "meteor": 0.15894046536621137
+    },
+    "format_metrics": {
+      "total_samples": 5,
+      "valid_count": 5,
+      "valid_rate": 1.0,
+      "definition_present": 1.0,
+      "definition_has_content": 1.0,
+      "definition_in_this_task": 1.0,
+      "emphasis_present": 1.0,
+      "emphasis_valid": 1.0,
+      "avoid_present": 1.0,
+      "avoid_valid": 1.0,
+      "avg_format_score": 1.0,
+      "detailed_results": [
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        },
+        {
+          "is_valid": true,
+          "has_definition": true,
+          "definition_has_content": true,
+          "definition_starts_with_in_this_task": true,
+          "has_emphasis": true,
+          "emphasis_is_valid": true,
+          "has_avoid": true,
+          "avoid_is_valid": true,
+          "format_score": 1.0,
+          "errors": []
+        }
+      ]
+    },
+    "statistical_metrics": {
+      "char_length": {
+        "mean": 316.0,
+        "min": 316,
+        "max": 316,
+        "median": 316
+      },
+      "word_count": {
+        "mean": 45.0,
+        "min": 45,
+        "max": 45,
+        "median": 45
+      },
+      "line_count": {
+        "mean": 3.0,
+        "min": 3,
+        "max": 3,
+        "median": 3
+      }
+    },
+    "validation_summary": {
+      "total": 5,
+      "passed": 5,
+      "failed": 0,
+      "pass_rate": 1.0,
+      "definition_present_rate": 1.0,
+      "definition_has_content_rate": 1.0,
+      "definition_starts_with_in_this_task_rate": 1.0,
+      "emphasis_present_rate": 1.0,
+      "emphasis_valid_rate": 1.0,
+      "avoid_present_rate": 1.0,
+      "avoid_valid_rate": 1.0,
+      "avg_format_score": 1.0,
+      "min_format_score": 1.0,
+      "max_format_score": 1.0,
+      "total_errors": 0,
+      "total_warnings": 0,
+      "common_errors": {}
+    }
+  }
+}

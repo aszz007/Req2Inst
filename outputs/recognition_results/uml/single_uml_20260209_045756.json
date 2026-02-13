@@ -1,0 +1,7 @@
+{
+  "description": "{\"actors\": [{\"name\": \"Customer\", \"position\": \"left\"}, {\"name\": \"Bank\", \"position\": \"right\"}], \"use_cases\": [{\"name\": \"Withdraw current\", \"description\": \"Customer withdraws money from current account.\"}, {\"name\": \"Withdraw deposit\", \"description\": \"Customer withdraws money from deposit account.\"}, {\"name\": \"Withdraw foreign\", \"description\": \"Customer withdraws foreign currency.\"}, {\"name\": \"Withdraw cash\", \"description\": \"General use case for withdrawing cash from ATM.\"}, {\"name\": \"Deposit\", \"description\": \"Customer deposits money into account.\"}, {\"name\": \"Transfer cash\", \"description\": \"Customer transfers money to another account.\"}, {\"name\": \"Check funds sufficient\", \"description\": \"System checks if customer has sufficient funds for transaction.\"}, {\"name\": \"Valid customer\", \"description\": \"System verifies if customer is valid and authenticated.\"}], \"system_boundary\": {\"name\": \"ATM system\", \"is_present\": true}, \"relationships\": [{\"type\": \"association\", \"from\": \"Customer\", \"to\": \"Withdraw current\", \"description\": \"Customer initiates withdrawal from current account.\"}], \"overall_description\": \"\", \"success\": true}",
+  "success": true,
+  "image_path": "data\\raw\\uml\\mdpi_uml\\3bbkL-copia.png",
+  "image_name": "3bbkL-copia.png",
+  "model_version": "qwen3"
+}
