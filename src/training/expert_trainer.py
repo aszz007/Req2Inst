@@ -24,7 +24,8 @@ from transformers import (
     Trainer,
     DataCollatorForLanguageModeling,
     BitsAndBytesConfig,
-    TrainerCallback
+    TrainerCallback,
+    EarlyStoppingCallback
 )
 from peft import (
     LoraConfig,
@@ -530,6 +531,56 @@ class ExpertTrainer:
             logger.info(f"有效批量大小: {batch_size * gradient_accumulation_steps}")
             logger.info(f"数据加载器工作进程: {dataloader_num_workers}")
 
+            # ===== 根据数据量和expert类型自适应训练配置 =====
+            train_size = len(self.train_dataset)
+            logger.info(f"训练集规模: {train_size}条")
+
+            # 早停patience配置（根据数据量）
+            # Text: 2400条 -> patience=3
+            # Image: 500条 -> patience=5（数据少，需要更多耐心）
+            # UML: 1500条 -> patience=4
+            # General: 4400条 -> patience=3
+            if self.expert_type == 'image':
+                early_stopping_patience = 5
+                warmup_ratio = 0.08
+                max_grad_norm = 1.0
+            elif self.expert_type == 'uml':
+                early_stopping_patience = 4
+                warmup_ratio = 0.1
+                max_grad_norm = 0.8
+            else:  # text or general
+                early_stopping_patience = 3
+                warmup_ratio = 0.05
+                max_grad_norm = 1.0
+
+            # 验证频率配置（根据数据量和expert类型）
+            # 数据少的expert使用epoch验证，数据多的使用steps验证
+            if self.expert_type == 'image':
+                eval_strategy_value = "steps"
+                eval_steps = 25
+                save_strategy_value = "steps"
+                save_steps = 25
+            elif self.expert_type == 'uml':
+                eval_strategy_value = "steps"
+                eval_steps = 30
+                save_strategy_value = "steps"
+                save_steps = 30
+            else:  # text or general (大数据集)
+                eval_strategy_value = "steps"
+                eval_steps = 50
+                save_strategy_value = "steps"
+                save_steps = 50
+
+            logger.info("=" * 60)
+            logger.info("自适应训练配置:")
+            logger.info(f"  早停patience: {early_stopping_patience}")
+            logger.info(f"  验证策略: {eval_strategy_value}")
+            if eval_strategy_value == "steps":
+                logger.info(f"  验证步数: {eval_steps}")
+            logger.info(f"  Warmup比例: {warmup_ratio}")
+            logger.info(f"  梯度裁剪阈值: {max_grad_norm}")
+            logger.info("=" * 60)
+
             # 检测transformers版本以使用正确的参数名
             use_eval_strategy = _should_use_eval_strategy()
 
@@ -542,11 +593,14 @@ class ExpertTrainer:
                 "gradient_accumulation_steps": gradient_accumulation_steps,
                 "learning_rate": self.train_cfg.learning_rate,
                 "weight_decay": self.train_cfg.weight_decay,
-                "warmup_ratio": self.train_cfg.warmup_ratio,
+                "warmup_ratio": warmup_ratio,
+                "lr_scheduler_type": "cosine",
+                "max_grad_norm": max_grad_norm,
                 "logging_dir": str(self.path_cfg.TRAINING_LOGS_DIR / f"{self.expert_type}_expert"),
                 "logging_steps": logging_steps,
-                "save_strategy": "epoch",
-                "save_total_limit": 2,
+                "save_strategy": save_strategy_value,
+                "save_steps": save_steps if save_strategy_value == "steps" else None,
+                "save_total_limit": 3,
                 "load_best_model_at_end": True,
                 "metric_for_best_model": "eval_loss",
                 "greater_is_better": False,
@@ -569,9 +623,11 @@ class ExpertTrainer:
 
             # 根据transformers版本选择正确的参数名
             if use_eval_strategy:
-                training_args_dict["eval_strategy"] = "epoch"
+                training_args_dict["eval_strategy"] = eval_strategy_value
+                training_args_dict["eval_steps"] = eval_steps if eval_strategy_value == "steps" else None
             else:
-                training_args_dict["evaluation_strategy"] = "epoch"
+                training_args_dict["evaluation_strategy"] = eval_strategy_value
+                training_args_dict["eval_steps"] = eval_steps if eval_strategy_value == "steps" else None
 
             training_args = TrainingArguments(**training_args_dict)
 
@@ -639,13 +695,18 @@ class ExpertTrainer:
             # ===== 调试输出结束 =====
 
             # 创建Trainer
+            early_stopping_callback = EarlyStoppingCallback(
+                early_stopping_patience=early_stopping_patience,
+                early_stopping_threshold=0.0001
+            )
+
             trainer = Trainer(
                 model=self.model,
                 args=training_args,
                 train_dataset=self.train_dataset,
                 eval_dataset=self.val_dataset,
                 data_collator=data_collator,
-                callbacks=[self.history_callback],
+                callbacks=[self.history_callback, early_stopping_callback],
             )
 
             # 执行训练
@@ -689,6 +750,15 @@ class ExpertTrainer:
 
             logger.info(f"训练历史已保存至: {history_file}")
             logger.info(f"共记录 {len(training_history)} 个训练步骤的数据")
+
+            # ===== 生成训练曲线可视化 =====
+            logger.info("生成训练曲线可视化...")
+            try:
+                self._plot_training_curves(training_history, self.expert_type)
+                logger.info("训练曲线可视化已生成")
+            except Exception as e:
+                logger.warning(f"训练曲线可视化失败: {e}")
+                logger.warning("继续执行，但未生成可视化图表")
 
             logger.info(f"LoRA权重已保存至: {self.output_dir}")
             logger.info(f"训练指标已保存至: {metrics_file}")
@@ -757,6 +827,101 @@ class ExpertTrainer:
             'val_samples': len(self.val_dataset) if self.val_dataset else 0,
             'use_4bit': self.use_4bit
         }
+
+    def _plot_training_curves(self, training_history: List[Dict], expert_type: str):
+        """
+        生成训练曲线可视化图表
+
+        Args:
+            training_history: 训练历史记录
+            expert_type: 专家类型
+        """
+        try:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+        except ImportError:
+            logger.warning("matplotlib未安装，跳过可视化")
+            return
+
+        # 创建输出目录
+        curves_dir = self.path_cfg.PROJECT_ROOT / 'outputs' / 'training_curves'
+        curves_dir.mkdir(parents=True, exist_ok=True)
+
+        # 提取数据
+        steps = []
+        losses = []
+        eval_losses = []
+        grad_norms = []
+        learning_rates = []
+
+        for entry in training_history:
+            step = entry.get('step', 0)
+            steps.append(step)
+
+            if 'loss' in entry:
+                losses.append(entry['loss'])
+
+            if 'eval_loss' in entry:
+                eval_losses.append(entry['eval_loss'])
+
+            if 'grad_norm' in entry:
+                grad_norms.append(entry['grad_norm'])
+
+            if 'learning_rate' in entry:
+                learning_rates.append(entry['learning_rate'])
+
+        # 创建图表
+        fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+        fig.suptitle(f'Training Curves - {expert_type.upper()} Expert', fontsize=16, fontweight='bold')
+
+        # 1. Training Loss
+        if losses:
+            loss_steps = steps[:len(losses)]
+            axes[0, 0].plot(loss_steps, losses, 'b-', linewidth=1.5, alpha=0.7)
+            axes[0, 0].set_xlabel('Step')
+            axes[0, 0].set_ylabel('Loss')
+            axes[0, 0].set_title('Training Loss')
+            axes[0, 0].grid(True, alpha=0.3)
+
+        # 2. Eval Loss
+        if eval_losses:
+            eval_steps_list = [entry['step'] for entry in training_history if 'eval_loss' in entry]
+            axes[0, 1].plot(eval_steps_list, eval_losses, 'r-', linewidth=2, marker='o', markersize=4)
+            axes[0, 1].set_xlabel('Step')
+            axes[0, 1].set_ylabel('Eval Loss')
+            axes[0, 1].set_title('Validation Loss')
+            axes[0, 1].grid(True, alpha=0.3)
+
+        # 3. Gradient Norm
+        if grad_norms:
+            grad_steps = steps[:len(grad_norms)]
+            axes[1, 0].plot(grad_steps, grad_norms, 'g-', linewidth=1, alpha=0.6)
+            axes[1, 0].set_xlabel('Step')
+            axes[1, 0].set_ylabel('Gradient Norm')
+            axes[1, 0].set_title('Gradient Norm')
+            axes[1, 0].grid(True, alpha=0.3)
+
+        # 4. Learning Rate
+        if learning_rates:
+            lr_steps = steps[:len(learning_rates)]
+            axes[1, 1].plot(lr_steps, learning_rates, 'm-', linewidth=1.5)
+            axes[1, 1].set_xlabel('Step')
+            axes[1, 1].set_ylabel('Learning Rate')
+            axes[1, 1].set_title('Learning Rate Schedule')
+            axes[1, 1].grid(True, alpha=0.3)
+            axes[1, 1].ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+
+        plt.tight_layout()
+
+        # 保存图表
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        plot_path = curves_dir / f'{expert_type}_expert_training_curves_{timestamp}.png'
+        plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+        plt.close()
+
+        logger.info(f"训练曲线已保存至: {plot_path}")
 
 
 # 测试代码
