@@ -421,15 +421,6 @@ class TextDatasetLoader:
         logger.info(f"文本数据集总计: {len(all_data)}条")
         return all_data
 
-    def load(self) -> List[Dict]:
-        """
-        加载数据（别名方法，用于兼容性）
-
-        Returns:
-            数据列表
-        """
-        return self.load_csv_files()
-
 
 class ImageDatasetLoader:
     """图像数据集加载器 - 优化版"""
@@ -525,15 +516,6 @@ class ImageDatasetLoader:
         logger.info(f"图像数据集加载完成, 数据量: {len(all_data)}")
 
         return all_data
-
-    def load(self) -> List[Dict]:
-        """
-        加载数据（别名方法，用于兼容性）
-
-        Returns:
-            数据列表
-        """
-        return self.load_csv_file()
 
 
 class UMLDatasetLoader:
@@ -662,15 +644,6 @@ class UMLDatasetLoader:
             import traceback
             logger.error(traceback.format_exc())
             return []
-
-    def load(self) -> List[Dict]:
-        """
-        加载数据（别名方法，用于兼容性）
-
-        Returns:
-            数据列表
-        """
-        return self.load_csv_file()
 
 
 class GeneralDatasetLoader:
@@ -825,16 +798,16 @@ def split_dataset(
 
 
 def split_dataset_for_expert(
-    expert_type: str,
     data: List[Dict],
+    expert_type: str,
     seed: int = 42
 ) -> Tuple[List[Dict], List[Dict], List[Dict]]:
     """
     根据专家类型智能划分数据集
 
     Args:
-        expert_type: 'text', 'image', 'uml', 'general'
         data: 原始数据
+        expert_type: 'text', 'image', 'uml', 'general'
         seed: 随机种子
 
     Returns:
@@ -901,7 +874,7 @@ if __name__ == "__main__":
         print(f"✓ 数据加载成功")
         print(f"  数据量: {len(text_data)}条")
         print(f"  示例来源: {text_data[0]['source']}")
-        train, val, test = split_dataset_for_expert('text', text_data)
+        train, val, test = split_dataset_for_expert(text_data, 'text')
         print(f"  划分结果: 训练{len(train)}, 验证{len(val)}, 测试{len(test)}")
     else:
         print("✗ 数据加载失败")
@@ -915,7 +888,7 @@ if __name__ == "__main__":
         print(f"✓ 数据加载成功")
         print(f"  数据量: {len(image_data)}条")
         print(f"  示例来源: {image_data[0]['source']}")
-        train, val, test = split_dataset_for_expert('image', image_data)
+        train, val, test = split_dataset_for_expert(image_data, 'image')
         print(f"  划分结果: 训练{len(train)}, 验证{len(val)}, 测试{len(test)}")
     else:
         print("✗ 数据加载失败")
@@ -929,7 +902,7 @@ if __name__ == "__main__":
         print(f"✓ 数据加载成功")
         print(f"  数据量: {len(uml_data)}条")
         print(f"  示例来源: {uml_data[0]['source']}")
-        train, val, test = split_dataset_for_expert('uml', uml_data)
+        train, val, test = split_dataset_for_expert(uml_data, 'uml')
         print(f"  划分结果: 训练{len(train)}, 验证{len(val)}, 测试{len(test)}")
     else:
         print("✗ 数据加载失败")

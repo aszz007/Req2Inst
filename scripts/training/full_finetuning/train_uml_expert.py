@@ -117,10 +117,10 @@ def main():
     # 1. 加载数据
     logger.info("加载UML数据集...")
     data_loader = UMLDatasetLoader()
-    raw_data = data_loader.load()
+    raw_data = data_loader.load_csv_file()
 
     # 划分数据集
-    train_data, val_data, _ = split_dataset_for_expert('uml', raw_data)
+    train_data, val_data, _ = split_dataset_for_expert(raw_data, 'uml')
     logger.info(f"训练样本: {len(train_data)}, 验证样本: {len(val_data)}")
 
     # 2. 加载模型和分词器

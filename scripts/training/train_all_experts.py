@@ -1,35 +1,35 @@
 """
-One-click Training Script for All Experts
+一键训练所有专家脚本
 
-Sequentially executes all training tasks:
-  - Session 1: Prompt Tuning (4 experts, ~4 hours)
-  - Session 2: P-Tuning v2 (4 experts, ~5 hours)
-  - Session 3: Full Fine-tuning (4 experts, ~7 hours)
+按顺序执行所有训练任务：
+  - 第1轮：Prompt Tuning (4个专家，约4小时)
+  - 第2轮：P-Tuning v2 (4个专家，约5小时)
+  - 第3轮：准全参数微调 (4个专家，约7小时)
 
-Total: 12 models, estimated ~16 hours
+总计：12个模型，预计约16小时
 
-Usage:
+使用方法：
   python scripts/training/train_all_experts.py
 
-  Optional arguments:
+  可选参数：
     --method {prompt_tuning,p_tuning,full_finetuning,all}
-             Train specific method only (default: all)
+             仅训练指定方法（默认：all）
     --expert {text,image,uml,general,all}
-             Train specific expert only (default: all)
+             仅训练指定专家（默认：all）
 
-Examples:
-  # Train all methods and experts
+示例：
+  # 训练所有方法和专家
   python scripts/training/train_all_experts.py
 
-  # Train only Prompt Tuning
+  # 仅训练Prompt Tuning
   python scripts/training/train_all_experts.py --method prompt_tuning
 
-  # Train only Text Expert across all methods
+  # 仅训练文本专家（所有方法）
   python scripts/training/train_all_experts.py --expert text
 
-Environment: instruction_generator (transformers==4.57.0)
-Author: Training Pipeline System
-Date: 2025-02-15
+环境：instruction_generator (transformers==4.57.0)
+作者：Training Pipeline System
+日期：2025-02-15
 """
 
 import sys
@@ -75,50 +75,50 @@ ESTIMATED_TIME = {
 
 
 def print_header():
-    """Print training header"""
+    """打印训练标题"""
     print("\n" + "=" * 80)
-    print(" " * 20 + "ONE-CLICK TRAINING FOR ALL EXPERTS")
+    print(" " * 22 + "一键训练所有专家")
     print("=" * 80)
-    print("\nThis script will train 12 models sequentially:")
-    print("  - Session 1: Prompt Tuning (4 experts, ~4 hours)")
-    print("  - Session 2: P-Tuning v2 (4 experts, ~5 hours)")
-    print("  - Session 3: Full Fine-tuning (4 experts, ~7 hours)")
-    print("\nTotal estimated time: ~16 hours")
+    print("\n本脚本将按顺序训练12个模型：")
+    print("  - 第1轮：Prompt Tuning (4个专家，约4小时)")
+    print("  - 第2轮：P-Tuning v2 (4个专家，约5小时)")
+    print("  - 第3轮：准全参数微调 (4个专家，约7小时)")
+    print("\n总预计时间：约16小时")
     print("=" * 80 + "\n")
 
 
 def print_session_header(session_num, method_name, total_time):
-    """Print session header"""
+    """打印训练轮次标题"""
     print("\n" + "=" * 80)
-    print(f"SESSION {session_num}: {method_name}")
-    print(f"Estimated time: {total_time:.1f} hours")
+    print(f"第{session_num}轮：{method_name}")
+    print(f"预计耗时：{total_time:.1f}小时")
     print("=" * 80 + "\n")
 
 
 def format_time(seconds):
-    """Format seconds to readable time string"""
+    """将秒数格式化为可读的时间字符串"""
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     secs = int(seconds % 60)
 
     if hours > 0:
-        return f"{hours}h {minutes}m {secs}s"
+        return f"{hours}小时{minutes}分{secs}秒"
     elif minutes > 0:
-        return f"{minutes}m {secs}s"
+        return f"{minutes}分{secs}秒"
     else:
-        return f"{secs}s"
+        return f"{secs}秒"
 
 
 def run_training_task(method, expert, script_path):
-    """Run a single training task"""
+    """执行单个训练任务"""
     full_path = PROJECT_ROOT / script_path
 
     if not full_path.exists():
-        print(f"ERROR: Script not found: {full_path}")
+        print(f"错误：脚本未找到: {full_path}")
         return False
 
-    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Starting: {method}/{expert}")
-    print(f"Script: {script_path}")
+    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 开始训练: {method}/{expert}")
+    print(f"脚本: {script_path}")
     print("-" * 80)
 
     start_time = time.time()
@@ -137,39 +137,39 @@ def run_training_task(method, expert, script_path):
 
         elapsed = time.time() - start_time
         print("-" * 80)
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Completed: {method}/{expert}")
-        print(f"Time taken: {format_time(elapsed)}")
-        print(f"Status: SUCCESS")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 完成: {method}/{expert}")
+        print(f"耗时: {format_time(elapsed)}")
+        print(f"状态: 成功")
 
         return True
 
     except subprocess.CalledProcessError as e:
         elapsed = time.time() - start_time
         print("-" * 80)
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Failed: {method}/{expert}")
-        print(f"Time taken: {format_time(elapsed)}")
-        print(f"Status: FAILED")
-        print(f"Error code: {e.returncode}")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 失败: {method}/{expert}")
+        print(f"耗时: {format_time(elapsed)}")
+        print(f"状态: 失败")
+        print(f"错误码: {e.returncode}")
 
         return False
 
     except KeyboardInterrupt:
         elapsed = time.time() - start_time
         print("\n" + "-" * 80)
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Interrupted: {method}/{expert}")
-        print(f"Time taken: {format_time(elapsed)}")
-        print(f"Status: INTERRUPTED BY USER")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 中断: {method}/{expert}")
+        print(f"耗时: {format_time(elapsed)}")
+        print(f"状态: 用户中断")
 
         raise
 
 
 def main():
-    """Main training pipeline"""
+    """主训练流程"""
     parser = argparse.ArgumentParser(
-        description='One-click training for all experts',
+        description='一键训练所有专家',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
+示例：
   python scripts/training/train_all_experts.py
   python scripts/training/train_all_experts.py --method prompt_tuning
   python scripts/training/train_all_experts.py --expert text
@@ -180,14 +180,14 @@ Examples:
         '--method',
         choices=['prompt_tuning', 'p_tuning', 'full_finetuning', 'all'],
         default='all',
-        help='Train specific method only (default: all)'
+        help='仅训练指定方法（默认：all）'
     )
 
     parser.add_argument(
         '--expert',
         choices=['text', 'image', 'uml', 'general', 'all'],
         default='all',
-        help='Train specific expert only (default: all)'
+        help='仅训练指定专家（默认：all）'
     )
 
     args = parser.parse_args()
@@ -211,9 +211,9 @@ Examples:
         session_num = 1
         for method in methods_to_train:
             method_display = {
-                'prompt_tuning': 'Prompt Tuning',
-                'p_tuning': 'P-Tuning v2',
-                'full_finetuning': 'Full Fine-tuning'
+                'prompt_tuning': 'Prompt Tuning（软提示）',
+                'p_tuning': 'P-Tuning v2（前缀微调）',
+                'full_finetuning': '准全参数微调'
             }[method]
 
             total_method_time = sum(
@@ -236,31 +236,31 @@ Examples:
 
                 if not success:
                     print("\n" + "=" * 80)
-                    print("TRAINING FAILED!")
+                    print("训练失败！")
                     print("=" * 80)
-                    print(f"Failed task: {method}/{expert}")
-                    print("Stopping execution.")
+                    print(f"失败任务: {method}/{expert}")
+                    print("停止执行。")
                     print("=" * 80 + "\n")
                     return 1
 
     except KeyboardInterrupt:
         print("\n\n" + "=" * 80)
-        print("TRAINING INTERRUPTED BY USER")
+        print("训练被用户中断")
         print("=" * 80 + "\n")
         return 1
 
     overall_elapsed = time.time() - overall_start
 
     print("\n\n" + "=" * 80)
-    print(" " * 25 + "TRAINING COMPLETED!")
+    print(" " * 28 + "训练完成！")
     print("=" * 80)
-    print(f"\nTotal time: {format_time(overall_elapsed)}")
-    print(f"Tasks completed: {len(results)}/{len(results)}")
-    print("\nResults:")
+    print(f"\n总耗时: {format_time(overall_elapsed)}")
+    print(f"已完成任务: {len(results)}/{len(results)}")
+    print("\n结果：")
     print("-" * 80)
 
     for result in results:
-        status = "SUCCESS" if result['success'] else "FAILED"
+        status = "成功" if result['success'] else "失败"
         print(f"  {result['method']:20s} / {result['expert']:10s} : {status}")
 
     print("=" * 80 + "\n")
