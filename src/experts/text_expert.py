@@ -123,13 +123,13 @@ class TextExpert(BaseExpert):
             logger.error(f"指令生成失败: {e}")
             return self._fallback_generation(input_data)
 
-    def batch_generate_instruction(self, input_data_list: list, batch_size: int = 4) -> list:
+    def batch_generate_instruction(self, input_data_list: list, batch_size: int = 8) -> list:
         """
         批量生成文本众包指令（提高GPU利用率）
 
         Args:
             input_data_list: 文本需求列表
-            batch_size: 批处理大小
+            batch_size: 批处理大小（默认8，适合RTX 4090 24GB）
 
         Returns:
             list: 生成的指令列表
@@ -146,6 +146,14 @@ class TextExpert(BaseExpert):
             # 构建所有prompts
             prompts = [TextInstructionTemplate.build_prompt(data) for data in input_data_list]
 
+            # 输出前3个样本的详细信息
+            for i in range(min(3, len(input_data_list))):
+                logger.info("=" * 80)
+                logger.info(f"[样本 {i+1}/{len(input_data_list)}] 输入需求:")
+                logger.info("-" * 80)
+                logger.info(input_data_list[i][:200] + ("..." if len(input_data_list[i]) > 200 else ""))
+                logger.info("=" * 80)
+
             # 批量生成
             infer_cfg = get_inference_config()
             instructions = self._generate_batch_with_model(
@@ -159,6 +167,14 @@ class TextExpert(BaseExpert):
                 start_index=0,
                 verbose=True
             )
+
+            # 输出前3个样本的生成结果
+            for i in range(min(3, len(instructions))):
+                logger.info("=" * 80)
+                logger.info(f"[样本 {i+1}/{len(input_data_list)}] 生成的指令:")
+                logger.info("-" * 80)
+                logger.info(instructions[i])
+                logger.info("=" * 80)
 
             # 验证每个输出
             validated_instructions = []

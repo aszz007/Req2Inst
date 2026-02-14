@@ -166,7 +166,7 @@ class ImageExpert(BaseExpert):
 
         Args:
             input_data_list: 图像描述数据列表
-            batch_size: 批处理大小
+            batch_size: 批处理大小（默认8，适合RTX 4090 24GB）
 
         Returns:
             list: 生成的指令列表
@@ -196,6 +196,14 @@ class ImageExpert(BaseExpert):
                 start_index=0,
                 verbose=True
             )
+
+            # 输出前3个样本的生成结果
+            for i in range(min(3, len(instructions))):
+                logger.info("=" * 80)
+                logger.info(f"[样本 {i+1}/{len(input_data_list)}] 生成的指令:")
+                logger.info("-" * 80)
+                logger.info(instructions[i])
+                logger.info("=" * 80)
 
             # 验证每个输出
             validated_instructions = []

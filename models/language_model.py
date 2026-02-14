@@ -15,6 +15,7 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig
 )
+from tqdm import tqdm
 
 # 尝试导入流式生成支持（仅qwen_text环境需要）
 try:
@@ -427,6 +428,11 @@ class LanguageModel:
         logger.info(f"批量推理: {len(prompts)}条样本, batch_size={batch_size}")
 
         results = []
+        num_batches = (len(prompts) + batch_size - 1) // batch_size
+
+        # 使用tqdm显示进度条
+        pbar = tqdm(total=len(prompts), desc="批量生成", unit="样本", ncols=100)
+
         for i in range(0, len(prompts), batch_size):
             batch_prompts = prompts[i:i+batch_size]
 
@@ -486,11 +492,16 @@ class LanguageModel:
                     generated_text = self._truncate_after_three_parts(generated_text)
                     results.append(generated_text)
 
+                # 更新进度条
+                pbar.update(len(batch_prompts))
+
             except Exception as e:
-                logger.error(f"批量生成失败 (batch {i//batch_size}): {e}")
+                logger.error(f"批量生成失败 (batch {i//batch_size + 1}/{num_batches}): {e}")
                 # 失败时返回空字符串
                 results.extend([""] * len(batch_prompts))
+                pbar.update(len(batch_prompts))
 
+        pbar.close()
         return results
 
     def _clean_generated_text(self, text: str) -> str:
@@ -756,4 +767,3 @@ if __name__ == "__main__":
         print("LoRA未找到（可能还未训练）")
 
     print("\n测试完成！")
-
