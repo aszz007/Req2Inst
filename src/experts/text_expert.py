@@ -18,7 +18,7 @@ from typing import Optional
 
 from src.experts.base_expert import BaseExpert
 from models.prompt_templates.text_template import TextInstructionTemplate
-from config.settings import get_path_config
+from config.settings import get_path_config, get_inference_config
 from src.utils.logger import get_logger
 
 logger = get_logger('experts.text')
@@ -87,13 +87,14 @@ class TextExpert(BaseExpert):
             logger.debug(f"生成指令 - 输入需求: {input_data[:100]}...")
 
             # 调用模型生成
+            infer_cfg = get_inference_config()
             instruction = self._generate_with_model(
                 prompt=prompt,
-                max_new_tokens=2048,
-                temperature=0.7,  # 高多样性,适合处理多样化的文本需求
-                top_p=0.9,       # 提高采样范围
-                top_k=50,        # 提高候选词数量
-                repetition_penalty=1.2  # 惩罚重复
+                max_new_tokens=infer_cfg.max_new_tokens,
+                temperature=infer_cfg.temperature,
+                top_p=infer_cfg.top_p,
+                top_k=infer_cfg.top_k,
+                repetition_penalty=infer_cfg.repetition_penalty
             )
 
             # 输出模型原始输出用于调试

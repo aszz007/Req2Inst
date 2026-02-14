@@ -489,6 +489,26 @@ class TrainingConfig4090:
     adam_epsilon = 1e-8
 
 @dataclass
+class InferenceConfig:
+    """专家推理生成参数配置 - 统一管理所有专家的推理生成参数"""
+
+    # 温度参数（0.3适合指令生成：稳定输出同时保留必要多样性）
+    temperature: float = 0.3
+
+    # Nucleus sampling
+    top_p: float = 0.85
+
+    # Top-k sampling
+    top_k: int = 40
+
+    # 重复惩罚
+    repetition_penalty: float = 1.15
+
+    # 最大生成token数（三段式指令通常不超过200 token，512为安全上限）
+    max_new_tokens: int = 512
+
+
+@dataclass
 class DeviceConfig:
     """设备配置"""
 
@@ -677,6 +697,7 @@ class DeviceConfig:
 _path_config = None
 _lora_config = None
 _training_config = None
+_inference_config = None
 _device_config = None
 _model_config = None  # 文本模型选择
 _vision_model_config = None  # 视觉模型选择
@@ -712,6 +733,14 @@ def get_training_config() -> TrainingConfig:
     if _training_config is None:
         _training_config = TrainingConfig()
     return _training_config
+
+
+def get_inference_config() -> InferenceConfig:
+    """获取推理生成参数配置单例"""
+    global _inference_config
+    if _inference_config is None:
+        _inference_config = InferenceConfig()
+    return _inference_config
 
 
 def get_device_config() -> DeviceConfig:

@@ -23,7 +23,7 @@ from typing import Optional, Union
 
 from src.experts.base_expert import BaseExpert
 from models.prompt_templates.image_template import ImageInstructionTemplate
-from config.settings import get_path_config
+from config.settings import get_path_config, get_inference_config
 from src.utils.logger import get_logger
 
 logger = get_logger('experts.image')
@@ -124,13 +124,14 @@ class ImageExpert(BaseExpert):
             logger.debug(f"生成指令 - 输入数据类型: {type(input_data).__name__}")
 
             # 调用模型生成
+            infer_cfg = get_inference_config()
             instruction = self._generate_with_model(
                 prompt=prompt,
-                max_new_tokens=2048,
-                temperature=0.5,  # 中等稳定性,图像标注格式相对固定
-                top_p=0.85,       # 适中的采样范围
-                top_k=40,         # 适中的候选词数量
-                repetition_penalty=1.15  # 中等惩罚
+                max_new_tokens=infer_cfg.max_new_tokens,
+                temperature=infer_cfg.temperature,
+                top_p=infer_cfg.top_p,
+                top_k=infer_cfg.top_k,
+                repetition_penalty=infer_cfg.repetition_penalty
             )
 
             # 输出模型原始输出用于调试

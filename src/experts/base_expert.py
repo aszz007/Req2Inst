@@ -210,16 +210,7 @@ class BaseExpert(ABC):
             if len(generated_text) > 500:
                 logger.info(f"[调试] 原始生成内容（后200字符）：\n{generated_text[-200:]}")
 
-            # 提取三段式指令（移除多余内容）
-            extracted_text = self._extract_three_part_instruction(generated_text)
-
-            # 调试日志：显示提取后内容
-            if extracted_text != generated_text:
-                logger.info(f"[调试] 提取后内容：\n{extracted_text}")
-            else:
-                logger.info("[调试] 未找到标准三段式格式，返回原始内容")
-
-            return extracted_text
+            return generated_text
 
         except Exception as e:
             logger.error(f"生成失败: {e}")
@@ -265,13 +256,7 @@ class BaseExpert(ABC):
                     batch_size=batch_size
                 )
 
-                # 对每个结果提取三段式指令
-                extracted_results = []
-                for text in results:
-                    extracted_text = self._extract_three_part_instruction(text)
-                    extracted_results.append(extracted_text)
-
-                return extracted_results
+                return results
             else:
                 # 降级到逐个生成（兼容旧版本）
                 logger.warning("模型不支持批量生成，降级到逐个生成")

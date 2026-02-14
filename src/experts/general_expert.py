@@ -22,10 +22,8 @@ from pathlib import Path
 from typing import Optional, Union
 
 from src.experts.base_expert import BaseExpert
-from models.prompt_templates.text_template import TextInstructionTemplate
-from models.prompt_templates.image_template import ImageInstructionTemplate
-from models.prompt_templates.uml_template import UMLInstructionTemplate
-from config.settings import get_path_config
+from models.prompt_templates.general_template import GeneralInstructionTemplate
+from config.settings import get_path_config, get_inference_config
 from src.utils.logger import get_logger
 
 logger = get_logger('experts.general')
@@ -107,29 +105,22 @@ class GeneralExpert(BaseExpert):
                 logger.info(f"输入内容（前500字符）: {str(input_data)[:500]}")
             logger.info("=" * 80)
 
-            # 自动识别输入类型
+            # 自动识别输入类型（仅用于日志）
             input_type = self._detect_input_type(input_data)
             logger.info(f"[调试] 识别输入类型: {input_type}")
 
-            # 根据类型选择合适的模板
-            if input_type == 'text':
-                prompt = self._build_text_prompt(input_data)
-            elif input_type == 'image':
-                prompt = self._build_image_prompt(input_data)
-            elif input_type == 'uml':
-                prompt = self._build_uml_prompt(input_data)
-            else:
-                logger.warning("无法识别输入类型,使用文本模板")
-                prompt = TextInstructionTemplate.build_prompt(str(input_data))
+            # 统一使用GeneralInstructionTemplate，与训练时保持一致
+            prompt = GeneralInstructionTemplate.build_prompt(input_data)
 
             # 调用模型生成
+            infer_cfg = get_inference_config()
             instruction = self._generate_with_model(
                 prompt=prompt,
-                max_new_tokens=2048,
-                temperature=0.7,  # 提高temperature以增加多样性
-                top_p=0.9,       # 提高top_p
-                top_k=50,        # 提高top_k
-                repetition_penalty=1.2  # 提高重复惩罚
+                max_new_tokens=infer_cfg.max_new_tokens,
+                temperature=infer_cfg.temperature,
+                top_p=infer_cfg.top_p,
+                top_k=infer_cfg.top_k,
+                repetition_penalty=infer_cfg.repetition_penalty
             )
 
             # 输出模型原始输出用于调试
@@ -185,22 +176,6 @@ class GeneralExpert(BaseExpert):
 
         return 'unknown'
 
-    def _build_text_prompt(self, input_data: Union[str, dict]) -> str:
-        """构建文本需求的prompt"""
-        if isinstance(input_data, dict):
-            text = str(input_data)
-        else:
-            text = input_data
-        return TextInstructionTemplate.build_prompt(text)
-
-    def _build_image_prompt(self, input_data: Union[str, dict]) -> str:
-        """构建图像描述的prompt"""
-        return ImageInstructionTemplate.build_prompt(input_data)
-
-    def _build_uml_prompt(self, input_data: Union[str, dict]) -> str:
-        """构建UML数据的prompt"""
-        return UMLInstructionTemplate.build_prompt(input_data)
-
     def validate_output(self, instruction: str) -> bool:
         """
         验证输出格式是否符合三段式要求
@@ -215,8 +190,8 @@ class GeneralExpert(BaseExpert):
             logger.debug("指令内容过短")
             return False
 
-        # 使用文本模板的验证逻辑(三段式基础验证)
-        result = TextInstructionTemplate.validate_instruction(instruction)
+        # 使用GeneralInstructionTemplate的验证逻辑(三段式基础验证)
+        result = GeneralInstructionTemplate.validate_instruction(instruction)
 
         if not result['is_valid']:
             logger.debug(f"格式验证失败: {result['errors']}")
