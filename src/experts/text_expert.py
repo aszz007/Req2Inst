@@ -57,7 +57,7 @@ class TextExpert(BaseExpert):
 
         super().__init__(
             expert_name='text_expert',
-            base_model_path=str(path_cfg.QWEN_7B_CHAT_PATH),
+            base_model_path=str(path_cfg.get_text_model_path()),
             lora_path=lora_path,
             use_4bit=use_4bit
         )

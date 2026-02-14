@@ -757,12 +757,3 @@ if __name__ == "__main__":
 
     print("\n测试完成！")
 
-# 使用示例：
-# 方法1：通过环境管理脚本运行（推荐）
-# python scripts/run_with_env.py --env text --script models/language_model.py inputs/text/requirement.txt
-#
-# 方法2：直接在qwen_text环境中运行
-# conda activate qwen_text
-# python models/language_model.py inputs/text/requirement.txt
-#
-# 注意：Text Expert只使用qwen-7B-Chat模型，无需指定版本
