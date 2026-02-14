@@ -285,7 +285,7 @@ class ExpertEvaluator:
 
         logger.info(f"测试样本数: {len(test_data)}")
         logger.info(f"批处理大小: {batch_size}")
-        logger.info(f"数据集: uml_dataset_qwen3_v3.csv")
+        logger.info(f"UML数据集: uml_dataset.csv")
 
         # 显示样本数据
         self._display_samples(test_data, "UML Expert")
@@ -344,8 +344,8 @@ class ExpertEvaluator:
         logger.info("评估通用专家")
         logger.info("=" * 80)
 
-        # 加载混合数据集(从text、image、uml各取一部分)
-        # 使用uml_dataset_qwen3_v3.csv
+        # 加载混合数据集
+        # 使用uml_dataset.csv
         text_loader = TextDatasetLoader()
         image_loader = ImageDatasetLoader()
         uml_loader = UMLDatasetLoader()
@@ -359,21 +359,30 @@ class ExpertEvaluator:
         _, _, image_test = split_dataset_for_expert(image_data, 'image')
         _, _, uml_test = split_dataset_for_expert(uml_data, 'uml')
 
-        # 混合测试数据(每种类型取相同数量)
-        min_samples = min(len(text_test), len(image_test), len(uml_test))
+        # 使用全部测试数据以获得最可靠的评估结果
         if num_samples:
-            samples_per_type = num_samples // 3
-            min_samples = min(min_samples, samples_per_type)
+            # 如果指定了num_samples，则按比例从每个数据集采样
+            text_ratio = len(text_test) / (len(text_test) + len(image_test) + len(uml_test))
+            image_ratio = len(image_test) / (len(text_test) + len(image_test) + len(uml_test))
+            uml_ratio = len(uml_test) / (len(text_test) + len(image_test) + len(uml_test))
 
-        test_data = (
-                text_test[:min_samples] +
-                image_test[:min_samples] +
-                uml_test[:min_samples]
-        )
+            text_samples = min(int(num_samples * text_ratio), len(text_test))
+            image_samples = min(int(num_samples * image_ratio), len(image_test))
+            uml_samples = min(int(num_samples * uml_ratio), len(uml_test))
 
-        logger.info(f"测试样本数: {len(test_data)} (text: {min_samples}, image: {min_samples}, uml: {min_samples})")
+            test_data = (
+                text_test[:text_samples] +
+                image_test[:image_samples] +
+                uml_test[:uml_samples]
+            )
+            logger.info(f"测试样本数: {len(test_data)} (text: {text_samples}, image: {image_samples}, uml: {uml_samples})")
+        else:
+            # 使用全部测试集数据
+            test_data = text_test + image_test + uml_test
+            logger.info(f"测试样本数: {len(test_data)} (text: {len(text_test)}, image: {len(image_test)}, uml: {len(uml_test)})")
+
         logger.info(f"批处理大小: {batch_size}")
-        logger.info(f"UML数据集: uml_dataset_qwen3_v3.csv")
+        logger.info(f"UML数据集: uml_dataset.csv")
 
         # 显示样本数据
         self._display_samples(test_data, "General Expert")

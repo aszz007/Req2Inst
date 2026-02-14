@@ -31,8 +31,8 @@ class EvaluationThresholds:
     """评估阈值配置类"""
 
     # 语义相似度阈值
-    ROUGE_L_THRESHOLD = 0.35  # ROUGE-L阈值，从0.5降低到0.35（适配开放式指令生成任务）
-    BERTSCORE_F1_THRESHOLD = 0.85  # BERTScore F1阈值，从0.6提高到0.85
+    ROUGE_L_THRESHOLD = 0.5  # ROUGE-L阈值
+    BERTSCORE_F1_THRESHOLD = 0.85  # BERTScore F1阈值
 
     # 组合逻辑
     USE_AND_LOGIC = True  # True=AND逻辑(两个都需满足), False=OR逻辑(满足一个即可)
