@@ -73,7 +73,7 @@ class UMLExpert(BaseExpert):
 
         logger.info("UML专家初始化完成")
 
-    def generate_instruction(self, input_data: Union[str, dict]) -> str:
+    def generate_instruction(self, input_data: Union[str, dict], sample_index: int = None) -> str:
         """
         生成UML业务逻辑实现指令
 
@@ -81,6 +81,7 @@ class UMLExpert(BaseExpert):
             input_data: UML用例图数据,支持:
                 - dict: 包含actors, use_cases, relationships字段的字典
                 - str: JSON字符串
+            sample_index: 样本索引（用于控制日志输出）
 
         Returns:
             str: 生成的三段式业务逻辑实现指令
@@ -92,29 +93,30 @@ class UMLExpert(BaseExpert):
                 return ""
 
         try:
-            # === 调试输出：显示接收到的原始数据 ===
-            logger.info("=" * 80)
-            logger.info("[UML Expert 调试] 接收到的原始输入数据:")
-            logger.info("-" * 80)
-            logger.info(f"数据类型: {type(input_data).__name__}")
+            # 只在前3个样本输出调试信息
+            show_debug = sample_index is None or sample_index < 3
 
-            if isinstance(input_data, dict):
-                logger.info("数据内容（dict格式）:")
-                logger.info(json.dumps(input_data, indent=2, ensure_ascii=False))
-            elif isinstance(input_data, str):
-                logger.info(f"数据内容（str格式，前500字符）:")
-                logger.info(input_data[:500])
-                # 尝试解析JSON
-                try:
-                    parsed = json.loads(input_data)
-                    logger.info("\n可以解析为JSON:")
-                    logger.info(json.dumps(parsed, indent=2, ensure_ascii=False))
-                except json.JSONDecodeError:
-                    logger.info("\n无法解析为JSON")
-            else:
-                logger.info(f"未知数据类型: {input_data}")
-            logger.info("=" * 80)
-            # === 调试输出结束 ===
+            if show_debug:
+                logger.info("=" * 80)
+                logger.info("[UML Expert 调试] 接收到的原始输入数据:")
+                logger.info("-" * 80)
+                logger.info(f"数据类型: {type(input_data).__name__}")
+
+                if isinstance(input_data, dict):
+                    logger.info("数据内容（dict格式）:")
+                    logger.info(json.dumps(input_data, indent=2, ensure_ascii=False))
+                elif isinstance(input_data, str):
+                    logger.info(f"数据内容（str格式，前500字符）:")
+                    logger.info(input_data[:500])
+                    try:
+                        parsed = json.loads(input_data)
+                        logger.info("\n可以解析为JSON:")
+                        logger.info(json.dumps(parsed, indent=2, ensure_ascii=False))
+                    except json.JSONDecodeError:
+                        logger.info("\n无法解析为JSON")
+                else:
+                    logger.info(f"未知数据类型: {input_data}")
+                logger.info("=" * 80)
 
             # 解析输入数据
             if isinstance(input_data, str):
@@ -130,8 +132,9 @@ class UMLExpert(BaseExpert):
                 return ""
 
             # 提取关键元素（用于日志）
-            elements = UMLInstructionTemplate.extract_key_elements(uml_data)
-            logger.debug(f"生成指令 - Actors: {elements['actors']}, Use Cases: {len(elements['use_cases'])}个")
+            if show_debug:
+                elements = UMLInstructionTemplate.extract_key_elements(uml_data)
+                logger.debug(f"生成指令 - Actors: {elements['actors']}, Use Cases: {len(elements['use_cases'])}个")
 
             # 使用UMLInstructionTemplate构建prompt
             prompt = UMLInstructionTemplate.build_prompt(uml_data)
@@ -144,28 +147,105 @@ class UMLExpert(BaseExpert):
                 temperature=infer_cfg.temperature,
                 top_p=infer_cfg.top_p,
                 top_k=infer_cfg.top_k,
-                repetition_penalty=infer_cfg.repetition_penalty
+                repetition_penalty=infer_cfg.repetition_penalty,
+                sample_index=sample_index,
+                verbose=show_debug
             )
 
-            # 输出模型原始输出用于调试
-            logger.info("=" * 80)
-            logger.info("模型原始输出:")
-            logger.info("-" * 80)
-            logger.info(instruction)
-            logger.info("=" * 80)
+            # 只在前3个样本输出模型原始输出
+            if show_debug:
+                logger.info("=" * 80)
+                logger.info("模型原始输出:")
+                logger.info("-" * 80)
+                logger.info(instruction)
+                logger.info("=" * 80)
 
             # 验证输出格式
             if self.validate_output(instruction):
                 logger.info("指令生成成功,格式验证通过")
                 return instruction
             else:
-                logger.warning("指令格式验证失败,尝试回退方案")
-                logger.warning(f"失败的指令内容：\n{instruction}")
+                if show_debug:
+                    logger.warning("指令格式验证失败,尝试回退方案")
+                    logger.warning(f"失败的指令内容：\n{instruction}")
                 return self._fallback_generation(uml_data)
 
         except Exception as e:
             logger.error(f"指令生成失败: {e}")
             return ""
+
+    def batch_generate_instruction(self, input_data_list: list, batch_size: int = 4) -> list:
+        """
+        批量生成UML业务逻辑实现指令（提高GPU利用率）
+
+        Args:
+            input_data_list: UML用例图数据列表
+            batch_size: 批处理大小
+
+        Returns:
+            list: 生成的指令列表
+        """
+        if not self.is_model_loaded:
+            logger.warning("模型未加载,尝试加载模型...")
+            if not self.load_model():
+                logger.error("模型加载失败")
+                return [""] * len(input_data_list)
+
+        try:
+            logger.info(f"批量生成指令 - 共{len(input_data_list)}个样本，batch_size={batch_size}")
+
+            # 解析所有输入数据并构建prompts
+            prompts = []
+            parsed_data_list = []
+            for data in input_data_list:
+                if isinstance(data, str):
+                    try:
+                        uml_data = json.loads(data)
+                    except json.JSONDecodeError:
+                        logger.error("输入不是有效的JSON格式，跳过")
+                        prompts.append("")
+                        parsed_data_list.append({})
+                        continue
+                elif isinstance(data, dict):
+                    uml_data = data
+                else:
+                    logger.error(f"不支持的输入类型: {type(data)}，跳过")
+                    prompts.append("")
+                    parsed_data_list.append({})
+                    continue
+
+                parsed_data_list.append(uml_data)
+                prompts.append(UMLInstructionTemplate.build_prompt(uml_data))
+
+            # 批量生成
+            infer_cfg = get_inference_config()
+            instructions = self._generate_batch_with_model(
+                prompts=prompts,
+                max_new_tokens=infer_cfg.max_new_tokens,
+                temperature=infer_cfg.temperature,
+                top_p=infer_cfg.top_p,
+                top_k=infer_cfg.top_k,
+                repetition_penalty=infer_cfg.repetition_penalty,
+                batch_size=batch_size,
+                start_index=0,
+                verbose=True
+            )
+
+            # 验证每个输出
+            validated_instructions = []
+            for i, instruction in enumerate(instructions):
+                if self.validate_output(instruction):
+                    validated_instructions.append(instruction)
+                else:
+                    if i < 3:
+                        logger.warning(f"样本{i+1}格式验证失败,使用回退方案")
+                    validated_instructions.append(self._fallback_generation(parsed_data_list[i]))
+
+            return validated_instructions
+
+        except Exception as e:
+            logger.error(f"批量生成失败: {e}")
+            return [""] * len(input_data_list)
 
     def validate_output(self, instruction: str) -> bool:
         """

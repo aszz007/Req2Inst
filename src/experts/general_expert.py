@@ -74,7 +74,7 @@ class GeneralExpert(BaseExpert):
 
         logger.info("通用专家初始化完成")
 
-    def generate_instruction(self, input_data: Union[str, dict]) -> str:
+    def generate_instruction(self, input_data: Union[str, dict], sample_index: int = None) -> str:
         """
         生成众包指令(自动识别输入类型)
 
@@ -82,6 +82,7 @@ class GeneralExpert(BaseExpert):
             input_data: 输入数据,支持:
                 - str: 文本需求或JSON字符串
                 - dict: 图像描述字典或UML结构字典
+            sample_index: 样本索引（用于控制日志输出）
 
         Returns:
             str: 生成的三段式指令
@@ -93,21 +94,25 @@ class GeneralExpert(BaseExpert):
                 return ""
 
         try:
-            # 调试输出：显示原始输入
-            logger.info("=" * 80)
-            logger.info("[调试] 原始输入数据:")
-            logger.info("-" * 80)
-            if isinstance(input_data, dict):
-                logger.info(f"输入类型: dict")
-                logger.info(f"输入内容（前500字符）: {str(input_data)[:500]}")
-            else:
-                logger.info(f"输入类型: {type(input_data).__name__}")
-                logger.info(f"输入内容（前500字符）: {str(input_data)[:500]}")
-            logger.info("=" * 80)
+            # 只在前3个样本输出调试信息
+            show_debug = sample_index is None or sample_index < 3
+
+            if show_debug:
+                logger.info("=" * 80)
+                logger.info("[调试] 原始输入数据:")
+                logger.info("-" * 80)
+                if isinstance(input_data, dict):
+                    logger.info(f"输入类型: dict")
+                    logger.info(f"输入内容（前500字符）: {str(input_data)[:500]}")
+                else:
+                    logger.info(f"输入类型: {type(input_data).__name__}")
+                    logger.info(f"输入内容（前500字符）: {str(input_data)[:500]}")
+                logger.info("=" * 80)
 
             # 自动识别输入类型（仅用于日志）
-            input_type = self._detect_input_type(input_data)
-            logger.info(f"[调试] 识别输入类型: {input_type}")
+            if show_debug:
+                input_type = self._detect_input_type(input_data)
+                logger.info(f"[调试] 识别输入类型: {input_type}")
 
             # 统一使用GeneralInstructionTemplate，与训练时保持一致
             prompt = GeneralInstructionTemplate.build_prompt(input_data)
@@ -120,23 +125,27 @@ class GeneralExpert(BaseExpert):
                 temperature=infer_cfg.temperature,
                 top_p=infer_cfg.top_p,
                 top_k=infer_cfg.top_k,
-                repetition_penalty=infer_cfg.repetition_penalty
+                repetition_penalty=infer_cfg.repetition_penalty,
+                sample_index=sample_index,
+                verbose=show_debug
             )
 
-            # 输出模型原始输出用于调试
-            logger.info("=" * 80)
-            logger.info("模型原始输出:")
-            logger.info("-" * 80)
-            logger.info(instruction)
-            logger.info("=" * 80)
+            # 只在前3个样本输出模型原始输出
+            if show_debug:
+                logger.info("=" * 80)
+                logger.info("模型原始输出:")
+                logger.info("-" * 80)
+                logger.info(instruction)
+                logger.info("=" * 80)
 
             # 验证输出格式
             if self.validate_output(instruction):
                 logger.info("指令生成成功,格式验证通过")
                 return instruction
             else:
-                logger.warning("指令格式验证失败,尝试回退方案")
-                logger.warning(f"失败的指令内容：\n{instruction}")
+                if show_debug:
+                    logger.warning("指令格式验证失败,尝试回退方案")
+                    logger.warning(f"失败的指令内容：\n{instruction}")
                 return self._fallback_generation(input_data)
 
         except Exception as e:
@@ -144,6 +153,61 @@ class GeneralExpert(BaseExpert):
             import traceback
             logger.error(f"异常详情: {traceback.format_exc()}")
             return ""
+
+    def batch_generate_instruction(self, input_data_list: list, batch_size: int = 4) -> list:
+        """
+        批量生成众包指令（提高GPU利用率）
+
+        Args:
+            input_data_list: 输入数据列表（支持混合类型）
+            batch_size: 批处理大小
+
+        Returns:
+            list: 生成的指令列表
+        """
+        if not self.is_model_loaded:
+            logger.warning("模型未加载,尝试加载模型...")
+            if not self.load_model():
+                logger.error("模型加载失败")
+                return [""] * len(input_data_list)
+
+        try:
+            logger.info(f"批量生成指令 - 共{len(input_data_list)}个样本，batch_size={batch_size}")
+
+            # 构建所有prompts（使用统一的GeneralInstructionTemplate）
+            prompts = [GeneralInstructionTemplate.build_prompt(data) for data in input_data_list]
+
+            # 批量生成
+            infer_cfg = get_inference_config()
+            instructions = self._generate_batch_with_model(
+                prompts=prompts,
+                max_new_tokens=infer_cfg.max_new_tokens,
+                temperature=infer_cfg.temperature,
+                top_p=infer_cfg.top_p,
+                top_k=infer_cfg.top_k,
+                repetition_penalty=infer_cfg.repetition_penalty,
+                batch_size=batch_size,
+                start_index=0,
+                verbose=True
+            )
+
+            # 验证每个输出
+            validated_instructions = []
+            for i, instruction in enumerate(instructions):
+                if self.validate_output(instruction):
+                    validated_instructions.append(instruction)
+                else:
+                    if i < 3:
+                        logger.warning(f"样本{i+1}格式验证失败,使用回退方案")
+                    validated_instructions.append(self._fallback_generation(input_data_list[i]))
+
+            return validated_instructions
+
+        except Exception as e:
+            logger.error(f"批量生成失败: {e}")
+            import traceback
+            logger.error(f"异常详情: {traceback.format_exc()}")
+            return [""] * len(input_data_list)
 
     def _detect_input_type(self, input_data: Union[str, dict]) -> str:
         """

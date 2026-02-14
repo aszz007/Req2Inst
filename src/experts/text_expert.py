@@ -64,12 +64,13 @@ class TextExpert(BaseExpert):
 
         logger.info("文本专家初始化完成")
 
-    def generate_instruction(self, input_data: str) -> str:
+    def generate_instruction(self, input_data: str, sample_index: int = None) -> str:
         """
         生成文本众包指令
 
         Args:
             input_data: Low_Requirements文本需求
+            sample_index: 样本索引（用于控制日志输出）
 
         Returns:
             str: 生成的三段式指令
@@ -84,7 +85,8 @@ class TextExpert(BaseExpert):
             # 使用TextInstructionTemplate构建prompt
             prompt = TextInstructionTemplate.build_prompt(input_data)
 
-            logger.debug(f"生成指令 - 输入需求: {input_data[:100]}...")
+            if sample_index is None or sample_index < 3:
+                logger.debug(f"生成指令 - 输入需求: {input_data[:100]}...")
 
             # 调用模型生成
             infer_cfg = get_inference_config()
@@ -94,28 +96,85 @@ class TextExpert(BaseExpert):
                 temperature=infer_cfg.temperature,
                 top_p=infer_cfg.top_p,
                 top_k=infer_cfg.top_k,
-                repetition_penalty=infer_cfg.repetition_penalty
+                repetition_penalty=infer_cfg.repetition_penalty,
+                sample_index=sample_index,
+                verbose=(sample_index is None or sample_index < 3)
             )
 
-            # 输出模型原始输出用于调试
-            logger.info("=" * 80)
-            logger.info("模型原始输出:")
-            logger.info("-" * 80)
-            logger.info(instruction)
-            logger.info("=" * 80)
+            # 只在前3个样本输出模型原始输出
+            if sample_index is None or sample_index < 3:
+                logger.info("=" * 80)
+                logger.info("模型原始输出:")
+                logger.info("-" * 80)
+                logger.info(instruction)
+                logger.info("=" * 80)
 
             # 验证输出格式
             if self.validate_output(instruction):
                 logger.info("指令生成成功,格式验证通过")
                 return instruction
             else:
-                logger.warning("指令格式验证失败,尝试回退方案")
-                logger.warning(f"失败的指令内容：\n{instruction}")
+                if sample_index is None or sample_index < 3:
+                    logger.warning("指令格式验证失败,尝试回退方案")
+                    logger.warning(f"失败的指令内容：\n{instruction}")
                 return self._fallback_generation(input_data)
 
         except Exception as e:
             logger.error(f"指令生成失败: {e}")
             return self._fallback_generation(input_data)
+
+    def batch_generate_instruction(self, input_data_list: list, batch_size: int = 4) -> list:
+        """
+        批量生成文本众包指令（提高GPU利用率）
+
+        Args:
+            input_data_list: 文本需求列表
+            batch_size: 批处理大小
+
+        Returns:
+            list: 生成的指令列表
+        """
+        if not self.is_model_loaded:
+            logger.warning("模型未加载,尝试加载模型...")
+            if not self.load_model():
+                logger.error("模型加载失败")
+                return [""] * len(input_data_list)
+
+        try:
+            logger.info(f"批量生成指令 - 共{len(input_data_list)}个样本，batch_size={batch_size}")
+
+            # 构建所有prompts
+            prompts = [TextInstructionTemplate.build_prompt(data) for data in input_data_list]
+
+            # 批量生成
+            infer_cfg = get_inference_config()
+            instructions = self._generate_batch_with_model(
+                prompts=prompts,
+                max_new_tokens=infer_cfg.max_new_tokens,
+                temperature=infer_cfg.temperature,
+                top_p=infer_cfg.top_p,
+                top_k=infer_cfg.top_k,
+                repetition_penalty=infer_cfg.repetition_penalty,
+                batch_size=batch_size,
+                start_index=0,
+                verbose=True
+            )
+
+            # 验证每个输出
+            validated_instructions = []
+            for i, instruction in enumerate(instructions):
+                if self.validate_output(instruction):
+                    validated_instructions.append(instruction)
+                else:
+                    if i < 3:
+                        logger.warning(f"样本{i+1}格式验证失败,使用回退方案")
+                    validated_instructions.append(self._fallback_generation(input_data_list[i]))
+
+            return validated_instructions
+
+        except Exception as e:
+            logger.error(f"批量生成失败: {e}")
+            return [""] * len(input_data_list)
 
     def validate_output(self, instruction: str) -> bool:
         """

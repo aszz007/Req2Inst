@@ -121,7 +121,8 @@ class ExpertEvaluator:
     def evaluate_text_expert(
             self,
             num_samples: Optional[int] = None,
-            save_predictions: bool = True
+            save_predictions: bool = True,
+            batch_size: int = 4
     ) -> Dict:
         """
         评估文本专家
@@ -129,6 +130,7 @@ class ExpertEvaluator:
         Args:
             num_samples: 使用的样本数(None表示全部)
             save_predictions: 是否保存预测数据到JSON
+            batch_size: 批处理大小（默认4，适合24GB显存）
 
         Returns:
             dict: 评估结果
@@ -146,6 +148,7 @@ class ExpertEvaluator:
             test_data = test_data[:num_samples]
 
         logger.info(f"测试样本数: {len(test_data)}")
+        logger.info(f"批处理大小: {batch_size}")
 
         # 显示样本数据
         self._display_samples(test_data, "Text Expert")
@@ -156,24 +159,13 @@ class ExpertEvaluator:
             logger.error("文本专家加载失败")
             return {}
 
-        # 生成预测
-        inputs = []
-        predictions = []
-        references = []
+        # 批量生成预测
+        inputs = [item['input'] for item in test_data]
+        references = [item['output'] for item in test_data]
 
-        for i, item in enumerate(test_data, 1):
-            logger.info(f"生成 {i}/{len(test_data)}")
-
-            try:
-                inputs.append(item['input'])
-                pred = expert.generate_instruction(item['input'])
-                predictions.append(pred)
-                references.append(item['output'])
-            except Exception as e:
-                logger.error(f"生成失败: {e}")
-                inputs.append(item['input'])
-                predictions.append("")
-                references.append(item['output'])
+        logger.info("开始批量生成指令...")
+        predictions = expert.batch_generate_instruction(inputs, batch_size=batch_size)
+        logger.info("批量生成完成")
 
         # 卸载模型
         expert.unload_model()
@@ -197,7 +189,8 @@ class ExpertEvaluator:
     def evaluate_image_expert(
             self,
             num_samples: Optional[int] = None,
-            save_predictions: bool = True
+            save_predictions: bool = True,
+            batch_size: int = 4
     ) -> Dict:
         """
         评估图像专家
@@ -205,6 +198,7 @@ class ExpertEvaluator:
         Args:
             num_samples: 使用的样本数
             save_predictions: 是否保存预测数据到JSON
+            batch_size: 批处理大小（默认4，适合24GB显存）
 
         Returns:
             dict: 评估结果
@@ -222,6 +216,7 @@ class ExpertEvaluator:
             test_data = test_data[:num_samples]
 
         logger.info(f"测试样本数: {len(test_data)}")
+        logger.info(f"批处理大小: {batch_size}")
 
         # 显示样本数据
         self._display_samples(test_data, "Image Expert")
@@ -232,24 +227,13 @@ class ExpertEvaluator:
             logger.error("图像专家加载失败")
             return {}
 
-        # 生成预测
-        inputs = []
-        predictions = []
-        references = []
+        # 批量生成预测
+        inputs = [item['input'] for item in test_data]
+        references = [item['output'] for item in test_data]
 
-        for i, item in enumerate(test_data, 1):
-            logger.info(f"生成 {i}/{len(test_data)}")
-
-            try:
-                inputs.append(item['input'])
-                pred = expert.generate_instruction(item['input'])
-                predictions.append(pred)
-                references.append(item['output'])
-            except Exception as e:
-                logger.error(f"生成失败: {e}")
-                inputs.append(item['input'])
-                predictions.append("")
-                references.append(item['output'])
+        logger.info("开始批量生成指令...")
+        predictions = expert.batch_generate_instruction(inputs, batch_size=batch_size)
+        logger.info("批量生成完成")
 
         # 卸载模型
         expert.unload_model()
@@ -273,7 +257,8 @@ class ExpertEvaluator:
     def evaluate_uml_expert(
             self,
             num_samples: Optional[int] = None,
-            save_predictions: bool = True
+            save_predictions: bool = True,
+            batch_size: int = 4
     ) -> Dict:
         """
         评估UML专家
@@ -281,6 +266,7 @@ class ExpertEvaluator:
         Args:
             num_samples: 使用的样本数
             save_predictions: 是否保存预测数据到JSON
+            batch_size: 批处理大小（默认4，适合24GB显存）
 
         Returns:
             dict: 评估结果
@@ -298,6 +284,7 @@ class ExpertEvaluator:
             test_data = test_data[:num_samples]
 
         logger.info(f"测试样本数: {len(test_data)}")
+        logger.info(f"批处理大小: {batch_size}")
         logger.info(f"数据集: uml_dataset_qwen3_v3.csv")
 
         # 显示样本数据
@@ -309,24 +296,13 @@ class ExpertEvaluator:
             logger.error("UML专家加载失败")
             return {}
 
-        # 生成预测
-        inputs = []
-        predictions = []
-        references = []
+        # 批量生成预测
+        inputs = [item['input'] for item in test_data]
+        references = [item['output'] for item in test_data]
 
-        for i, item in enumerate(test_data, 1):
-            logger.info(f"生成 {i}/{len(test_data)}")
-
-            try:
-                inputs.append(item['input'])
-                pred = expert.generate_instruction(item['input'])
-                predictions.append(pred)
-                references.append(item['output'])
-            except Exception as e:
-                logger.error(f"生成失败: {e}")
-                inputs.append(item['input'])
-                predictions.append("")
-                references.append(item['output'])
+        logger.info("开始批量生成指令...")
+        predictions = expert.batch_generate_instruction(inputs, batch_size=batch_size)
+        logger.info("批量生成完成")
 
         # 卸载模型
         expert.unload_model()
@@ -350,7 +326,8 @@ class ExpertEvaluator:
     def evaluate_general_expert(
             self,
             num_samples: Optional[int] = None,
-            save_predictions: bool = True
+            save_predictions: bool = True,
+            batch_size: int = 4
     ) -> Dict:
         """
         评估通用专家
@@ -358,6 +335,7 @@ class ExpertEvaluator:
         Args:
             num_samples: 使用的样本数
             save_predictions: 是否保存预测数据到JSON
+            batch_size: 批处理大小（默认4，适合24GB显存）
 
         Returns:
             dict: 评估结果
@@ -394,6 +372,7 @@ class ExpertEvaluator:
         )
 
         logger.info(f"测试样本数: {len(test_data)} (text: {min_samples}, image: {min_samples}, uml: {min_samples})")
+        logger.info(f"批处理大小: {batch_size}")
         logger.info(f"UML数据集: uml_dataset_qwen3_v3.csv")
 
         # 显示样本数据
@@ -405,24 +384,13 @@ class ExpertEvaluator:
             logger.error("通用专家加载失败")
             return {}
 
-        # 生成预测
-        inputs = []
-        predictions = []
-        references = []
+        # 批量生成预测
+        inputs = [item['input'] for item in test_data]
+        references = [item['output'] for item in test_data]
 
-        for i, item in enumerate(test_data, 1):
-            logger.info(f"生成 {i}/{len(test_data)}")
-
-            try:
-                inputs.append(item['input'])
-                pred = expert.generate_instruction(item['input'])
-                predictions.append(pred)
-                references.append(item['output'])
-            except Exception as e:
-                logger.error(f"生成失败: {e}")
-                inputs.append(item['input'])
-                predictions.append("")
-                references.append(item['output'])
+        logger.info("开始批量生成指令...")
+        predictions = expert.batch_generate_instruction(inputs, batch_size=batch_size)
+        logger.info("批量生成完成")
 
         # 卸载模型
         expert.unload_model()

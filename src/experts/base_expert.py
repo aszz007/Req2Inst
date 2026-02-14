@@ -164,7 +164,9 @@ class BaseExpert(ABC):
                             temperature: float = 0.7,
                             top_p: float = 0.9,
                             top_k: int = 50,
-                            repetition_penalty: float = 1.1) -> str:
+                            repetition_penalty: float = 1.1,
+                            sample_index: int = None,
+                            verbose: bool = True) -> str:
         """
         使用模型生成文本(通用方法)
 
@@ -175,6 +177,8 @@ class BaseExpert(ABC):
             top_p: nucleus sampling
             top_k: top-k sampling
             repetition_penalty: 重复惩罚
+            sample_index: 样本索引（用于控制日志输出，仅前3个样本输出详细日志）
+            verbose: 是否输出详细日志
 
         Returns:
             str: 生成的文本
@@ -187,13 +191,16 @@ class BaseExpert(ABC):
             return ""
 
         try:
-            # 调试输出：显示完整的prompt
-            logger.info("=" * 80)
-            logger.info("[调试] 完整Prompt内容:")
-            logger.info("-" * 80)
-            logger.info(prompt)
-            logger.info("=" * 80)
-            logger.info(f"[调试] 生成参数: temp={temperature}, top_p={top_p}, top_k={top_k}, rep_penalty={repetition_penalty}")
+            # 只在前3个样本输出详细调试信息
+            show_debug = verbose and (sample_index is None or sample_index < 3)
+
+            if show_debug:
+                logger.info("=" * 80)
+                logger.info(f"[调试] 样本 {sample_index + 1 if sample_index is not None else 'N/A'} - 完整Prompt内容:")
+                logger.info("-" * 80)
+                logger.info(prompt)
+                logger.info("=" * 80)
+                logger.info(f"[调试] 生成参数: temp={temperature}, top_p={top_p}, top_k={top_k}, rep_penalty={repetition_penalty}")
 
             generated_text = self.model.generate(
                 prompt=prompt,
@@ -204,11 +211,11 @@ class BaseExpert(ABC):
                 repetition_penalty=repetition_penalty
             )
 
-            # 调试日志：显示原始生成内容
-            logger.info(f"[调试] 原始生成内容长度: {len(generated_text)} 字符")
-            logger.info(f"[调试] 原始生成内容（前500字符）：\n{generated_text[:500]}")
-            if len(generated_text) > 500:
-                logger.info(f"[调试] 原始生成内容（后200字符）：\n{generated_text[-200:]}")
+            if show_debug:
+                logger.info(f"[调试] 原始生成内容长度: {len(generated_text)} 字符")
+                logger.info(f"[调试] 原始生成内容（前500字符）：\n{generated_text[:500]}")
+                if len(generated_text) > 500:
+                    logger.info(f"[调试] 原始生成内容（后200字符）：\n{generated_text[-200:]}")
 
             return generated_text
 
@@ -223,7 +230,9 @@ class BaseExpert(ABC):
                                    top_p: float = 0.9,
                                    top_k: int = 50,
                                    repetition_penalty: float = 1.1,
-                                   batch_size: int = None) -> list:
+                                   batch_size: int = None,
+                                   start_index: int = 0,
+                                   verbose: bool = True) -> list:
         """
         批量生成文本（通用方法，提高GPU利用率）
 
@@ -235,6 +244,8 @@ class BaseExpert(ABC):
             top_k: top-k sampling
             repetition_penalty: 重复惩罚
             batch_size: 批处理大小（None则自动选择）
+            start_index: 起始索引（用于日志输出）
+            verbose: 是否输出详细日志
 
         Returns:
             list: 生成的文本列表
@@ -244,6 +255,12 @@ class BaseExpert(ABC):
             return [""] * len(prompts)
 
         try:
+            # 只在前3个样本输出详细日志
+            show_debug = verbose and start_index < 3
+
+            if show_debug:
+                logger.info(f"批量生成 - 共{len(prompts)}个样本，起始索引{start_index}")
+
             # 使用LanguageModel的批量生成方法
             if hasattr(self.model, 'generate_batch'):
                 results = self.model.generate_batch(
@@ -261,14 +278,16 @@ class BaseExpert(ABC):
                 # 降级到逐个生成（兼容旧版本）
                 logger.warning("模型不支持批量生成，降级到逐个生成")
                 results = []
-                for prompt in prompts:
+                for i, prompt in enumerate(prompts):
                     result = self._generate_with_model(
                         prompt=prompt,
                         max_new_tokens=max_new_tokens,
                         temperature=temperature,
                         top_p=top_p,
                         top_k=top_k,
-                        repetition_penalty=repetition_penalty
+                        repetition_penalty=repetition_penalty,
+                        sample_index=start_index + i,
+                        verbose=verbose
                     )
                     results.append(result)
                 return results
