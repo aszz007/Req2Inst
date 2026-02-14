@@ -421,6 +421,15 @@ class TextDatasetLoader:
         logger.info(f"文本数据集总计: {len(all_data)}条")
         return all_data
 
+    def load(self) -> List[Dict]:
+        """
+        加载数据（别名方法，用于兼容性）
+
+        Returns:
+            数据列表
+        """
+        return self.load_csv_files()
+
 
 class ImageDatasetLoader:
     """图像数据集加载器 - 优化版"""
@@ -516,6 +525,15 @@ class ImageDatasetLoader:
         logger.info(f"图像数据集加载完成, 数据量: {len(all_data)}")
 
         return all_data
+
+    def load(self) -> List[Dict]:
+        """
+        加载数据（别名方法，用于兼容性）
+
+        Returns:
+            数据列表
+        """
+        return self.load_csv_file()
 
 
 class UMLDatasetLoader:
@@ -644,6 +662,15 @@ class UMLDatasetLoader:
             import traceback
             logger.error(traceback.format_exc())
             return []
+
+    def load(self) -> List[Dict]:
+        """
+        加载数据（别名方法，用于兼容性）
+
+        Returns:
+            数据列表
+        """
+        return self.load_csv_file()
 
 
 class GeneralDatasetLoader:
