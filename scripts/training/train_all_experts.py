@@ -33,14 +33,17 @@ Date: 2025-02-15
 """
 
 import sys
+import os
 import subprocess
 import argparse
 from pathlib import Path
 from datetime import datetime
 import time
 
+
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
 
 TRAINING_TASKS = {
     'prompt_tuning': {
@@ -62,6 +65,7 @@ TRAINING_TASKS = {
         'general': 'scripts/training/full_finetuning/train_general_expert.py',
     }
 }
+
 
 ESTIMATED_TIME = {
     'prompt_tuning': {'text': 1.0, 'image': 0.3, 'uml': 0.75, 'general': 1.9},
@@ -119,10 +123,14 @@ def run_training_task(method, expert, script_path):
 
     start_time = time.time()
 
+    env = os.environ.copy()
+    env['PYTHONPATH'] = str(PROJECT_ROOT)
+
     try:
         result = subprocess.run(
             [sys.executable, str(full_path)],
             cwd=str(PROJECT_ROOT),
+            env=env,
             check=True,
             capture_output=False
         )
