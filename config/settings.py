@@ -218,9 +218,46 @@ class PathConfig:
 
         # ==================== Checkpoint路径 ====================
         self.CHECKPOINTS_DIR = self.PROJECT_ROOT / "checkpoints"
-        self.TEXT_EXPERT_CKPT = self.CHECKPOINTS_DIR / "text_expert_training"
-        self.IMAGE_EXPERT_CKPT = self.CHECKPOINTS_DIR / "image_expert_training"
-        self.UML_EXPERT_CKPT = self.CHECKPOINTS_DIR / "uml_expert_training"
+
+        # LoRA-MoE方法（主要方法）
+        self.LORA_MOE_CKPTS = {
+            'text': self.CHECKPOINTS_DIR / "lora_moe" / "text_expert",
+            'image': self.CHECKPOINTS_DIR / "lora_moe" / "image_expert",
+            'uml': self.CHECKPOINTS_DIR / "lora_moe" / "uml_expert",
+            'general': self.CHECKPOINTS_DIR / "lora_moe" / "general_expert",
+        }
+
+        # LoRA-Single方法（对比基线）
+        self.LORA_SINGLE_CKPT = self.CHECKPOINTS_DIR / "lora_single" / "unified_expert"
+
+        # P-Tuning v2方法（对比基线）
+        self.PTUNING_CKPTS = {
+            'text': self.CHECKPOINTS_DIR / "p_tuning" / "text_expert",
+            'image': self.CHECKPOINTS_DIR / "p_tuning" / "image_expert",
+            'uml': self.CHECKPOINTS_DIR / "p_tuning" / "uml_expert",
+            'general': self.CHECKPOINTS_DIR / "p_tuning" / "general_expert",
+        }
+
+        # Prompt Tuning方法（对比基线）
+        self.PROMPT_TUNING_CKPTS = {
+            'text': self.CHECKPOINTS_DIR / "prompt_tuning" / "text_expert",
+            'image': self.CHECKPOINTS_DIR / "prompt_tuning" / "image_expert",
+            'uml': self.CHECKPOINTS_DIR / "prompt_tuning" / "uml_expert",
+            'general': self.CHECKPOINTS_DIR / "prompt_tuning" / "general_expert",
+        }
+
+        # Full Fine-tuning方法（最强基线）
+        self.FULL_FINETUNING_CKPTS = {
+            'text': self.CHECKPOINTS_DIR / "full_finetuning" / "text_expert",
+            'image': self.CHECKPOINTS_DIR / "full_finetuning" / "image_expert",
+            'uml': self.CHECKPOINTS_DIR / "full_finetuning" / "uml_expert",
+            'general': self.CHECKPOINTS_DIR / "full_finetuning" / "general_expert",
+        }
+
+        # 兼容旧版路径
+        self.TEXT_EXPERT_CKPT = self.LORA_MOE_CKPTS['text']
+        self.IMAGE_EXPERT_CKPT = self.LORA_MOE_CKPTS['image']
+        self.UML_EXPERT_CKPT = self.LORA_MOE_CKPTS['uml']
 
         # ==================== 输出路径 ====================
         self.OUTPUTS_DIR = self.PROJECT_ROOT / "outputs"
@@ -431,7 +468,7 @@ class TrainingConfig:
     fp16: bool = True  # 混合精度训练
     max_grad_norm: float = 1.0
     seed: int = 42
-    max_seq_length: int = 1536  # 最大序列长度（优化显存占用，足够覆盖长文本需求）
+    max_seq_length: int = 2048  # 支持长文本样本（UML和Text数据集包含1000+ tokens的样本）
 
     # ==================== 数据集划分比例 ====================
     # 文本数据集（2400条）
@@ -460,7 +497,7 @@ class TrainingConfig4090:
     learning_rate = 2e-4
     weight_decay = 0.01
     warmup_ratio = 0.1
-    max_seq_length = 1536  # 优化显存占用（从2048降低），足够覆盖长文本需求
+    max_seq_length = 2048  # 支持长文本（UML和Text数据集包含长样本）
 
     # ===== 4090专属优化 =====
     use_flash_attention = True  # 启用Flash Attention 2（提速30%）
@@ -487,6 +524,109 @@ class TrainingConfig4090:
     adam_beta1 = 0.9
     adam_beta2 = 0.999
     adam_epsilon = 1e-8
+
+
+@dataclass
+class PTuningV2Config:
+    """P-Tuning v2配置（用于对比实验）"""
+
+    # Prefix长度（virtual tokens数量）
+    num_virtual_tokens: int = 20  # 根据论文推荐，适合中等任务
+
+    # Encoder配置
+    encoder_hidden_size: int = 128  # MLP encoder的隐藏层大小
+    encoder_num_layers: int = 2  # MLP encoder的层数
+    encoder_dropout: float = 0.1  # Dropout率
+
+    # 任务类型
+    task_type: str = "CAUSAL_LM"
+
+    # Prefix投影（是否使用MLP重参数化）
+    prefix_projection: bool = True
+
+    @classmethod
+    def get_default_config(cls):
+        """默认配置"""
+        return cls(num_virtual_tokens=20, encoder_hidden_size=128)
+
+    @classmethod
+    def get_large_config(cls):
+        """更大的配置（适合复杂任务）"""
+        return cls(num_virtual_tokens=30, encoder_hidden_size=256)
+
+
+@dataclass
+class PromptTuningConfig:
+    """Prompt Tuning配置（用于对比实验）"""
+
+    # Soft prompt长度（virtual tokens数量）
+    num_virtual_tokens: int = 10  # 更轻量的配置
+
+    # Prompt初始化方式
+    prompt_tuning_init: str = "RANDOM"  # RANDOM或TEXT
+    prompt_tuning_init_text: Optional[str] = None  # 如果使用TEXT初始化
+
+    # 任务类型
+    task_type: str = "CAUSAL_LM"
+
+    # Token嵌入维度（自动从模型获取）
+    token_dim: Optional[int] = None
+
+    @classmethod
+    def get_default_config(cls):
+        """默认配置"""
+        return cls(num_virtual_tokens=10, prompt_tuning_init="RANDOM")
+
+    @classmethod
+    def get_large_config(cls):
+        """更大的配置"""
+        return cls(num_virtual_tokens=20, prompt_tuning_init="RANDOM")
+
+
+@dataclass
+class FullFineTuningConfig:
+    """全参数微调配置（用于对比实验）
+
+    注意：由于RTX 4090的24GB显存对Qwen3-8B全参数微调可能不够，
+    我们使用LoRA rank=64作为"准全参数微调"方案，
+    在保持稳定性的同时达到接近全参数微调的效果。
+    """
+
+    # 使用大rank的LoRA模拟全参数微调
+    use_high_rank_lora: bool = True
+    lora_rank: int = 64  # 大rank模拟全参数
+    lora_alpha: int = 128  # 2倍rank
+    lora_dropout: float = 0.05
+
+    # 目标模块（覆盖更多层）
+    target_modules: List[str] = None
+
+    # 训练配置（更保守以避免过拟合）
+    learning_rate: float = 1e-4  # 比LoRA更小的学习率
+    num_epochs: int = 2  # 更少的epochs
+    weight_decay: float = 0.01
+    warmup_ratio: float = 0.1
+
+    # 梯度裁剪（防止梯度爆炸）
+    max_grad_norm: float = 0.5
+
+    # 批次大小（显存限制）
+    batch_size: int = 4  # 相比LoRA减半
+    gradient_accumulation_steps: int = 4
+
+    def __post_init__(self):
+        """初始化target_modules"""
+        if self.target_modules is None:
+            # 覆盖所有注意力层和部分FFN层
+            self.target_modules = [
+                "q_proj", "k_proj", "v_proj", "o_proj",  # 注意力层
+                "gate_proj", "up_proj", "down_proj"  # FFN层
+            ]
+
+    @classmethod
+    def get_default_config(cls):
+        """默认配置（准全参数微调）"""
+        return cls(lora_rank=64, lora_alpha=128)
 
 @dataclass
 class InferenceConfig:
@@ -701,6 +841,9 @@ _inference_config = None
 _device_config = None
 _model_config = None  # 文本模型选择
 _vision_model_config = None  # 视觉模型选择
+_ptuning_config = None  # P-Tuning v2配置
+_prompt_tuning_config = None  # Prompt Tuning配置
+_full_finetuning_config = None  # Full Fine-tuning配置
 
 
 def get_path_config() -> PathConfig:
@@ -733,6 +876,46 @@ def get_training_config() -> TrainingConfig:
     if _training_config is None:
         _training_config = TrainingConfig()
     return _training_config
+
+
+def get_ptuning_config(config_type: str = "default") -> PTuningV2Config:
+    """
+    获取P-Tuning v2配置
+
+    Args:
+        config_type: 'default' 或 'large'
+    """
+    global _ptuning_config
+    if _ptuning_config is None:
+        if config_type == "large":
+            _ptuning_config = PTuningV2Config.get_large_config()
+        else:
+            _ptuning_config = PTuningV2Config.get_default_config()
+    return _ptuning_config
+
+
+def get_prompt_tuning_config(config_type: str = "default") -> PromptTuningConfig:
+    """
+    获取Prompt Tuning配置
+
+    Args:
+        config_type: 'default' 或 'large'
+    """
+    global _prompt_tuning_config
+    if _prompt_tuning_config is None:
+        if config_type == "large":
+            _prompt_tuning_config = PromptTuningConfig.get_large_config()
+        else:
+            _prompt_tuning_config = PromptTuningConfig.get_default_config()
+    return _prompt_tuning_config
+
+
+def get_full_finetuning_config() -> FullFineTuningConfig:
+    """获取Full Fine-tuning配置单例"""
+    global _full_finetuning_config
+    if _full_finetuning_config is None:
+        _full_finetuning_config = FullFineTuningConfig.get_default_config()
+    return _full_finetuning_config
 
 
 def get_inference_config() -> InferenceConfig:
