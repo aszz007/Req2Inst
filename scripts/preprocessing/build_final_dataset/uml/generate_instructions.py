@@ -1033,7 +1033,9 @@ class GPTAutomator:
             if retry_count > 0:
                 retry_happened = True
                 print(f"\n🔄 检测到生成错误,正在重试 ({retry_count}/{max_retries - 1})...")
-                time.sleep(3)
+                print("  🔄 开启新对话以重试...")
+                self.start_new_chat()
+                time.sleep(2)
 
             # 发送提示词
             if not self.send_prompt(prompt):

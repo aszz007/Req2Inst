@@ -1,14 +1,15 @@
 """
-众包指令自动生成脚本 - Image标注版本
-基于图像JSON描述批量生成众包标注指令
-
-优化要点:
-1. 专门处理图像标注JSON数据
-2. 数据清洗：移除无关元数据字段
-3. Few-shot学习：包含高质量标注示例
-4. 单条处理高质量：BATCH_SIZE=1
-5. 增强生成检测稳定性（支持长响应+瞬间生成）
-6. 修复刷新计数bug（每条后自动刷新）
+Image众包指令批次修复脚本
+基于generate_instructions_image.py的稳定生成逻辑
+核心特性:
+1. 继承稳定的浏览器自动化功能
+2. 批次完整性检查:如果批次中有任何ERROR,整个批次重新生成
+3. 自动检测需要修复的批次范围
+4. 精准检测"ERROR: 生成失败",支持多种引号格式
+5. 新增:三段式完整性检查(Definition/Emphasis/Things to Avoid)
+6. 新增:句号检查(可通过ENABLE_PERIOD_CHECK参数配置,默认关闭)
+7. 详细错误报告,列出每条错误数据及具体问题
+8. 使用与generate文件完全一致的硬编码Prompt
 """
 
 import os
@@ -30,52 +31,31 @@ CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 DATASET_PATH = r"D:\MyPyProject\crowdsourcing_instruction_generator\dataset\image"
 GPT_URL = "https://sass-node1.chatshare.biz/"
 
-# 单个CSV文件
+# 目标文件
 CSV_FILE = "image_interim_coco_1k.csv"
 
-# 优化批次参数
-BATCH_SIZE = 1  # 每批1条，质量优先
-REFRESH_INTERVAL = 1  # 每1条开启新对话（每批都刷新）
+# 批次参数
+BATCH_SIZE = 1  # 批次大小(与首次生成保持一致)
 CHECK_INTERVAL = 100
-TEST_MODE_LIMIT = 10  # 测试模式
-
-# 响应等待时间配置
-WAIT_NEW_RESPONSE_TIMEOUT = 60  # 等待新回复最多60秒（应对长响应）
+WAIT_NEW_RESPONSE_TIMEOUT = 60  # 等待新回复最多60秒
 CONTENT_STABLE_CHECKS = 3  # 内容稳定性检查次数
-
-# ==================== 高质量Few-shot示例 ====================
-IMAGE_ANNOTATION_EXAMPLE = {
-    "json": """{
-  "description": "A busy urban street with cars and traffic signs in the foreground.",
-  "details": {
-    "objects": ["car", "traffic sign", "person", "building", "road"],
-    "scene": "urban street",
-    "spatial_info": "Cars are in the foreground, buildings in the background"
-  }
-}""",
-    "instruction": """Definition: In this task, draw bounding boxes around all "car", "traffic sign", and "person" objects.
-Emphasis & Caution: Focus on foreground objects. Ensure bounding boxes are tight and accurate.
-Things to Avoid: Do not annotate "building" or "road" as these are background elements."""
-}
+ENABLE_PERIOD_CHECK = False  # 句号检测开关（默认关闭）
 
 # ==================== 工具函数 ====================
-class GPTAutomator:
-    def __init__(self, test_mode=True):
-        self.test_mode = test_mode
+class ImageBatchRepairer:
+    def __init__(self):
         self.driver = None
         self.current_tab = None
-        self.processed_count = 0
+        self.repaired_count = 0
         self.error_log = []
+        self.error_details = []  # 存储详细错误信息
 
-        # 【优化】缓存成功的选择器
+        # 缓存成功的选择器
         self.cached_input_selector = None
         self.cached_button_selector = None
 
-        # 【新增】记录发送前的回复数量，避免检测到旧回复
+        # 记录发送前的回复数量
         self.response_count_before_send = 0
-
-        # ✨ 【新增】批次计数器（修复刷新bug）
-        self.batches_since_refresh = 0
 
     def init_driver(self):
         """初始化Chrome浏览器"""
@@ -841,7 +821,9 @@ CRITICAL RULES:
             if retry_count > 0:
                 retry_happened = True
                 print(f"\n🔄 检测到生成错误,正在重试 ({retry_count}/{max_retries - 1})...")
-                time.sleep(3)
+                print("  🔄 开启新对话以重试...")
+                self.start_new_chat()
+                time.sleep(2)
 
             # 发送提示词
             if not self.send_prompt(prompt):
@@ -939,6 +921,239 @@ CRITICAL RULES:
         except Exception as e:
             print(f"  ✗ 开启新对话失败: {e}")
             print("  ℹ 将继续在当前对话中处理")
+
+    def validate_instruction_format(self, instruction):
+        """
+        验证指令格式完整性
+        返回: (is_valid, errors)
+        """
+        errors = []
+
+        if not instruction or instruction.strip() == "":
+            return False, ["指令为空"]
+
+        lines = [line.strip() for line in instruction.strip().split('\n') if line.strip()]
+
+        if len(lines) < 3:
+            return False, [f"行数不足(期望3行,实际{len(lines)}行)"]
+
+        has_definition = False
+        has_emphasis = False
+        has_avoid = False
+
+        for line in lines:
+            if line.startswith('Definition:'):
+                has_definition = True
+                # 检查Definition是否包含"draw bounding boxes"（图像标注的核心任务）
+                content = line[len('Definition:'):].strip()
+                if not content.lower().startswith('in this task'):
+                    errors.append("Definition未以'In this task'开头")
+                if 'bounding box' not in content.lower() and 'draw box' not in content.lower():
+                    errors.append("Definition未明确要求画边框")
+                # 检查是否以句号结尾
+                if ENABLE_PERIOD_CHECK and not content.endswith('.'):
+                    errors.append("Definition缺少结尾句号")
+
+            elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
+                has_emphasis = True
+                content = line.split(':', 1)[1].strip() if ':' in line else ""
+                # 检查是否以句号结尾(如果不是"-")
+                if ENABLE_PERIOD_CHECK and content and content != '-' and not content.endswith('.'):
+                    errors.append("Emphasis & Caution缺少结尾句号")
+
+            elif line.startswith('Things to Avoid:'):
+                has_avoid = True
+                content = line[len('Things to Avoid:'):].strip()
+                # 检查是否以句号结尾(如果不是"-")
+                if ENABLE_PERIOD_CHECK and content and content != '-' and not content.endswith('.'):
+                    errors.append("Things to Avoid缺少结尾句号")
+
+        if not has_definition:
+            errors.append("缺少Definition部分")
+        if not has_emphasis:
+            errors.append("缺少Emphasis & Caution部分")
+        if not has_avoid:
+            errors.append("缺少Things to Avoid部分")
+
+        is_valid = (has_definition and has_emphasis and has_avoid and len(errors) == 0)
+        return is_valid, errors
+
+    def detect_error_batches(self, df):
+        """
+        检测需要修复的批次
+        包括:
+        1. 包含"ERROR: 生成失败"的行
+        2. 格式不完整的行(三段式检查、句号检查)
+        """
+        print("\n" + "="*60)
+        print("开始检测错误数据...")
+        print("="*60)
+
+        error_batches = []
+        self.error_details = []
+
+        total_rows = len(df)
+        error_count = 0
+
+        for i in range(0, total_rows, BATCH_SIZE):
+            batch_end = min(i + BATCH_SIZE, total_rows)
+            batch_has_error = False
+            batch_error_details = []
+
+            for idx in range(i, batch_end):
+                instruction = str(df.loc[idx, 'Instruction'])
+                header = df.loc[idx, 'Header']
+                row_num = idx + 1
+
+                # 检查1: ERROR标记
+                if 'ERROR' in instruction.upper() and '生成失败' in instruction:
+                    batch_has_error = True
+                    error_msg = "含有ERROR标记"
+                    batch_error_details.append((row_num, header, error_msg))
+                    continue
+
+                # 检查2: 空指令
+                if not instruction or instruction.strip() == '' or instruction == 'nan':
+                    batch_has_error = True
+                    error_msg = "指令为空"
+                    batch_error_details.append((row_num, header, error_msg))
+                    continue
+
+                # 检查3: 格式完整性
+                is_valid, format_errors = self.validate_instruction_format(instruction)
+                if not is_valid:
+                    batch_has_error = True
+                    error_msg = "; ".join(format_errors)
+                    batch_error_details.append((row_num, header, error_msg))
+
+            if batch_has_error:
+                error_count += len(batch_error_details)
+                self.error_details.extend(batch_error_details)
+
+                # 获取该批次的数据
+                batch_data = []
+                for idx in range(i, batch_end):
+                    header = df.loc[idx, 'Header']
+                    description = df.loc[idx, 'Description']
+                    batch_data.append((header, description))
+
+                error_batches.append((len(error_batches) + 1, i, batch_data))
+
+        print(f"\n检测结果:")
+        print(f"  总数据条数: {total_rows}")
+        print(f"  错误数据条数: {error_count}")
+        print(f"  需修复批次数: {len(error_batches)}")
+
+        return error_batches
+
+    def print_error_report(self):
+        """打印详细错误报告"""
+        if not self.error_details:
+            return
+
+        print("\n" + "="*60)
+        print("详细错误报告")
+        print("="*60)
+
+        for row_num, header, error_msg in self.error_details:
+            print(f"\n第{row_num}行: {header}")
+            print(f"  错误: {error_msg}")
+
+        print("\n" + "="*60)
+
+    def repair_file(self, csv_path):
+        """修复单个文件"""
+        print(f"\n{'#' * 60}")
+        print(f"# 处理文件: {os.path.basename(csv_path)}")
+        print(f"{'#' * 60}")
+
+        # 读取文件
+        try:
+            with open(csv_path, 'rb') as f:
+                raw_data = f.read(100000)
+                result = chardet.detect(raw_data)
+                encoding = result['encoding']
+                print(f"文件编码: {encoding}")
+
+            try:
+                df = pd.read_csv(csv_path, encoding=encoding)
+            except:
+                for enc in ['utf-8', 'gbk', 'gb18030', 'latin1']:
+                    try:
+                        df = pd.read_csv(csv_path, encoding=enc)
+                        print(f"  ✓ 使用 {enc} 编码")
+                        break
+                    except:
+                        continue
+                else:
+                    raise Exception("无法读取文件")
+
+        except Exception as e:
+            print(f"✗ 读取文件失败: {e}")
+            return 0
+
+        # 确保Instruction列存在
+        if 'Instruction' not in df.columns:
+            df['Instruction'] = ''
+        df['Instruction'] = df['Instruction'].astype(str)
+        df.loc[df['Instruction'] == 'nan', 'Instruction'] = ''
+
+        # 检测需要修复的批次
+        error_batches = self.detect_error_batches(df)
+
+        if not error_batches:
+            print("\n✓ 未发现需要修复的错误数据")
+            # 仍然打印详细报告(如果有的话)
+            self.print_error_report()
+            return 0
+
+        # 打印详细错误报告
+        self.print_error_report()
+
+        # 询问是否继续
+        print(f"\n⚠️ 发现 {len(error_batches)} 个错误批次,共约 {len(error_batches) * BATCH_SIZE} 条数据需要修复")
+        user_input = input("是否继续修复? (y/n): ").strip().lower()
+        if user_input != 'y':
+            print("❌ 用户取消修复")
+            return 0
+
+        # 开启新对话
+        self.start_new_chat()
+
+        # 逐批次修复
+        repaired_batches = 0
+        for batch_num, start_idx, batch_data in error_batches:
+            # 处理批次
+            instructions, _ = self.process_batch(batch_data, start_idx)
+
+            # 写入结果
+            for i, instruction in enumerate(instructions):
+                row_idx = start_idx + i
+                if instruction:
+                    # 标准化三段式格式后再保存
+                    instruction = self.normalize_three_part_format(instruction)
+                    df.at[row_idx, 'Instruction'] = instruction
+                    self.repaired_count += 1
+                else:
+                    df.at[row_idx, 'Instruction'] = "ERROR: 生成失败"
+
+            repaired_batches += 1
+
+            # 保存进度
+            df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+            print(f"  ✓ 已保存进度: {start_idx + len(batch_data)}/{len(df)}")
+
+            # 每个批次刷新对话
+            if repaired_batches < len(error_batches):
+                self.start_new_chat()
+
+        # 最终保存
+        df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+        print(f"\n✓ 文件修复完成: {os.path.basename(csv_path)}")
+        print(f"  修复批次: {repaired_batches}")
+        print(f"  修复数据: {self.repaired_count} 条\n")
+
+        return self.repaired_count
 
     def process_file(self, csv_path):
         """
@@ -1047,37 +1262,35 @@ CRITICAL RULES:
         """主运行函数"""
         start_time = datetime.now()
         print(f"\n{'=' * 60}")
-        print(f"{'批量图像标注指令生成系统':^60}")
+        print(f"{'Image批次完整性修复系统':^60}")
         print(f"{'=' * 60}")
         print(f"开始时间: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"模式: {'测试模式 (10条)' if self.test_mode else '完整模式'}")
         print(f"批次大小: {BATCH_SIZE} 条/批")
-        print(f"刷新间隔: {REFRESH_INTERVAL} 条 ({REFRESH_INTERVAL//BATCH_SIZE} 批)")
-        print(f"响应超时: {WAIT_NEW_RESPONSE_TIMEOUT} 秒")
+        period_check_status = "启用" if ENABLE_PERIOD_CHECK else "关闭"
+        print(f"检测功能: ERROR标记 + 三段式格式 + 句号检查({period_check_status})")
+        print(f"目标文件: {CSV_FILE}")
         print(f"{'=' * 60}\n")
 
         try:
             self.init_driver()
 
-            # ✨ 处理单个CSV文件
+            # 处理目标文件
             csv_path = os.path.join(DATASET_PATH, CSV_FILE)
             if os.path.exists(csv_path):
-                total_processed = self.process_file(csv_path)
+                total_repaired = self.repair_file(csv_path)
             else:
                 print(f"✗ 文件不存在: {csv_path}")
-                total_processed = 0
+                total_repaired = 0
 
             end_time = datetime.now()
             duration = end_time - start_time
 
             print(f"\n{'=' * 60}")
-            print(f"{'处理完成':^60}")
+            print(f"{'修复完成':^60}")
             print(f"{'=' * 60}")
             print(f"结束时间: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
             print(f"耗时: {duration}")
-            print(f"总计处理: {total_processed} 条图像数据")
-            print(f"成功: {total_processed - len(self.error_log)} 条")
-            print(f"失败: {len(self.error_log)} 条")
+            print(f"总计修复: {total_repaired} 条数据")
 
             if self.error_log:
                 print(f"\n错误日志:")
@@ -1099,29 +1312,5 @@ CRITICAL RULES:
 
 # ==================== 主程序 ====================
 if __name__ == "__main__":
-    print("\n" + "="*60)
-    print("请选择运行模式:")
-    print(f"  1. 测试模式 (仅处理前{TEST_MODE_LIMIT}条)")
-    print("  2. 完整模式 (处理所有数据)")
-    print("="*60)
-
-    while True:
-        choice = input("\n请输入选项 (1 或 2): ").strip()
-        if choice == "1":
-            test_mode = True
-            print("\n✓ 已选择: 测试模式")
-            break
-        elif choice == "2":
-            test_mode = False
-            print("\n✓ 已选择: 完整模式")
-            confirm = input("⚠ 完整模式将处理大量数据,确认继续? (y/n): ").strip().lower()
-            if confirm == 'y':
-                break
-            else:
-                print("已取消")
-                exit(0)
-        else:
-            print("✗ 无效选项,请输入 1 或 2")
-
-    automator = GPTAutomator(test_mode=test_mode)
-    automator.run()
+    repairer = ImageBatchRepairer()
+    repairer.run()
