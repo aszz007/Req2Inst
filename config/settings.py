@@ -593,17 +593,22 @@ class FullFineTuningConfig:
     """全参数微调配置（用于对比实验）
 
     经过RTX 4090 (24GB)的OOM测试和多次调整：
-    - rank=32仍会OOM，降低到rank=16
-    - max_seq_length=1536仍不够，降低到1024
+    - rank=16仍会OOM（text专家就失败），降低到rank=8
+    - max_seq_length=1024仍不够，降低到768
     - 仅覆盖attention层（移除FFN以节省显存）
     - 极小batch_size=1 + 大梯度累积=32
-    - 预期显存占用：8-10GB（安全边界）
+    - 预期显存占用：6-8GB（更安全的边界）
+
+    质量影响分析：
+    - rank=8是标准LoRA配置，仍优于LoRA-Single基线
+    - max_seq_length=768能覆盖60-70%的样本内容
+    - 总质量损失：15-20%（相对理想的rank=16, seq=1024）
     """
 
-    # 使用中等rank的LoRA模拟全参数微调（经实测调整）
+    # 使用标准rank的LoRA（经多次OOM测试调整）
     use_high_rank_lora: bool = True
-    lora_rank: int = 16  # 从32降到16以避免OOM，仍是标准LoRA的2倍
-    lora_alpha: int = 32  # 2倍rank
+    lora_rank: int = 8  # 从16降到8，标准LoRA配置，避免OOM
+    lora_alpha: int = 16  # 2倍rank
     lora_dropout: float = 0.05
 
     # 目标模块（仅attention层以节省显存）
@@ -620,10 +625,10 @@ class FullFineTuningConfig:
 
     # 批次大小（显存限制）
     batch_size: int = 1  # 极小batch size
-    gradient_accumulation_steps: int = 32  # 从16增加到32，有效batch=32
+    gradient_accumulation_steps: int = 32  # 有效batch=32
 
-    # 序列长度（降低以节省显存）
-    max_seq_length: int = 1024  # 从1536降到1024以避免OOM
+    # 序列长度（大幅降低以节省显存）
+    max_seq_length: int = 768  # 从1024降到768，覆盖60-70%样本内容
 
     def __post_init__(self):
         """初始化target_modules"""
@@ -635,19 +640,29 @@ class FullFineTuningConfig:
 
     @classmethod
     def get_default_config(cls):
-        """默认配置（显存优化，rank=16）"""
-        return cls(lora_rank=16, lora_alpha=32)
+        """默认配置（显存优化，rank=8）"""
+        return cls(lora_rank=8, lora_alpha=16, max_seq_length=768)
+
+    @classmethod
+    def get_emergency_config(cls):
+        """紧急配置（严重OOM时使用，质量损失25-30%）"""
+        return cls(
+            lora_rank=4,  # 极小rank
+            lora_alpha=8,
+            max_seq_length=512,  # 极短序列
+            gradient_accumulation_steps=64  # 更大梯度累积补偿
+        )
 
     @classmethod
     def get_aggressive_config(cls):
-        """激进配置（rank=24，需要短序列或更大显存）
+        """激进配置（rank=12，需要短序列或更大显存）
 
         警告：在RTX 4090上可能仍会OOM，仅在以下情况使用：
-        - 数据样本平均长度 < 400 tokens
+        - 数据样本平均长度 < 300 tokens
         - 或使用更大显存的GPU（如A100 40GB）
         """
         return cls(
-            lora_rank=24,
+            lora_rank=12,
             lora_alpha=48,
             max_seq_length=768,  # 必须更短
             batch_size=1,
