@@ -90,13 +90,20 @@ class ImageDatasetBuilder:
             # 从图片名中移除扩展名
             name_without_ext = Path(image_name).stem
 
-            # 检查识别是否成功
-            if not entry.get('success', False):
+            # 检查识别是否成功（支持两种格式）
+            recognition_status = entry.get('recognition_status', '')
+            success_flag = entry.get('success', False)
+
+            # 识别失败的判断：recognition_status不是'success' 且 success不是True
+            is_failed = (recognition_status != 'success' and not success_flag)
+
+            if is_failed:
                 self.stats['failed_recognitions'] += 1
+                error_msg = entry.get('error', f'Recognition status: {recognition_status}' if recognition_status else 'Unknown error')
                 self.errors.append({
                     'type': 'FAILED_RECOGNITION',
                     'image_name': name_without_ext,
-                    'error': entry.get('error', '未知错误')
+                    'error': error_msg
                 })
 
             # 存入映射（即使识别失败也保留，但标记）
@@ -147,7 +154,7 @@ class ImageDatasetBuilder:
         """
         准备用于CSV的JSON字符串（移除元数据，保留Image描述内容）
         只保留: Description字段内容
-        移除: image_path, image_name, success, timestamp
+        移除: image_path, image_name, recognition_status, timestamp
 
         Args:
             recognition_info: 识别信息字典
@@ -155,12 +162,19 @@ class ImageDatasetBuilder:
         Returns:
             str: 格式化的JSON字符串
         """
-        # 检查识别是否成功
-        if not recognition_info.get('success', False):
+        # 检查识别是否成功（支持两种格式）
+        recognition_status = recognition_info.get('recognition_status', '')
+        success_flag = recognition_info.get('success', False)
+
+        # 识别成功的判断：recognition_status是'success' 或 success是True
+        is_success = (recognition_status == 'success' or success_flag)
+
+        if not is_success:
             # 识别失败，返回错误信息
+            error_msg = recognition_info.get('error', f'Recognition status: {recognition_status}' if recognition_status else 'Unknown error')
             return json.dumps({
                 'recognition_status': 'failed',
-                'error': recognition_info.get('error', 'Unknown error')
+                'error': error_msg
             }, ensure_ascii=False)
 
         # 识别成功，获取description字段内容
@@ -257,8 +271,12 @@ class ImageDatasetBuilder:
             if image_name in json_mapping:
                 recognition_info = json_mapping[image_name]
 
-                # 如果不包含失败的记录，则跳过
-                if not include_failed and not recognition_info.get('success', False):
+                # 如果不包含失败的记录，则跳过（支持两种格式）
+                recognition_status = recognition_info.get('recognition_status', '')
+                success_flag = recognition_info.get('success', False)
+                is_success = (recognition_status == 'success' or success_flag)
+
+                if not include_failed and not is_success:
                     continue
 
                 # 准备行数据
