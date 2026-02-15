@@ -183,7 +183,7 @@ class PTuningTrainer(BaseTrainer):
                 'pretrained_model_name_or_path': self.base_model_path,
                 'trust_remote_code': True,
                 'device_map': 'auto',
-                'torch_dtype': torch.bfloat16 if self.use_rtx4090_optimization else torch.float16,
+                'dtype': torch.bfloat16 if self.use_rtx4090_optimization else torch.float16,
             }
 
             if quantization_config:
