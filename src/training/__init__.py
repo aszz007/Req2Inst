@@ -22,7 +22,7 @@ from .data_loader import (
     create_dataloader,
 )
 
-from .expert_trainer import ExpertTrainer
+from .lora_trainer import ExpertTrainer
 
 __all__ = [
     # 数据加载器

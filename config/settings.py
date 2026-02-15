@@ -139,7 +139,7 @@ class PathConfig:
         self.RAW_UML_DIR = self.RAW_DATA_DIR / "uml"
 
         # 原始数据默认测试目录（用于批量识别脚本）
-        self.COCO_500_DIR = self.RAW_IMAGE_DIR / "coco_1k"
+        self.COCO_1K_DIR = self.RAW_IMAGE_DIR / "coco_1k"
         self.ROBOFLOW_UML_DIR = self.RAW_UML_DIR / "roboflow_uml"
         self.MDPI_UML_DIR = self.RAW_UML_DIR / "mdpi_uml"
         self.PLANT_UML_DIR = self.RAW_UML_DIR / "plant_uml"
@@ -476,7 +476,7 @@ class TrainingConfig:
     text_val_ratio: float = 0.1
     text_test_ratio: float = 0.1
 
-    # 图像数据集（500条）
+    # 图像数据集（1000条）
     image_train_ratio: float = 0.8
     image_val_ratio: float = 0.1
     image_test_ratio: float = 0.1
@@ -611,7 +611,7 @@ class FullFineTuningConfig:
     max_grad_norm: float = 0.5
 
     # 批次大小（显存限制）
-    batch_size: int = 4  # 相比LoRA减半
+    batch_size: int = 2  # 相比LoRA减半
     gradient_accumulation_steps: int = 4
 
     def __post_init__(self):
