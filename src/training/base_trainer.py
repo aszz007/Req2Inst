@@ -8,7 +8,6 @@
   - 训练曲线可视化
   - RTX 4090优化配置
   - 早停策略
-  - 长序列专家内存优化（UML和General）
 
 作者：Training System
 日期：2025-02-15
@@ -138,7 +137,7 @@ class BaseTrainer(ABC):
             base_model_path: 基础模型路径（None则从配置获取）
             output_dir: 输出目录（None则从配置获取）
             use_rtx4090_optimization: 是否启用RTX 4090优化
-            debug_samples: 是否在训练开始前打印前3个训练样本（默认开启）
+            debug_samples: 是否在训练开始前打印前5个训练样本（默认开启）
         """
         valid_types = ['text', 'image', 'uml', 'general']
         if expert_type not in valid_types:
@@ -295,12 +294,6 @@ class BaseTrainer(ABC):
             logger.info(f"  验证集: {len(self.val_dataset)}条")
             logger.info(f"  测试集: {len(self.test_dataset)}条")
 
-            # 针对长序列专家在数据准备后清理GPU缓存
-            if self.expert_type in ['uml', 'general']:
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    logger.info(f"数据准备完成后清理GPU缓存（{self.expert_type}专家长序列优化）")
-
             return True
 
         except Exception as e:
@@ -364,12 +357,6 @@ class BaseTrainer(ABC):
             logger.error("数据未准备，请先调用prepare_data()")
             return False
 
-        # 针对长序列专家在训练开始前清理GPU缓存
-        if self.expert_type in ['uml', 'general']:
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                logger.info(f"训练开始前清理GPU缓存（{self.expert_type}专家长序列优化）")
-
         try:
             # 创建输出目录
             self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -415,9 +402,14 @@ class BaseTrainer(ABC):
                 'metric_for_best_model': 'eval_loss',
                 'greater_is_better': False,
                 'report_to': 'none',
-                'gradient_checkpointing': True,
                 'remove_unused_columns': False,
             }
+
+            # Gradient checkpointing（某些方法如P-Tuning v2不支持）
+            if not getattr(self, 'disable_gradient_checkpointing', False):
+                training_args_dict['gradient_checkpointing'] = True
+            else:
+                logger.info("Gradient checkpointing已禁用（当前训练方法不支持）")
 
             # 使用eval_strategy或evaluation_strategy（根据transformers版本）
             if _should_use_eval_strategy():
@@ -427,19 +419,13 @@ class BaseTrainer(ABC):
 
             # RTX 4090优化配置
             if self.use_rtx4090_optimization:
-                # UML和General专家使用较少的workers以节省内存
-                num_workers = 4 if self.expert_type in ['uml', 'general'] else 8
-
                 training_args_dict.update({
                     'bf16': True,
                     'tf32': True,
                     'optim': 'adamw_torch_fused',
-                    'dataloader_num_workers': num_workers,
+                    'dataloader_num_workers': 8,
                     'dataloader_prefetch_factor': 4,
                 })
-
-                if self.expert_type in ['uml', 'general']:
-                    logger.info(f"使用较少的dataloader workers ({num_workers}) 以节省{self.expert_type}专家的内存")
             else:
                 training_args_dict['fp16'] = torch.cuda.is_available()
 
@@ -451,13 +437,13 @@ class BaseTrainer(ABC):
                 pad_to_multiple_of=8
             )
 
-            # 调试：打印前3个训练样本
+            # 调试：打印前5个训练样本
             if self.debug_samples and len(self.train_dataset) > 0:
                 logger.info("=" * 80)
-                logger.info("[调试输出] 打印前3个训练样本的prompt")
+                logger.info("[调试输出] 打印前5个训练样本的prompt")
                 logger.info("=" * 80)
 
-                for i in range(min(3, len(self.train_dataset))):
+                for i in range(min(5, len(self.train_dataset))):
                     sample = self.train_dataset.data[i]
                     logger.info(f"\n样本 {i+1}:")
                     logger.info("-" * 80)

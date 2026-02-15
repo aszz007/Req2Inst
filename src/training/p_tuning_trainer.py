@@ -82,10 +82,14 @@ class PTuningTrainer(BaseTrainer):
         self.use_4bit = use_4bit
         self.ptuning_cfg = get_ptuning_config()
 
+        # P-Tuning v2不支持gradient checkpointing
+        self.disable_gradient_checkpointing = True
+
         logger.info(f"4bit量化: {use_4bit}")
         logger.info(f"P-Tuning v2配置: virtual_tokens={self.ptuning_cfg.num_virtual_tokens}, "
                     f"encoder_hidden_size={self.ptuning_cfg.encoder_hidden_size}, "
                     f"prefix_projection={self.ptuning_cfg.prefix_projection}")
+        logger.info("注意: P-Tuning v2不支持gradient checkpointing，已禁用")
 
         self._print_training_config()
 
@@ -159,6 +163,17 @@ class PTuningTrainer(BaseTrainer):
 
             # 配置P-Tuning v2（Prefix Tuning）
             logger.info("配置P-Tuning v2...")
+
+            # 关键：P-Tuning v2不支持gradient checkpointing，必须先禁用
+            if hasattr(self.model, 'gradient_checkpointing_disable'):
+                self.model.gradient_checkpointing_disable()
+                logger.info("已禁用gradient checkpointing（P-Tuning v2要求）")
+
+            # 如果模型已经启用了gradient checkpointing，需要显式关闭
+            if hasattr(self.model, 'config') and hasattr(self.model.config, 'use_cache'):
+                self.model.config.use_cache = True
+                logger.info("启用use_cache（P-Tuning v2优化）")
+
             peft_config = PrefixTuningConfig(
                 task_type=TaskType.CAUSAL_LM,
                 num_virtual_tokens=self.ptuning_cfg.num_virtual_tokens,
