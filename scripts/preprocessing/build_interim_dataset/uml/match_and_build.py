@@ -280,12 +280,12 @@ class DatasetBuilder:
                 # 准备行数据
                 header = image_name  # 图片名（去掉扩展名）
                 description = self.prepare_json_string(recognition_info)  # 只保留UML内容的JSON
-                example = ""  # 空白，待后续填充
+                instruction = ""  # 空白，待后续填充
 
                 rows.append({
                     'Header': header,
                     'Description': description,
-                    'Example': example
+                    'Instruction': instruction
                 })
             else:
                 # 图片存在但没有JSON - 添加占位符
@@ -295,12 +295,12 @@ class DatasetBuilder:
                         'recognition_status': 'missing',
                         'error': 'No JSON recognition result found'
                     }, ensure_ascii=False),
-                    'Example': ""
+                    'Instruction': ""
                 })
 
         # 写入CSV（使用utf-8-sig编码，添加BOM以避免Windows Excel乱码）
         with open(output_csv, 'w', encoding='utf-8-sig', newline='') as f:
-            fieldnames = ['Header', 'Description', 'Example']
+            fieldnames = ['Header', 'Description', 'Instruction']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
 
             writer.writeheader()
@@ -373,7 +373,7 @@ def main():
     print(" "*20 + "UML用例图数据集构建工具")
     print("="*80)
     print(f"用途: 将图片 + JSON结果转换为CSV数据集")
-    print(f"输出格式: Header | Description | Example")
+    print(f"输出格式: Header | Description | Instruction")
     print(f"Description内容: 仅包含UML识别信息（actors, use_cases, etc.）")
     print(f"已过滤字段: image_path, image_name, success, timestamp")
     print("="*80 + "\n")
@@ -395,7 +395,7 @@ def main():
         print(f"✓ 输出文件: {output_path}")
         print(f"\n后续步骤:")
         print(f"1. 查看错误日志以检查任何问题")
-        print(f"2. 根据需要填充 'Example' 列")
+        print(f"2. 根据需要填充 'Instruction' 列")
         print(f"3. 使用数据集进行模型训练或其他应用")
 
     except Exception as e:
