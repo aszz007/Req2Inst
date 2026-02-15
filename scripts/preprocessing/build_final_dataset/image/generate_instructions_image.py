@@ -1,13 +1,14 @@
 """
-众包指令自动生成脚本 - 图像数据版本
-基于图像识别结果批量生成众包任务指令
+众包指令自动生成脚本 - Image标注版本
+基于图像JSON描述批量生成众包标注指令
+
 优化要点:
-1. 专门处理COCO数据集识别结果
-2. 数据清洗：移除无关字段
-3. Few-shot学习：包含优质样本
-4. 小批量高质量：BATCH_SIZE=5
-5. ✨ 增强生成检测稳定性（支持长响应+瞬间生成）
-6. ✨ 修复刷新计数bug（重试后自动刷新）
+1. 专门处理图像标注JSON数据
+2. 数据清洗：移除无关元数据字段
+3. Few-shot学习：包含高质量标注示例
+4. 单条处理高质量：BATCH_SIZE=1
+5. 增强生成检测稳定性（支持长响应+瞬间生成）
+6. 修复刷新计数bug（每条后自动刷新）
 """
 
 import os
@@ -29,71 +30,33 @@ CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 DATASET_PATH = r"D:\MyPyProject\crowdsourcing_instruction_generator\dataset\image"
 GPT_URL = "https://sass-node1.chatshare.biz/"
 
-# ✨ 修改：单个CSV文件
+# 单个CSV文件
 CSV_FILE = "image_interim_coco_1k.csv"
 
-# ✨ 修改：优化批次参数
-BATCH_SIZE = 5  # 每批5条，质量优先
-REFRESH_INTERVAL = 15  # 开启新对话（改为3批=15条，避免第4批卡死）
+# 优化批次参数
+BATCH_SIZE = 1  # 每批1条，质量优先
+REFRESH_INTERVAL = 1  # 每1条开启新对话（每批都刷新）
 CHECK_INTERVAL = 100
-TEST_MODE_LIMIT = 15  # 测试模式
+TEST_MODE_LIMIT = 10  # 测试模式
 
-# ✨ 新增：响应等待时间配置
+# 响应等待时间配置
 WAIT_NEW_RESPONSE_TIMEOUT = 60  # 等待新回复最多60秒（应对长响应）
 CONTENT_STABLE_CHECKS = 3  # 内容稳定性检查次数
 
-# ✨ 新增：优质样本作为Few-shot示例
-QUALITY_EXAMPLE = """{
-  "description": "Three workers wearing orange uniforms checking equipment on the railway tracks.",
+# ==================== 高质量Few-shot示例 ====================
+IMAGE_ANNOTATION_EXAMPLE = {
+    "json": """{
+  "description": "A busy urban street with cars and traffic signs in the foreground.",
   "details": {
-    "objects": ["three workers", "orange uniforms", "yellow helmets", "black truck", "rails", "stones", "blue sky and clouds"],
-    "spatial_info": {
-      "workers": ["standing on the tracks"]
-    }
+    "objects": ["car", "traffic sign", "person", "building", "road"],
+    "scene": "urban street",
+    "spatial_info": "Cars are in the foreground, buildings in the background"
   }
+}""",
+    "instruction": """Definition: In this task, draw bounding boxes around all "car", "traffic sign", and "person" objects.
+Emphasis & Caution: Focus on foreground objects. Ensure bounding boxes are tight and accurate.
+Things to Avoid: Do not annotate "building" or "road" as these are background elements."""
 }
-
-Output Instruction:
-Definition: In this task, draw tight bounding boxes around all "workers" and "trucks".
-Emphasis & Caution: Focus on targets wearing "orange uniforms" and "yellow helmets".
-Things to Avoid: Do not annotate background elements like "rails", "stones", or "sky".
-"""
-
-# ✨ 修改：新的提示词模板（针对图像标注任务）
-SYSTEM_PROMPT = """你是一个计算机视觉数据专家与众包任务设计者。请根据以下输入的图像分析结构化数据，编写一个适合众包工人使用的英文图像标注任务指令。
-
-核心原则：
-1.标注导向：指令必须明确要求工人进行 "Draw bounding boxes" (画边框)。
-2.前景提取：从 objects 中提取主要的前景实体（如人、车）作为目标，忽略背景元素。
-3.直接引用：直接使用 JSON 中的英文术语，不要进行同义词替换。
-4.极致精简：Emphasis 和 Avoid 部分必须言简意赅。如果 JSON 中缺乏显著的视觉特征或干扰项，直接填 "-"。
-
-格式要求：
-· Definition: 使用简明扼要的祈使句描述标注目标。必须以 "In this task," 开头。
-· Emphasis & Caution: 仅列出极具识别性的视觉特征（如特定颜色、位置）。如无特别强调，填 "-"。
-· Things to Avoid: 仅列出容易混淆的背景干扰项。如无特别避免事项，填 "-"。
-
-参考示例：
-{example}
-
-请为以下{count}条图像数据分别生成指令，严格按照以下格式输出：
-
-{image_data}
-
-请严格按照以下格式输出每条指令，不要添加额外说明：
-
-【图像1】
-Definition: ...
-Emphasis & Caution: ...
-Things to Avoid: ...
-
-【图像2】
-Definition: ...
-Emphasis & Caution: ...
-Things to Avoid: ...
-
-(依此类推)
-"""
 
 # ==================== 工具函数 ====================
 class GPTAutomator:
@@ -569,8 +532,8 @@ class GPTAutomator:
 
     def parse_instructions(self, response_text, expected_count):
         """
-        ✨ 修改：解析LLM回复,提取图像标注指令
-        适配新的格式：【图像N】
+        解析LLM回复,提取图像标注指令（批量版，已废弃）
+        保留此方法以防万一需要
         """
         instructions = []
 
@@ -589,6 +552,121 @@ class GPTAutomator:
                     instructions.append('Definition:' + part.strip())
 
         return instructions
+
+    def parse_image_instruction(self, response_text):
+        """
+        解析单条图像标注指令（新版，参考UML的稳定逻辑）
+        返回标准三段式指令文本
+        """
+        response_text = response_text.strip()
+
+        # 方法1：直接提取三段式内容
+        if 'Definition:' in response_text and 'Emphasis & Caution:' in response_text and 'Things to Avoid:' in response_text:
+            # 找到三个关键标记的位置
+            def_pos = response_text.find('Definition:')
+            emp_pos = response_text.find('Emphasis & Caution:')
+            avoid_pos = response_text.find('Things to Avoid:')
+
+            # 确保顺序正确
+            if def_pos < emp_pos < avoid_pos:
+                # 提取每个部分
+                definition = response_text[def_pos:emp_pos].strip()
+                emphasis = response_text[emp_pos:avoid_pos].strip()
+                avoid = response_text[avoid_pos:].strip()
+
+                # 移除末尾的多余内容（如果有）
+                avoid_lines = avoid.split('\n')
+                if len(avoid_lines) > 1:
+                    # 只保留第一行
+                    avoid = avoid_lines[0].strip()
+
+                instruction = f"{definition}\n{emphasis}\n{avoid}"
+                return instruction
+
+        # 方法2：使用正则表达式提取
+        pattern = r'Definition:\s*(.*?)\s*Emphasis & Caution:\s*(.*?)\s*Things to Avoid:\s*(.*?)(?:\n|$)'
+        match = re.search(pattern, response_text, re.DOTALL)
+        if match:
+            definition = f"Definition: {match.group(1).strip()}"
+            emphasis = f"Emphasis & Caution: {match.group(2).strip()}"
+            avoid = f"Things to Avoid: {match.group(3).strip()}"
+            instruction = f"{definition}\n{emphasis}\n{avoid}"
+            return instruction
+
+        # 如果无法解析，返回None
+        print(f"  ⚠ 无法解析指令格式")
+        return None
+
+    def normalize_three_part_format(self, instruction):
+        """
+        标准化三段式格式（确保每个部分独占一行）
+        """
+        if not instruction:
+            return instruction
+
+        # 检查是否已经是标准格式
+        lines = instruction.strip().split('\n')
+        if len(lines) >= 3:
+            has_definition = any(line.strip().startswith('Definition:') for line in lines)
+            has_emphasis = any(line.strip().startswith('Emphasis & Caution:') or line.strip().startswith('Emphasis and Caution:') for line in lines)
+            has_avoid = any(line.strip().startswith('Things to Avoid:') for line in lines)
+
+            if has_definition and has_emphasis and has_avoid:
+                # 已经是标准格式，直接返回
+                return instruction
+
+        # 需要标准化：确保三个部分都在单独的行
+        normalized_lines = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            # 如果一行中包含多个部分，拆分
+            if 'Definition:' in line:
+                # 提取Definition部分
+                def_start = line.find('Definition:')
+                def_content = line[def_start:]
+
+                # 检查是否包含其他部分
+                if 'Emphasis & Caution:' in def_content or 'Emphasis and Caution:' in def_content:
+                    # 需要拆分
+                    parts = re.split(r'(Emphasis & Caution:|Emphasis and Caution:|Things to Avoid:)', def_content)
+                    for i, part in enumerate(parts):
+                        if part.strip():
+                            if i == 0:
+                                normalized_lines.append(part.strip())
+                            elif part.strip() in ['Emphasis & Caution:', 'Emphasis and Caution:', 'Things to Avoid:']:
+                                continue
+                            else:
+                                # 添加标签
+                                if i > 0 and i < len(parts):
+                                    prev = parts[i-1].strip()
+                                    if prev in ['Emphasis & Caution:', 'Emphasis and Caution:']:
+                                        normalized_lines.append(f"Emphasis & Caution: {part.strip()}")
+                                    elif prev == 'Things to Avoid:':
+                                        normalized_lines.append(f"Things to Avoid: {part.strip()}")
+                else:
+                    normalized_lines.append(def_content.strip())
+
+            elif 'Emphasis & Caution:' in line or 'Emphasis and Caution:' in line:
+                # 统一使用 Emphasis & Caution:
+                if 'Emphasis and Caution:' in line:
+                    line = line.replace('Emphasis and Caution:', 'Emphasis & Caution:')
+                normalized_lines.append(line)
+
+            elif 'Things to Avoid:' in line:
+                normalized_lines.append(line)
+
+            else:
+                # 其他内容，跳过
+                continue
+
+        if len(normalized_lines) >= 3:
+            return '\n'.join(normalized_lines[:3])
+        else:
+            # 无法标准化，返回原始内容
+            return instruction
 
     def send_prompt(self, prompt_text, max_retries=3):
         """
@@ -686,66 +764,112 @@ class GPTAutomator:
 
     def process_batch(self, image_data_batch, start_idx):
         """
-        ✨ 修改：处理一批图像数据(5条)
-        检测生成错误并自动重试
-        【新增】返回是否发生重试的标志
+        处理单条图像数据（BATCH_SIZE=1）
+        硬编码完整prompt，采用UML的稳定处理逻辑
+        返回是否发生重试的标志
         """
         print(f"\n{'=' * 60}")
-        print(f"处理第 {start_idx + 1}-{start_idx + len(image_data_batch)} 条图像数据")
+        print(f"处理第 {start_idx + 1} 条图像数据")
         print(f"{'=' * 60}")
 
-        # ✨ 构建图像数据文本（清洗后）
-        data_text = ""
-        for i, (header, description) in enumerate(image_data_batch, 1):
-            # 清洗JSON数据
-            cleaned_json = self.clean_json_data(description)
-            data_text += f"{i}. [Header: {header}]\n{cleaned_json}\n\n"
+        # 提取Header和Description
+        header, description = image_data_batch[0]
 
-        prompt = SYSTEM_PROMPT.format(
-            example=QUALITY_EXAMPLE,
-            count=len(image_data_batch),
-            image_data=data_text
-        )
+        # 清洗JSON数据，移除元数据字段
+        try:
+            data = json.loads(description)
+            # 只保留description和details字段
+            filtered_data = {
+                "description": data.get("description", ""),
+                "details": data.get("details", {})
+            }
+            # 转为压缩JSON字符串（无空格、无换行）
+            json_str = json.dumps(filtered_data, ensure_ascii=False, separators=(',', ':'))
+        except json.JSONDecodeError:
+            # 如果不是有效JSON，直接使用
+            json_str = description
 
-        # ✨ 最大重试次数
+        # 硬编码完整Prompt（参考image_template.py的英文模板）
+        SYSTEM_PROMPT_HARDCODED = """You are a computer vision data expert and crowdsourcing task designer. Based on the input image analysis structured data, write an English image annotation instruction for crowdsourcing workers.
+
+Core Principles:
+1. Annotation Focus: The instruction must explicitly require workers to draw bounding boxes.
+2. Foreground Extraction: Extract main foreground objects (e.g., people, vehicles) from the objects list as annotation targets. Ignore background elements.
+3. Direct Reference: Use English terms directly from the JSON data. Do not replace with synonyms.
+4. Extreme Conciseness: Keep Emphasis and Avoid sections brief. Use "-" if no significant visual features or distractors exist."""
+
+        FORMAT_INSTRUCTIONS_HARDCODED = """Output Format Requirements:
+
+Definition: Use a clear imperative sentence to describe the annotation targets. Must start with "In this task," and explicitly mention "draw bounding boxes around".
+Emphasis & Caution: Only list highly distinctive visual features (e.g., specific colors, positions). Use "-" if nothing specific to emphasize.
+Things to Avoid: Only list confusing background distractors. Use "-" if nothing specific to avoid.
+
+CRITICAL RULES:
+- Each section must be on a separate line
+- Each line must start with the section label (Definition: / Emphasis & Caution: / Things to Avoid:)
+- Definition must include "draw bounding boxes around" and list specific objects from JSON data
+- Keep all sections concise
+- Output ONLY these three lines, nothing else"""
+
+        # 构建用户消息
+        user_message = f"""Image analysis structured data (JSON format):
+```json
+{json_str}
+```
+
+{FORMAT_INSTRUCTIONS_HARDCODED}"""
+
+        # 构建完整的Qwen格式prompt（assistant部分使用空think块禁用Qwen3思考模式）
+        prompt = f"""<|im_start|>system
+{SYSTEM_PROMPT_HARDCODED}<|im_end|>
+<|im_start|>user
+{user_message}<|im_end|>
+<|im_start|>assistant
+<think>
+
+</think>
+
+"""
+
+        # 最大重试次数
         max_retries = 3
         response = None
-        retry_happened = False  # 【新增】标记是否发生重试
+        retry_happened = False
 
         for retry_count in range(max_retries):
-            # 如果是重试,打印重试信息
+            # 如果是重试
             if retry_count > 0:
-                retry_happened = True  # 【新增】标记重试
+                retry_happened = True
                 print(f"\n🔄 检测到生成错误,正在重试 ({retry_count}/{max_retries - 1})...")
-                time.sleep(3)  # 等待3秒后重试
+                time.sleep(3)
 
             # 发送提示词
             if not self.send_prompt(prompt):
                 if retry_count < max_retries - 1:
-                    continue  # 重试
+                    continue
                 else:
                     self.error_log.append({
-                        'range': f"{start_idx + 1}-{start_idx + len(image_data_batch)}",
+                        'range': f"{start_idx + 1}",
                         'error': '发送失败'
                     })
-                    return [None] * len(image_data_batch), retry_happened
+                    return [None], retry_happened
 
             # 等待响应完成
             if not self.wait_for_response_complete():
                 if retry_count < max_retries - 1:
-                    continue  # 重试
+                    continue
                 else:
                     self.error_log.append({
-                        'range': f"{start_idx + 1}-{start_idx + len(image_data_batch)}",
+                        'range': f"{start_idx + 1}",
                         'error': '等待超时'
                     })
-                    return [None] * len(image_data_batch), retry_happened
+                    return [None], retry_happened
 
             # 提取响应
             response = self.extract_response()
             print(f"\n响应预览: {response[:200]}...\n")
 
-            # ✨ 核心修改:检测是否为错误响应
+            # 检测是否为错误响应
             error_keywords = [
                 "Something went wrong",
                 "生成响应时出错",
@@ -758,34 +882,30 @@ class GPTAutomator:
 
             is_error_response = any(keyword in response for keyword in error_keywords)
 
-            # 如果检测到错误响应
             if is_error_response:
                 print(f"  ⚠️ 检测到生成错误: {response[:100]}")
                 if retry_count < max_retries - 1:
                     print(f"  ↻ 将在3秒后重新发送...")
-                    continue  # 继续下一次重试
+                    continue
                 else:
-                    print(f"  ✗ 已达到最大重试次数({max_retries}),放弃本批次")
+                    print(f"  ✗ 已达到最大重试次数({max_retries}),放弃本条数据")
                     self.error_log.append({
-                        'range': f"{start_idx + 1}-{start_idx + len(image_data_batch)}",
+                        'range': f"{start_idx + 1}",
                         'error': f'生成错误(重试{max_retries}次后失败)'
                     })
-                    return [None] * len(image_data_batch), retry_happened
+                    return [None], retry_happened
             else:
-                # ✅ 响应正常,跳出重试循环
                 print(f"  ✓ 响应正常,准备解析")
                 break
 
-        # 解析指令
-        instructions = self.parse_instructions(response, len(image_data_batch))
+        # 解析指令（单条）
+        instruction = self.parse_image_instruction(response)
 
-        if len(instructions) != len(image_data_batch):
-            print(f"  ⚠ 警告: 期望{len(image_data_batch)}条,实际{len(instructions)}条")
-            while len(instructions) < len(image_data_batch):
-                instructions.append(None)
-            instructions = instructions[:len(image_data_batch)]
-
-        return instructions, retry_happened  # 【修改】返回重试标志
+        if instruction:
+            return [instruction], retry_happened
+        else:
+            print(f"  ✗ 解析失败")
+            return [None], retry_happened
 
     def start_new_chat(self):
         """
@@ -885,35 +1005,30 @@ class GPTAutomator:
         for i in range(0, total_rows, BATCH_SIZE):
             batch_end = min(i + BATCH_SIZE, total_rows)
 
-            # ✨✨✨ 【核心修复】在批次开始前检查是否需要刷新
-            # 这样可以在资源累积过多之前就刷新对话
-            if i > 0 and self.batches_since_refresh >= (REFRESH_INTERVAL // BATCH_SIZE):
-                print(f"\n  🔄 预防性刷新 - 已处理{self.batches_since_refresh}批({self.batches_since_refresh * BATCH_SIZE}条数据)")
-                print(f"  ℹ️ 当前进度: {i}/{total_rows}")
-                self.start_new_chat()
-
-            # ✨ 修改：提取 Header 和 Description
+            # 提取 Header 和 Description
             batch_data = []
             for idx in range(i, batch_end):
                 header = df.loc[idx, 'Header']
                 description = df.loc[idx, 'Description']
                 batch_data.append((header, description))
 
-            # 【关键】获取批处理结果和重试标志
+            # 获取批处理结果和重试标志
             instructions, retry_happened = self.process_batch(batch_data, i)
 
             for j, instruction in enumerate(instructions):
                 if instruction:
+                    # 标准化三段式格式后再保存
+                    instruction = self.normalize_three_part_format(instruction)
                     df.at[i + j, 'Instruction'] = instruction
                 else:
                     df.at[i + j, 'Instruction'] = "ERROR: 生成失败"
 
             self.processed_count += len(instructions)
-            self.batches_since_refresh += 1  # 【修复】每批都计数
+            self.batches_since_refresh += 1
 
-            # ✨✨ 【补充】发生重试后也立即刷新
-            if retry_happened and (i + BATCH_SIZE) < total_rows:
-                print(f"\n  🔄 检测到重试 - 立即刷新对话避免上下文混乱")
+            # 修改：每批次处理完成后立即刷新对话（除非是最后一批）
+            if (i + BATCH_SIZE) < total_rows:
+                print(f"\n  🔄 批次完成刷新 - 已处理{self.batches_since_refresh}批({self.batches_since_refresh * BATCH_SIZE}条数据)")
                 print(f"  ℹ️ 当前进度: {i + BATCH_SIZE}/{total_rows}")
                 self.start_new_chat()
 
