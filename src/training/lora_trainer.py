@@ -137,12 +137,15 @@ class LoRATrainer(BaseTrainer):
             if quantization_config:
                 model_kwargs['quantization_config'] = quantization_config
 
-            # Qwen3-8B需要禁用思考模式
-            if self.model_version == 'qwen3_8b':
-                model_kwargs['enable_thinking'] = False
-                logger.info("Qwen3-8B: 禁用思考模式（enable_thinking=False）")
-
             self.model = AutoModelForCausalLM.from_pretrained(**model_kwargs)
+
+            # Qwen3-8B需要禁用思考模式（加载后设置）
+            if self.model_version == 'qwen3_8b':
+                if hasattr(self.model.config, 'enable_thinking'):
+                    self.model.config.enable_thinking = False
+                    logger.info("Qwen3-8B: 禁用思考模式（enable_thinking=False）")
+                else:
+                    logger.info("Qwen3-8B: 模型不支持enable_thinking配置，跳过")
 
             # 如果使用4bit量化，准备模型
             if self.use_4bit:
