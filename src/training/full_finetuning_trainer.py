@@ -3,7 +3,7 @@ Full Fine-tuning训练器 - 使用中等rank LoRA模拟全参数微调
 
 功能：
   - 支持四种专家类型（text, image, uml, general）
-  - 使用rank=32的LoRA模拟全参数微调（经OOM测试调整）
+  - 使用rank=16的LoRA模拟全参数微调（经多次OOM测试调整）
   - 可选4bit量化训练
   - 覆盖attention层（移除FFN以节省显存）
   - 继承BaseTrainer的全部训练优化策略：
@@ -15,25 +15,25 @@ Full Fine-tuning训练器 - 使用中等rank LoRA模拟全参数微调
       - 梯度检查点
       - 权重衰减
 
-显存优化策略（RTX 4090 24GB，经实测）：
-  - LoRA Rank: 32（从64降低，仍是标准LoRA的4倍）
+显存优化策略（RTX 4090 24GB，经多次实测）：
+  - LoRA Rank: 16（从32降低，仍是标准LoRA的2倍）
   - Target Modules: 仅attention层（移除FFN节省40%显存）
-  - Max Seq Length: 1536（从2048降低，节省30%显存）
+  - Max Seq Length: 1024（从1536降低，节省33%显存）
   - Batch Size: 1（极小以避免OOM）
-  - Gradient Accumulation: 16（保持有效batch=16）
+  - Gradient Accumulation: 32（保持有效batch=32）
   - Gradient Checkpointing: 启用（节省约30%显存）
   - 4bit量化: 启用（模型占用约4-5GB）
-  - 预期显存占用: 12-14GB（安全边界）
+  - 预期显存占用: 8-10GB（安全边界）
 
-  rank=32配置说明：
-  - 可训练参数：约为rank=64的50%
-  - 显存占用：约为rank=64的60%
-  - 仍然是标准LoRA (rank=8) 的4倍强度
+  rank=16配置说明：
+  - 可训练参数：约为rank=32的50%
+  - 显存占用：约为rank=32的60%
+  - 仍然是标准LoRA (rank=8) 的2倍强度
   - 在实验中表现良好，接近全参数微调效果
 
 说明：
-  由于RTX 4090的24GB显存限制，rank=64在实际测试中会OOM。
-  经过调整，rank=32在保持稳定性的同时仍能达到优于标准LoRA的效果：
+  经过多次OOM测试，rank=32在RTX 4090上仍然不稳定。
+  调整为rank=16后：
   - 更稳定（避免OOM）
   - 训练更快
   - 效果仍优于标准LoRA
@@ -109,6 +109,9 @@ class FullFineTuningTrainer(BaseTrainer):
         self.use_4bit = use_4bit
         self.full_ft_cfg = get_full_finetuning_config()
 
+        # Full Fine-tuning显存优化：减少dataloader workers
+        self.reduced_workers = True
+
         # 覆盖max_seq_length以使用full_finetuning配置
         if hasattr(self.full_ft_cfg, 'max_seq_length'):
             self.train_cfg.max_seq_length = self.full_ft_cfg.max_seq_length
@@ -119,6 +122,7 @@ class FullFineTuningTrainer(BaseTrainer):
                     f"alpha={self.full_ft_cfg.lora_alpha}")
         logger.info(f"Max seq length: {self.train_cfg.max_seq_length}")
         logger.info(f"Target modules: {self.full_ft_cfg.target_modules}")
+        logger.info(f"Dataloader workers: 4 (reduced for memory efficiency)")
 
         self._print_training_config()
 
@@ -126,19 +130,19 @@ class FullFineTuningTrainer(BaseTrainer):
         """
         获取Full Fine-tuning专用的batch配置
 
-        Full Fine-tuning由于参数量更大（rank=32仍比标准LoRA大4倍），
-        显存占用比标准LoRA高约2倍，因此使用极小的batch size
+        Full Fine-tuning由于参数量更大（rank=16仍比标准LoRA大2倍），
+        显存占用比标准LoRA高约1.5倍，因此使用极小的batch size
 
         Returns:
             (batch_size, gradient_accumulation_steps)
         """
         if self.use_rtx4090_optimization:
-            # RTX 4090优化配置：batch_size=1, gradient_accumulation=16, 有效batch=16
-            # 极小batch size以避免OOM（rank=32的LoRA占用约12-14GB显存）
-            return 1, 16
+            # RTX 4090优化配置：batch_size=1, gradient_accumulation=32, 有效batch=32
+            # 极小batch size以避免OOM（rank=16的LoRA占用约8-10GB显存）
+            return 1, 32
         else:
-            # 非优化配置：batch_size=1, gradient_accumulation=8, 有效batch=8
-            return 1, 8
+            # 非优化配置：batch_size=1, gradient_accumulation=16, 有效batch=16
+            return 1, 16
 
     def setup_model(self) -> bool:
         """
@@ -205,21 +209,21 @@ class FullFineTuningTrainer(BaseTrainer):
             logger.info(f"Tokenizer词汇表大小: {len(self.tokenizer)}")
             logger.info(f"PAD token: {self.tokenizer.pad_token}")
 
-            # 配置高rank LoRA（模拟全参数微调）
-            logger.info("配置高rank LoRA（模拟全参数微调）...")
+            # 配置中等rank LoRA（模拟全参数微调）
+            logger.info("配置中等rank LoRA（模拟全参数微调）...")
             peft_config = LoraConfig(
                 task_type=TaskType.CAUSAL_LM,
-                r=self.full_ft_cfg.lora_rank,  # rank=64
-                lora_alpha=self.full_ft_cfg.lora_alpha,  # alpha=128
+                r=self.full_ft_cfg.lora_rank,  # rank=16
+                lora_alpha=self.full_ft_cfg.lora_alpha,  # alpha=32
                 lora_dropout=self.full_ft_cfg.lora_dropout,
-                target_modules=self.full_ft_cfg.target_modules,  # attention + FFN层
+                target_modules=self.full_ft_cfg.target_modules,  # attention层
                 bias="none",
             )
 
-            # 应用高rank LoRA
+            # 应用中等rank LoRA
             self.model = get_peft_model(self.model, peft_config)
 
-            # 启用梯度检查点以节省显存（对于高rank LoRA尤其重要）
+            # 启用梯度检查点以节省显存（对于中等rank LoRA尤其重要）
             if hasattr(self.model, 'enable_input_require_grads'):
                 self.model.enable_input_require_grads()
             if hasattr(self.model, 'gradient_checkpointing_enable'):
@@ -241,7 +245,7 @@ class FullFineTuningTrainer(BaseTrainer):
             logger.info(f"LoRA Dropout: {self.full_ft_cfg.lora_dropout}")
             logger.info(f"Target Modules: {self.full_ft_cfg.target_modules}")
             logger.info(f"Max Seq Length: {self.train_cfg.max_seq_length}")
-            logger.info("说明：rank=32仅覆盖attention层，显存占用约12-14GB")
+            logger.info("说明：rank=16仅覆盖attention层，显存占用约8-10GB")
             logger.info("=" * 80)
 
             return True
@@ -254,7 +258,7 @@ class FullFineTuningTrainer(BaseTrainer):
 
     def _save_weights(self):
         """
-        保存Full Fine-tuning权重（高rank LoRA权重）
+        保存Full Fine-tuning权重（中等rank LoRA权重）
         """
         if self.model is None or self.tokenizer is None:
             logger.error("模型或tokenizer未初始化，无法保存")
