@@ -4,10 +4,10 @@ Image数据集构建脚本 - 从图片和JSON识别结果构建CSV数据集
 1. 遍历图片目录获取所有图片名（去除扩展名）
 2. 读取JSON文件构建 图片名 -> 识别信息 映射
 3. 验证映射完整性（记录缺失项）
-4. 生成CSV：Header | Description | Example
+4. 生成CSV：Header | Description | Instruction
 5. 处理图片和JSON不匹配的情况，不终止程序
 6. 单独记录错误日志和处理统计
-7. Description列只保留Image描述内容
+7. Description列保留所有Image识别内容（description, details等），过滤元数据字段
 """
 
 import json
@@ -152,9 +152,9 @@ class ImageDatasetBuilder:
 
     def prepare_json_string(self, recognition_info: Dict) -> str:
         """
-        准备用于CSV的JSON字符串（移除元数据，保留Image描述内容）
-        只保留: Description字段内容
-        移除: image_path, image_name, recognition_status, timestamp
+        准备用于CSV的JSON字符串（移除元数据，保留所有Image识别内容）
+        保留字段: description, details (objects, scene, spatial_info等所有识别内容)
+        移除字段: confidence, recognition_status, image_path, image_name, model_version
 
         Args:
             recognition_info: 识别信息字典
@@ -177,23 +177,32 @@ class ImageDatasetBuilder:
                 'error': error_msg
             }, ensure_ascii=False)
 
-        # 识别成功，获取description字段内容
+        # 识别成功，提取所有识别内容相关的字段
         try:
-            description_data = recognition_info.get('description', '')
+            # 定义需要排除的元数据字段
+            metadata_fields = {
+                'confidence',
+                'recognition_status',
+                'image_path',
+                'image_name',
+                'model_version',
+                'success',
+                'timestamp',
+                'error'
+            }
 
-            # 判断description是字符串还是字典
-            if isinstance(description_data, str):
-                # 如果是字符串，直接返回
-                clean_description = description_data
-            elif isinstance(description_data, dict):
-                # 如果是字典，转换为JSON字符串
-                clean_description = json.dumps(description_data, ensure_ascii=False)
-            else:
-                # 其他类型，转换为字符串
-                clean_description = str(description_data)
+            # 创建干净的识别内容字典，排除元数据字段
+            clean_info = {}
+            for key, value in recognition_info.items():
+                if key not in metadata_fields:
+                    clean_info[key] = value
 
-            # 返回干净的描述内容
-            return clean_description
+            # 如果clean_info为空，至少保留description字段
+            if not clean_info:
+                clean_info = {'description': recognition_info.get('description', '')}
+
+            # 转换为JSON字符串
+            return json.dumps(clean_info, ensure_ascii=False)
 
         except Exception as e:
             # 其他异常处理
@@ -376,8 +385,8 @@ def main():
     print("="*80)
     print(f"用途: 将图片 + JSON结果转换为CSV数据集")
     print(f"输出格式: Header | Description | Instruction")
-    print(f"Description内容: 仅包含图像描述信息")
-    print(f"已过滤字段: image_path, image_name, success, timestamp")
+    print(f"Description内容: 包含所有图像识别信息（description, details等）")
+    print(f"已过滤字段: confidence, recognition_status, image_path, image_name, model_version")
     print("="*80 + "\n")
 
     try:
