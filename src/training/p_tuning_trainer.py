@@ -68,7 +68,7 @@ class PTuningTrainer(BaseTrainer):
             output_dir: 输出目录（None则使用checkpoints/p_tuning/{expert_type}_expert/）
             use_4bit: 是否使用4bit量化训练
             use_rtx4090_optimization: 是否启用RTX 4090优化
-            debug_samples: 是否在训练开始前打印前5个训练样本（默认开启）
+            debug_samples: 是否在训练开始前打印前3个训练样本（默认开启）
         """
         super().__init__(
             expert_type=expert_type,

@@ -137,7 +137,7 @@ class BaseTrainer(ABC):
             base_model_path: 基础模型路径（None则从配置获取）
             output_dir: 输出目录（None则从配置获取）
             use_rtx4090_optimization: 是否启用RTX 4090优化
-            debug_samples: 是否在训练开始前打印前5个训练样本（默认开启）
+            debug_samples: 是否在训练开始前打印前3个训练样本（默认开启）
         """
         valid_types = ['text', 'image', 'uml', 'general']
         if expert_type not in valid_types:
@@ -444,13 +444,13 @@ class BaseTrainer(ABC):
                 pad_to_multiple_of=8
             )
 
-            # 调试：打印前5个训练样本
+            # 调试：打印前3个训练样本
             if self.debug_samples and len(self.train_dataset) > 0:
                 logger.info("=" * 80)
-                logger.info("[调试输出] 打印前5个训练样本的prompt")
+                logger.info("[调试输出] 打印前3个训练样本的prompt")
                 logger.info("=" * 80)
 
-                for i in range(min(5, len(self.train_dataset))):
+                for i in range(min(3, len(self.train_dataset))):
                     sample = self.train_dataset.data[i]
                     logger.info(f"\n样本 {i+1}:")
                     logger.info("-" * 80)
