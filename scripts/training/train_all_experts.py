@@ -12,8 +12,8 @@
   python scripts/training/train_all_experts.py
 
   可选参数：
-    --method {prompt_tuning,p_tuning,full_finetuning,all}
-             仅训练指定方法（默认：all）
+    --method {prompt_tuning,p_tuning,full_finetuning,all} [...]
+             训练指定方法，可指定多个（默认：all）
     --expert {text,image,uml,general,all}
              仅训练指定专家（默认：all）
 
@@ -23,6 +23,9 @@
 
   # 仅训练Prompt Tuning
   python scripts/training/train_all_experts.py --method prompt_tuning
+
+  # 训练P-Tuning v2和准全参数微调（跳过Prompt Tuning）
+  python scripts/training/train_all_experts.py --method p_tuning full_finetuning --skip-failed
 
   # 仅训练文本专家（所有方法）
   python scripts/training/train_all_experts.py --expert text
@@ -176,6 +179,9 @@ def main():
   # 仅训练Prompt Tuning
   python scripts/training/train_all_experts.py --method prompt_tuning
   
+  # 训练P-Tuning v2和准全参数微调（跳过Prompt Tuning）
+  python scripts/training/train_all_experts.py --method p_tuning full_finetuning --skip-failed
+  
   # 仅训练文本专家（所有方法）
   python scripts/training/train_all_experts.py --expert text
   
@@ -186,9 +192,10 @@ def main():
 
     parser.add_argument(
         '--method',
+        nargs='+',
         choices=['prompt_tuning', 'p_tuning', 'full_finetuning', 'all'],
-        default='all',
-        help='仅训练指定方法（默认：all）'
+        default=['all'],
+        help='训练指定方法，可指定多个（默认：all）'
     )
 
     parser.add_argument(
@@ -210,8 +217,8 @@ def main():
     print_header()
 
     methods_to_train = (
-        list(TRAINING_TASKS.keys()) if args.method == 'all'
-        else [args.method]
+        list(TRAINING_TASKS.keys()) if 'all' in args.method
+        else args.method
     )
 
     experts_to_train = (
