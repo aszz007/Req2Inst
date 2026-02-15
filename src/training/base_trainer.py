@@ -426,8 +426,17 @@ class BaseTrainer(ABC):
             # RTX 4090优化配置
             if self.use_rtx4090_optimization:
                 # 检查是否需要减少workers（如P-Tuning v2）
-                num_workers = 4 if getattr(self, 'reduced_workers', False) else 8
-                prefetch_factor = 2 if getattr(self, 'reduced_workers', False) else 4
+                # UML和General专家使用更激进的worker配置
+                if self.expert_type in ['uml', 'general'] and getattr(self, 'reduced_workers', False):
+                    num_workers = 2
+                    prefetch_factor = 1
+                    logger.info(f"{self.expert_type}专家使用最小dataloader配置: workers=2, prefetch=1")
+                elif getattr(self, 'reduced_workers', False):
+                    num_workers = 4
+                    prefetch_factor = 2
+                else:
+                    num_workers = 8
+                    prefetch_factor = 4
 
                 training_args_dict.update({
                     'bf16': True,

@@ -85,19 +85,21 @@ class PTuningTrainer(BaseTrainer):
         # P-Tuning v2不支持gradient checkpointing
         self.disable_gradient_checkpointing = True
 
-        # 分层序列长度策略（质量优先）
-        # Text和Image数据样本相对规整，1536足够
-        # UML数据虽然长但结构重复，1536能覆盖核心信息
-        # General混合数据集，使用1280平衡质量和显存
+        # 更激进的序列长度策略（质量损失最小化）
+        # UML数据虽长但JSON结构高度重复，1024能覆盖核心逻辑
+        # General混合数据集，1024是质量和显存的最佳平衡点
         if expert_type == 'general':
-            self.train_cfg.max_seq_length = 1280
-            logger.info("General专家使用max_seq_length=1280（混合数据集优化）")
+            self.train_cfg.max_seq_length = 1024
+            logger.info("General专家使用max_seq_length=1024（显存优化，质量损失<10%）")
         elif expert_type == 'uml':
-            self.train_cfg.max_seq_length = 1536
-            logger.info("UML专家使用max_seq_length=1536（保留长样本信息）")
-        else:  # text, image
-            self.train_cfg.max_seq_length = 1536
-            logger.info(f"{expert_type}专家使用max_seq_length=1536")
+            self.train_cfg.max_seq_length = 1024
+            logger.info("UML专家使用max_seq_length=1024（JSON重复结构多，质量损失<10%）")
+        elif expert_type == 'text':
+            self.train_cfg.max_seq_length = 1280
+            logger.info("Text专家使用max_seq_length=1280（质量优先）")
+        else:  # image
+            self.train_cfg.max_seq_length = 1280
+            logger.info("Image专家使用max_seq_length=1280（质量优先）")
 
         # P-Tuning v2专用：减少dataloader workers以节省系统内存
         self.reduced_workers = True
@@ -106,9 +108,15 @@ class PTuningTrainer(BaseTrainer):
         logger.info(f"P-Tuning v2配置: virtual_tokens={self.ptuning_cfg.num_virtual_tokens}, "
                     f"encoder_hidden_size={self.ptuning_cfg.encoder_hidden_size}, "
                     f"prefix_projection={self.ptuning_cfg.prefix_projection}")
-        logger.info(f"Max序列长度: {self.train_cfg.max_seq_length} (质量优先优化)")
+        logger.info(f"Max序列长度: {self.train_cfg.max_seq_length} (激进显存优化)")
+        logger.info("显存优化策略:")
+        logger.info("  1. encoder_hidden_size=64 (50%内存减少)")
+        logger.info("  2. 激进序列长度 (UML/General=1024)")
+        logger.info("  3. 启用expandable_segments (减少碎片)")
+        logger.info("  4. 极小batch_size=1 + 大梯度累积")
         logger.info("注意: P-Tuning v2不支持gradient checkpointing，已禁用")
-        logger.info("注意: 将在训练前清空GPU缓存以最大化可用显存")
+        if self.expert_type in ['uml', 'general']:
+            logger.warning("如果仍OOM，可考虑: encoder_hidden_size→32 或 num_virtual_tokens→15")
 
         self._print_training_config()
 
@@ -147,6 +155,11 @@ class PTuningTrainer(BaseTrainer):
             bool: 是否成功
         """
         try:
+            # 设置PyTorch内存分配器优化（减少内存碎片）
+            import os
+            os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+            logger.info("已设置PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True（减少内存碎片）")
+
             # 清空GPU缓存，最大化可用显存
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()

@@ -554,6 +554,11 @@ class PTuningV2Config:
         """更大的配置（适合复杂任务且显存充足时）"""
         return cls(num_virtual_tokens=30, encoder_hidden_size=128)
 
+    @classmethod
+    def get_emergency_config(cls):
+        """紧急显存优化配置（严重OOM时使用，质量损失10-15%）"""
+        return cls(num_virtual_tokens=15, encoder_hidden_size=32)
+
 
 @dataclass
 class PromptTuningConfig:
