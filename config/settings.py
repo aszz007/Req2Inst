@@ -587,18 +587,21 @@ class PromptTuningConfig:
 class FullFineTuningConfig:
     """全参数微调配置（用于对比实验）
 
-    注意：由于RTX 4090的24GB显存对Qwen3-8B全参数微调可能不够，
-    我们使用LoRA rank=64作为"准全参数微调"方案，
-    在保持稳定性的同时达到接近全参数微调的效果。
+    经过RTX 4090 (24GB)的OOM测试，rank=64会导致显存不足。
+    我们调整为rank=32作为"准全参数微调"方案：
+    - 仍然是标准LoRA (rank=8) 的4倍
+    - 仅覆盖attention层（移除FFN以节省显存）
+    - max_seq_length降到1536（从2048）
+    - 预期显存占用：12-14GB（安全边界）
     """
 
-    # 使用大rank的LoRA模拟全参数微调
+    # 使用中等rank的LoRA模拟全参数微调（经实测调整）
     use_high_rank_lora: bool = True
-    lora_rank: int = 64  # 大rank模拟全参数
-    lora_alpha: int = 128  # 2倍rank
+    lora_rank: int = 32  # 从64降到32以避免OOM
+    lora_alpha: int = 64  # 2倍rank
     lora_dropout: float = 0.05
 
-    # 目标模块（覆盖更多层）
+    # 目标模块（仅attention层以节省显存）
     target_modules: List[str] = None
 
     # 训练配置（更保守以避免过拟合）
@@ -611,38 +614,57 @@ class FullFineTuningConfig:
     max_grad_norm: float = 0.5
 
     # 批次大小（显存限制）
-    batch_size: int = 2  # 相比LoRA减半
-    gradient_accumulation_steps: int = 4
+    batch_size: int = 1  # 极小batch size
+    gradient_accumulation_steps: int = 16  # 保持有效batch=16
+
+    # 序列长度（降低以节省显存）
+    max_seq_length: int = 1536  # 从2048降到1536
 
     def __post_init__(self):
         """初始化target_modules"""
         if self.target_modules is None:
-            # 覆盖所有注意力层和部分FFN层
+            # 仅覆盖注意力层（移除FFN以节省显存）
             self.target_modules = [
                 "q_proj", "k_proj", "v_proj", "o_proj",  # 注意力层
-                "gate_proj", "up_proj", "down_proj"  # FFN层
             ]
 
     @classmethod
     def get_default_config(cls):
-        """默认配置（准全参数微调，rank=64）"""
-        return cls(lora_rank=64, lora_alpha=128)
+        """默认配置（准全参数微调，rank=32，显存优化）"""
+        return cls(lora_rank=32, lora_alpha=64)
+
+    @classmethod
+    def get_aggressive_config(cls):
+        """激进配置（rank=48，需要短序列或更大显存）
+
+        警告：在RTX 4090上可能仍会OOM，仅在以下情况使用：
+        - 数据样本平均长度 < 512 tokens
+        - 或使用更大显存的GPU（如A100 40GB）
+        """
+        return cls(
+            lora_rank=48,
+            lora_alpha=96,
+            max_seq_length=1024,  # 必须更短
+            batch_size=1,
+            gradient_accumulation_steps=16
+        )
 
     @classmethod
     def get_memory_efficient_config(cls):
-        """显存优化配置（rank=32，适合显存紧张的情况）
+        """显存高效配置（rank=16，适合极度显存紧张的情况）
 
         相比默认配置：
-        - rank降低一半（64 -> 32）
+        - rank降低一半（32 -> 16）
         - 可训练参数减少约50%
-        - 显存占用降低约30-40%
-        - 仍然比标准LoRA (rank=8) 强4倍
+        - 显存占用降低约30%
+        - 仍然是标准LoRA (rank=8) 的2倍
         """
         return cls(
-            lora_rank=32,
-            lora_alpha=64,
-            batch_size=2,  # 可以用稍大的batch size
-            gradient_accumulation_steps=8
+            lora_rank=16,
+            lora_alpha=32,
+            batch_size=2,
+            gradient_accumulation_steps=8,
+            max_seq_length=2048
         )
 
 @dataclass
