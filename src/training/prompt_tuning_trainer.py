@@ -13,6 +13,11 @@ Prompt Tuning训练器 - Prompt Tuning方法的训练实现（对比实验）
       - 训练曲线可视化
       - 梯度检查点
       - 权重衰减
+  - 长序列专家优化（UML和General）：
+      - 更小的batch size（2 vs 4）以避免OOM
+      - 更多的梯度累积步数（8 vs 4）保持有效batch size
+      - 较少的dataloader workers（4 vs 8）节省内存
+      - 多阶段GPU缓存清理
 
 作者：Training System
 日期：2025-02-15
@@ -89,6 +94,36 @@ class PromptTuningTrainer(BaseTrainer):
 
         self._print_training_config()
 
+    def _print_training_config(self):
+        """打印Prompt Tuning训练配置（包括专家特定的batch配置）"""
+        batch_size, gradient_accumulation_steps = self._get_batch_config()
+
+        logger.info("=" * 80)
+        logger.info("Prompt Tuning训练配置")
+        logger.info("=" * 80)
+        logger.info(f"专家类型: {self.expert_type}")
+        logger.info(f"微调方法: {self.method_name}")
+        logger.info(f"基础模型: {self.base_model_path}")
+        logger.info(f"模型版本: {self.model_version}")
+        logger.info(f"4bit量化: {self.use_4bit}")
+
+        if self.use_rtx4090_optimization:
+            if self.expert_type in ['uml', 'general']:
+                logger.info(f"批次大小: {batch_size} (RTX 4090优化 - {self.expert_type}专家长序列配置)")
+                logger.info(f"梯度累积: {gradient_accumulation_steps} (RTX 4090优化 - {self.expert_type}专家长序列配置)")
+            else:
+                logger.info(f"批次大小: {batch_size} (RTX 4090优化)")
+                logger.info(f"梯度累积: {gradient_accumulation_steps} (RTX 4090优化)")
+        else:
+            logger.info(f"批次大小: {batch_size}")
+            logger.info(f"梯度累积: {gradient_accumulation_steps}")
+
+        logger.info(f"有效批次: {batch_size * gradient_accumulation_steps}")
+        logger.info(f"训练轮数: {self.train_cfg.num_epochs}")
+        logger.info(f"学习率: {self.train_cfg.learning_rate}")
+        logger.info(f"最大序列长度: {self.train_cfg.max_seq_length}")
+        logger.info("=" * 80)
+
     def _get_batch_config(self):
         """
         获取Prompt Tuning专用的batch配置（更保守以避免OOM）
@@ -96,13 +131,21 @@ class PromptTuningTrainer(BaseTrainer):
         Prompt Tuning由于需要存储virtual tokens的梯度，
         显存占用比LoRA更高，因此使用更小的batch size
 
+        UML和General专家的样本更长，需要进一步降低batch size
+
         Returns:
             (batch_size, gradient_accumulation_steps)
         """
         if self.use_rtx4090_optimization:
-            # Prompt Tuning优化配置：更小的batch size以避免OOM
-            # batch_size=4, gradient_accumulation=4, 有效batch=16
-            return 4, 4
+            # 根据专家类型调整batch配置
+            if self.expert_type in ['uml', 'general']:
+                # UML和General：样本更长，使用更小的batch
+                # batch_size=2, gradient_accumulation=8, 有效batch=16
+                return 2, 8
+            else:
+                # Text和Image：样本较短，可以使用较大的batch
+                # batch_size=4, gradient_accumulation=4, 有效batch=16
+                return 4, 4
         else:
             # 非优化配置：使用基础配置
             return self.train_cfg.batch_size, self.train_cfg.gradient_accumulation_steps
@@ -192,6 +235,12 @@ class PromptTuningTrainer(BaseTrainer):
             logger.info(f"Virtual Tokens: {self.prompt_cfg.num_virtual_tokens}")
             logger.info(f"初始化方式: {self.prompt_cfg.prompt_tuning_init}")
             logger.info("=" * 80)
+
+            # 针对长序列专家清理GPU缓存
+            if self.expert_type in ['uml', 'general']:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    logger.info(f"已清理GPU缓存（{self.expert_type}专家长序列优化）")
 
             return True
 

@@ -8,6 +8,7 @@
   - 训练曲线可视化
   - RTX 4090优化配置
   - 早停策略
+  - 长序列专家内存优化（UML和General）
 
 作者：Training System
 日期：2025-02-15
@@ -294,6 +295,12 @@ class BaseTrainer(ABC):
             logger.info(f"  验证集: {len(self.val_dataset)}条")
             logger.info(f"  测试集: {len(self.test_dataset)}条")
 
+            # 针对长序列专家在数据准备后清理GPU缓存
+            if self.expert_type in ['uml', 'general']:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    logger.info(f"数据准备完成后清理GPU缓存（{self.expert_type}专家长序列优化）")
+
             return True
 
         except Exception as e:
@@ -357,6 +364,12 @@ class BaseTrainer(ABC):
             logger.error("数据未准备，请先调用prepare_data()")
             return False
 
+        # 针对长序列专家在训练开始前清理GPU缓存
+        if self.expert_type in ['uml', 'general']:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                logger.info(f"训练开始前清理GPU缓存（{self.expert_type}专家长序列优化）")
+
         try:
             # 创建输出目录
             self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -414,13 +427,19 @@ class BaseTrainer(ABC):
 
             # RTX 4090优化配置
             if self.use_rtx4090_optimization:
+                # UML和General专家使用较少的workers以节省内存
+                num_workers = 4 if self.expert_type in ['uml', 'general'] else 8
+
                 training_args_dict.update({
                     'bf16': True,
                     'tf32': True,
                     'optim': 'adamw_torch_fused',
-                    'dataloader_num_workers': 8,
+                    'dataloader_num_workers': num_workers,
                     'dataloader_prefetch_factor': 4,
                 })
+
+                if self.expert_type in ['uml', 'general']:
+                    logger.info(f"使用较少的dataloader workers ({num_workers}) 以节省{self.expert_type}专家的内存")
             else:
                 training_args_dict['fp16'] = torch.cuda.is_available()
 
