@@ -625,8 +625,25 @@ class FullFineTuningConfig:
 
     @classmethod
     def get_default_config(cls):
-        """默认配置（准全参数微调）"""
+        """默认配置（准全参数微调，rank=64）"""
         return cls(lora_rank=64, lora_alpha=128)
+
+    @classmethod
+    def get_memory_efficient_config(cls):
+        """显存优化配置（rank=32，适合显存紧张的情况）
+
+        相比默认配置：
+        - rank降低一半（64 -> 32）
+        - 可训练参数减少约50%
+        - 显存占用降低约30-40%
+        - 仍然比标准LoRA (rank=8) 强4倍
+        """
+        return cls(
+            lora_rank=32,
+            lora_alpha=64,
+            batch_size=2,  # 可以用稍大的batch size
+            gradient_accumulation_steps=8
+        )
 
 @dataclass
 class InferenceConfig:
@@ -910,11 +927,21 @@ def get_prompt_tuning_config(config_type: str = "default") -> PromptTuningConfig
     return _prompt_tuning_config
 
 
-def get_full_finetuning_config() -> FullFineTuningConfig:
-    """获取Full Fine-tuning配置单例"""
+def get_full_finetuning_config(config_type: str = "default") -> FullFineTuningConfig:
+    """
+    获取Full Fine-tuning配置单例
+
+    Args:
+        config_type: 配置类型
+            - 'default': 默认配置（rank=64，接近全参数微调）
+            - 'memory_efficient': 显存优化配置（rank=32，显存占用更低）
+    """
     global _full_finetuning_config
     if _full_finetuning_config is None:
-        _full_finetuning_config = FullFineTuningConfig.get_default_config()
+        if config_type == "memory_efficient":
+            _full_finetuning_config = FullFineTuningConfig.get_memory_efficient_config()
+        else:
+            _full_finetuning_config = FullFineTuningConfig.get_default_config()
     return _full_finetuning_config
 
 

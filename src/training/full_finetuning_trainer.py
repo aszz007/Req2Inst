@@ -15,6 +15,18 @@ Full Fine-tuning训练器 - 使用高rank LoRA模拟全参数微调
       - 梯度检查点
       - 权重衰减
 
+显存优化策略（RTX 4090 24GB）：
+  - Batch Size: 1（极小以避免OOM）
+  - Gradient Accumulation: 16（保持有效batch=16）
+  - Gradient Checkpointing: 启用（节省约30%显存）
+  - 4bit量化: 启用（模型占用约4-5GB）
+  - 预期显存占用: 15-16GB（安全边界）
+
+  如果仍然OOM，可以考虑：
+  1. 降低max_seq_length（从2048降到1024）
+  2. 减小rank（从64降到32）
+  3. 减少target_modules（仅保留attention层）
+
 说明：
   由于RTX 4090的24GB显存对Qwen3-8B真正的全参数微调不够
   （需要约32GB = 8GB模型 + 24GB训练状态），
@@ -105,18 +117,19 @@ class FullFineTuningTrainer(BaseTrainer):
         """
         获取Full Fine-tuning专用的batch配置
 
-        Full Fine-tuning由于参数量更大，显存占用比标准LoRA更高，
-        因此使用更小的batch size
+        Full Fine-tuning由于参数量更大（rank=64覆盖attention+FFN），
+        显存占用比标准LoRA高约3-4倍，因此使用极小的batch size
 
         Returns:
             (batch_size, gradient_accumulation_steps)
         """
         if self.use_rtx4090_optimization:
-            # RTX 4090优化配置：batch_size=4, gradient_accumulation=4, 有效batch=16
-            return 4, 4
+            # RTX 4090优化配置：batch_size=1, gradient_accumulation=16, 有效batch=16
+            # 极小batch size以避免OOM（rank=64的LoRA占用约15-16GB显存）
+            return 1, 16
         else:
-            # 非优化配置：使用Full Fine-tuning配置
-            return self.full_ft_cfg.batch_size, self.full_ft_cfg.gradient_accumulation_steps
+            # 非优化配置：batch_size=1, gradient_accumulation=8, 有效batch=8
+            return 1, 8
 
     def setup_model(self) -> bool:
         """
@@ -196,6 +209,13 @@ class FullFineTuningTrainer(BaseTrainer):
 
             # 应用高rank LoRA
             self.model = get_peft_model(self.model, peft_config)
+
+            # 启用梯度检查点以节省显存（对于rank=64的LoRA尤其重要）
+            if hasattr(self.model, 'enable_input_require_grads'):
+                self.model.enable_input_require_grads()
+            if hasattr(self.model, 'gradient_checkpointing_enable'):
+                self.model.gradient_checkpointing_enable()
+                logger.info("已启用梯度检查点（节省显存）")
 
             # 打印可训练参数统计
             trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
