@@ -119,7 +119,7 @@ def main():
     raw_data = data_loader.load_all_data()
 
     # 划分数据集
-    train_data, val_data, _ = split_dataset_for_expert('general', raw_data)
+    train_data, val_data, _ = split_dataset_for_expert(raw_data, 'general')
     logger.info(f"训练样本: {len(train_data)}, 验证样本: {len(val_data)}")
 
     # 2. 加载模型和分词器
@@ -166,23 +166,25 @@ def main():
         prefix_projection=ptuning_cfg.prefix_projection
     )
 
+    # 禁用gradient checkpointing（Prefix Tuning不支持）
+    if hasattr(model, 'gradient_checkpointing_disable'):
+        model.gradient_checkpointing_disable()
+        logger.info("已禁用gradient checkpointing以支持Prefix Tuning")
+
     model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
 
     # 4. 准备数据集
     logger.info("准备训练数据集...")
-    template = GeneralInstructionTemplate()
 
     train_dataset = InstructionDataset(
         data=train_data,
         tokenizer=tokenizer,
-        template=template,
         max_length=2048
     )
     val_dataset = InstructionDataset(
         data=val_data,
         tokenizer=tokenizer,
-        template=template,
         max_length=2048
     )
 
@@ -195,23 +197,23 @@ def main():
     training_args = TrainingArguments(
         output_dir=str(output_dir),
         num_train_epochs=train_cfg.num_epochs,
-        per_device_train_batch_size=8 if is_rtx4090 else train_cfg.batch_size,
-        per_device_eval_batch_size=8 if is_rtx4090 else train_cfg.batch_size,
-        gradient_accumulation_steps=2 if is_rtx4090 else train_cfg.gradient_accumulation_steps,
+        per_device_train_batch_size=1 if is_rtx4090 else train_cfg.batch_size,
+        per_device_eval_batch_size=1 if is_rtx4090 else train_cfg.batch_size,
+        gradient_accumulation_steps=16 if is_rtx4090 else train_cfg.gradient_accumulation_steps,
         learning_rate=train_cfg.learning_rate,
         weight_decay=train_cfg.weight_decay,
         warmup_ratio=train_cfg.warmup_ratio,
         lr_scheduler_type=train_cfg.lr_scheduler_type,
         logging_steps=train_cfg.logging_steps,
         save_strategy="epoch",
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_total_limit=train_cfg.save_total_limit,
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
         bf16=is_rtx4090,
         fp16=not is_rtx4090 and train_cfg.fp16,
-        dataloader_num_workers=8 if is_rtx4090 else 2,
+        dataloader_num_workers=1,
         remove_unused_columns=False,
         report_to="none"
     )

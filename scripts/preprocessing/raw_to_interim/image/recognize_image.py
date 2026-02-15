@@ -21,8 +21,10 @@ from datetime import datetime
 from typing import List, Dict
 
 # 添加项目根目录到Python路径
-current_dir = Path(__file__).parent
-project_root = current_dir.parent
+# 脚本位于: scripts/preprocessing/raw_to_interim/image/recognize_image.py
+# 需要向上4层到达项目根目录
+current_dir = Path(__file__).resolve().parent
+project_root = current_dir.parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from models.vision_model import VisionModel
@@ -35,9 +37,9 @@ def parse_args():
     parser.add_argument(
         '--version',
         type=str,
-        default='qwen2.5',
+        default='qwen3',
         choices=['qwen2.5', 'qwen3'],
-        help='选择视觉模型版本（默认: qwen2.5）'
+        help='选择视觉模型版本（默认: qwen3）'
     )
     parser.add_argument(
         '--input',
@@ -345,7 +347,7 @@ if __name__ == "__main__":
 # python scripts/run_with_env.py --env image_qwen2.5 --script scripts/preprocessing/image/recognize_image.py --output /path/to/output.json
 
 # 参数说明:
-# --input        输入图片文件夹路径（默认: data/raw/image/coco_500/）
+# --input        输入图片文件夹路径（默认: data/raw/image/coco_1k/）
 # --output       输出JSON文件路径（默认: outputs/recognition_results/image/image_recognition_<version>_<timestamp>.json）
 # --single       单张图片路径，用于快速测试（可选）
 # 注意: --version 参数由 run_with_env.py 根据 --env 自动添加，无需手动指定

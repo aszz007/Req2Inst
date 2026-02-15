@@ -122,7 +122,7 @@ def main():
     raw_data = data_loader.load_all_data()
 
     # 划分数据集
-    train_data, val_data, _ = split_dataset_for_expert('general', raw_data)
+    train_data, val_data, _ = split_dataset_for_expert(raw_data, 'general')
     logger.info(f"训练样本: {len(train_data)}, 验证样本: {len(val_data)}")
 
     # 2. 加载模型和分词器
@@ -176,18 +176,15 @@ def main():
 
     # 4. 准备数据集
     logger.info("准备训练数据集...")
-    template = GeneralInstructionTemplate()
 
     train_dataset = InstructionDataset(
         data=train_data,
         tokenizer=tokenizer,
-        template=template,
         max_length=2048
     )
     val_dataset = InstructionDataset(
         data=val_data,
         tokenizer=tokenizer,
-        template=template,
         max_length=2048
     )
 
@@ -209,7 +206,7 @@ def main():
         lr_scheduler_type="cosine",
         logging_steps=train_cfg.logging_steps,
         save_strategy="epoch",
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_total_limit=2,
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",

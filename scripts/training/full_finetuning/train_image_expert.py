@@ -174,18 +174,15 @@ def main():
 
     # 4. 准备数据集
     logger.info("准备训练数据集...")
-    template = ImageInstructionTemplate()
 
     train_dataset = InstructionDataset(
         data=train_data,
         tokenizer=tokenizer,
-        template=template,
         max_length=2048
     )
     val_dataset = InstructionDataset(
         data=val_data,
         tokenizer=tokenizer,
-        template=template,
         max_length=2048
     )
 
@@ -207,7 +204,7 @@ def main():
         lr_scheduler_type="cosine",
         logging_steps=train_cfg.logging_steps,
         save_strategy="epoch",
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_total_limit=2,
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",

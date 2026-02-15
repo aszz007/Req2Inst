@@ -139,7 +139,7 @@ class PathConfig:
         self.RAW_UML_DIR = self.RAW_DATA_DIR / "uml"
 
         # 原始数据默认测试目录（用于批量识别脚本）
-        self.COCO_500_DIR = self.RAW_IMAGE_DIR / "coco_500"
+        self.COCO_500_DIR = self.RAW_IMAGE_DIR / "coco_1k"
         self.ROBOFLOW_UML_DIR = self.RAW_UML_DIR / "roboflow_uml"
         self.MDPI_UML_DIR = self.RAW_UML_DIR / "mdpi_uml"
         self.PLANT_UML_DIR = self.RAW_UML_DIR / "plant_uml"

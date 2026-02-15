@@ -169,18 +169,15 @@ def main():
 
     # 4. 准备数据集
     logger.info("准备训练数据集...")
-    template = TextInstructionTemplate()
 
     train_dataset = InstructionDataset(
         data=train_data,
         tokenizer=tokenizer,
-        template=template,
         max_length=2048  # 支持长文本
     )
     val_dataset = InstructionDataset(
         data=val_data,
         tokenizer=tokenizer,
-        template=template,
         max_length=2048
     )
 
@@ -193,16 +190,16 @@ def main():
     training_args = TrainingArguments(
         output_dir=str(output_dir),
         num_train_epochs=train_cfg.num_epochs,
-        per_device_train_batch_size=8 if is_rtx4090 else train_cfg.batch_size,
-        per_device_eval_batch_size=8 if is_rtx4090 else train_cfg.batch_size,
-        gradient_accumulation_steps=2 if is_rtx4090 else train_cfg.gradient_accumulation_steps,
+        per_device_train_batch_size=2 if is_rtx4090 else train_cfg.batch_size,
+        per_device_eval_batch_size=2 if is_rtx4090 else train_cfg.batch_size,
+        gradient_accumulation_steps=8 if is_rtx4090 else train_cfg.gradient_accumulation_steps,
         learning_rate=train_cfg.learning_rate,
         weight_decay=train_cfg.weight_decay,
         warmup_ratio=train_cfg.warmup_ratio,
         lr_scheduler_type=train_cfg.lr_scheduler_type,
         logging_steps=train_cfg.logging_steps,
         save_strategy="epoch",
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_total_limit=train_cfg.save_total_limit,
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
