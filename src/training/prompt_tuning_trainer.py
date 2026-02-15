@@ -69,7 +69,7 @@ class PromptTuningTrainer(BaseTrainer):
             output_dir: 输出目录（None则使用checkpoints/prompt_tuning/{expert_type}_expert/）
             use_4bit: 是否使用4bit量化训练
             use_rtx4090_optimization: 是否启用RTX 4090优化
-            debug_samples: 是否在训练开始前打印前5个训练样本（默认开启）
+            debug_samples: 是否在训练开始前打印前3个训练样本（默认开启）
         """
         super().__init__(
             expert_type=expert_type,
@@ -88,6 +88,24 @@ class PromptTuningTrainer(BaseTrainer):
                     f"init={self.prompt_cfg.prompt_tuning_init}")
 
         self._print_training_config()
+
+    def _get_batch_config(self):
+        """
+        获取Prompt Tuning专用的batch配置（更保守以避免OOM）
+
+        Prompt Tuning由于需要存储virtual tokens的梯度，
+        显存占用比LoRA更高，因此使用更小的batch size
+
+        Returns:
+            (batch_size, gradient_accumulation_steps)
+        """
+        if self.use_rtx4090_optimization:
+            # Prompt Tuning优化配置：更小的batch size以避免OOM
+            # batch_size=4, gradient_accumulation=4, 有效batch=16
+            return 4, 4
+        else:
+            # 非优化配置：使用基础配置
+            return self.train_cfg.batch_size, self.train_cfg.gradient_accumulation_steps
 
     def setup_model(self) -> bool:
         """
