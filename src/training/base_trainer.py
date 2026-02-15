@@ -419,13 +419,20 @@ class BaseTrainer(ABC):
 
             # RTX 4090优化配置
             if self.use_rtx4090_optimization:
+                # 检查是否需要减少workers（如P-Tuning v2）
+                num_workers = 4 if getattr(self, 'reduced_workers', False) else 8
+                prefetch_factor = 2 if getattr(self, 'reduced_workers', False) else 4
+
                 training_args_dict.update({
                     'bf16': True,
                     'tf32': True,
                     'optim': 'adamw_torch_fused',
-                    'dataloader_num_workers': 8,
-                    'dataloader_prefetch_factor': 4,
+                    'dataloader_num_workers': num_workers,
+                    'dataloader_prefetch_factor': prefetch_factor,
                 })
+
+                if getattr(self, 'reduced_workers', False):
+                    logger.info(f"使用减少的dataloader workers: {num_workers} (显存优化)")
             else:
                 training_args_dict['fp16'] = torch.cuda.is_available()
 

@@ -85,13 +85,40 @@ class PTuningTrainer(BaseTrainer):
         # P-Tuning v2不支持gradient checkpointing
         self.disable_gradient_checkpointing = True
 
+        # P-Tuning v2显存占用更大，减小max_seq_length
+        # 从2048减小到1536，减少约25%显存占用，同时保留大部分长样本
+        self.train_cfg.max_seq_length = 1536
+
+        # P-Tuning v2专用：减少dataloader workers以节省系统内存
+        self.reduced_workers = True
+
         logger.info(f"4bit量化: {use_4bit}")
         logger.info(f"P-Tuning v2配置: virtual_tokens={self.ptuning_cfg.num_virtual_tokens}, "
                     f"encoder_hidden_size={self.ptuning_cfg.encoder_hidden_size}, "
                     f"prefix_projection={self.ptuning_cfg.prefix_projection}")
+        logger.info(f"Max序列长度: {self.train_cfg.max_seq_length} (P-Tuning v2优化)")
         logger.info("注意: P-Tuning v2不支持gradient checkpointing，已禁用")
+        logger.info("注意: P-Tuning v2使用更小的batch size和序列长度以避免OOM")
 
         self._print_training_config()
+
+    def _get_batch_config(self):
+        """
+        获取P-Tuning v2专用的batch配置
+
+        P-Tuning v2不能使用gradient checkpointing，显存占用更大，
+        需要使用更小的batch size和更大的gradient accumulation
+
+        Returns:
+            (batch_size, gradient_accumulation_steps)
+        """
+        if self.use_rtx4090_optimization:
+            # RTX 4090优化配置 - P-Tuning v2专用
+            # 由于不能用gradient checkpointing，使用更小的batch size
+            return 1, 16  # 有效batch=16（与LoRA保持一致）
+        else:
+            # 标准配置 - P-Tuning v2专用
+            return 1, 16  # 有效batch=16
 
     def setup_model(self) -> bool:
         """
