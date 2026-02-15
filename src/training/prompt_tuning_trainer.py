@@ -124,11 +124,6 @@ class PromptTuningTrainer(BaseTrainer):
             if quantization_config:
                 model_kwargs['quantization_config'] = quantization_config
 
-            # Qwen3-8B需要禁用思考模式
-            if self.model_version == 'qwen3_8b':
-                model_kwargs['enable_thinking'] = False
-                logger.info("Qwen3-8B: 禁用思考模式（enable_thinking=False）")
-
             self.model = AutoModelForCausalLM.from_pretrained(**model_kwargs)
 
             # 4bit量化后准备模型（冻结基础模型参数，仅virtual tokens可训练）
