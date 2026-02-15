@@ -1,20 +1,20 @@
 """
 图像专家训练脚本
-功能:训练Image Expert,将图像描述转换为标注指令
-环境:instruction_generator(transformers==4.51.0)
-基础模型:Qwen3-8B（默认）
-输出:lora_weights/experts/image_expert/
+功能：训练Image Expert，将图像描述转换为标注指令
+环境：instruction_generator（transformers==4.57.0）
+基础模型：Qwen3-8B（默认）
+输出：checkpoints/lora_moe/image_expert/
 
-使用方法:
-  # 方法1: 通过环境管理脚本运行(推荐)
+使用方法：
+  # 方法1: 通过环境管理脚本运行（推荐）
   python scripts/run_with_env.py --env text --script scripts/training/train_image_expert.py
 
   # 方法2: 直接在instruction_generator环境中运行
   conda activate instruction_generator
   python scripts/training/train_image_expert.py
 
-作者:Training System
-日期:2025-02-13
+作者：Training System
+日期：2025-02-15
 """
 
 import sys
@@ -26,7 +26,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.training.expert_trainer import ExpertTrainer
+from src.training.lora_trainer import LoRATrainer
 from config.settings import get_path_config, get_training_config, get_lora_config
 from src.utils.logger import get_logger
 
@@ -61,7 +61,7 @@ def print_config(use_4bit: bool, use_rtx4090_opt: bool):
     print("-" * 80)
     print(f"专家类型: Image Expert")
     print(f"基础模型: {path_cfg.QWEN_7B_CHAT_PATH}")
-    print(f"输出目录: {path_cfg.IMAGE_EXPERT_WEIGHTS}")
+    print(f"输出目录: checkpoints/lora_moe/image_expert/")
     print()
     print(f"LoRA配置:")
     print(f"  - Rank: {lora_cfg.rank}")
@@ -108,12 +108,12 @@ def validate_environment():
         version = transformers.__version__
         print(f"Transformers版本: {version}")
 
-        # Image Expert应该使用transformers 4.51.0（Qwen3-8B要求）
+        # Image Expert应该使用transformers 4.57.0（统一环境）
         try:
             v_parts = version.split('.')
             major, minor = int(v_parts[0]), int(v_parts[1])
             if not (major > 4 or (major == 4 and minor >= 51)):
-                logger.warning(f"警告:当前transformers版本为{version},推荐使用>=4.51.0")
+                logger.warning(f"警告：当前transformers版本为{version}，推荐使用>=4.51.0")
                 logger.warning("请确认是否在instruction_generator环境中运行")
         except (ValueError, IndexError):
             logger.warning(f"无法解析transformers版本: {version}")
@@ -126,7 +126,7 @@ def validate_environment():
         import peft
         print(f"PEFT版本: {peft.__version__}")
     except ImportError:
-        logger.error("未安装PEFT库,请运行: pip install peft --break-system-packages")
+        logger.error("未安装PEFT库，请运行: pip install peft --break-system-packages")
         return False
 
     # 检查PyTorch
@@ -137,7 +137,7 @@ def validate_environment():
             print(f"CUDA可用: {torch.cuda.get_device_name(0)}")
             print(f"显存: {torch.cuda.get_device_properties(0).total_memory / 1024 ** 3:.2f}GB")
         else:
-            logger.warning("CUDA不可用,将使用CPU训练(速度极慢)")
+            logger.warning("CUDA不可用，将使用CPU训练（速度极慢）")
     except ImportError:
         logger.error("未安装PyTorch库")
         return False
@@ -152,7 +152,7 @@ def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='训练图像专家')
     parser.add_argument('--use_4bit', action='store_true', default=True,
-                        help='使用4bit量化训练(默认:True)')
+                        help='使用4bit量化训练（默认：True）')
     parser.add_argument('--no_4bit', dest='use_4bit', action='store_false',
                         help='不使用4bit量化')
     args = parser.parse_args()
@@ -162,7 +162,7 @@ def main():
 
     # 验证环境
     if not validate_environment():
-        logger.error("环境验证失败,请检查依赖库")
+        logger.error("环境验证失败，请检查依赖库")
         return 1
 
     # 检测是否为RTX 4090
@@ -170,12 +170,12 @@ def main():
     use_rtx4090_opt = is_rtx4090
 
     if is_rtx4090:
-        logger.info("检测到RTX 4090,启用优化配置")
+        logger.info("检测到RTX 4090，启用优化配置")
 
     # 创建训练器（会自动打印实际配置）
     logger.info("创建图像专家训练器...")
     try:
-        trainer = ExpertTrainer(
+        trainer = LoRATrainer(
             expert_type='image',
             use_4bit=args.use_4bit,
             use_rtx4090_optimization=use_rtx4090_opt
@@ -206,7 +206,7 @@ def main():
     # 开始训练
     logger.info("开始训练...")
     print("=" * 80)
-    print("训练开始 - 这可能需要较长时间,请耐心等待...")
+    print("训练开始 - 这可能需要较长时间，请耐心等待...")
     print("=" * 80)
     print()
 
@@ -215,17 +215,18 @@ def main():
     if success:
         print()
         print("=" * 80)
-        print(" " * 25 + "训练成功完成!")
+        print(" " * 25 + "训练成功完成！")
         print("=" * 80)
         print()
 
         path_cfg = get_path_config()
-        print(f"LoRA权重已保存至: {path_cfg.IMAGE_EXPERT_WEIGHTS}")
-        print(f"检查点目录: {path_cfg.get_checkpoint_path('image_expert')}")
+        output_path = path_cfg.PROJECT_ROOT / 'checkpoints' / 'lora_moe' / 'image_expert'
+        print(f"LoRA权重已保存至: {output_path}")
+        print(f"检查点目录: {output_path / 'training_checkpoints'}")
         print()
         print("下一步:")
         print("  1. 可以使用该权重进行推理测试")
-        print("  2. 继续训练其他专家(Text, UML, General)")
+        print("  2. 继续训练其他专家（Text, UML, General）")
         print()
 
         return 0
@@ -235,23 +236,9 @@ def main():
         print(" " * 28 + "训练失败")
         print("=" * 80)
         print()
-        logger.error("训练过程中出现错误,请查看日志")
+        logger.error("训练过程中出现错误，请查看日志")
         return 1
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-# 使用示例:
-# 方法1:通过环境管理脚本运行(推荐)
-# python scripts/run_with_env.py --env text --script scripts/training/train_image_expert.py
-#
-# 方法2:直接在qwen_text环境中运行
-# conda activate qwen_text
-# python scripts/training/train_image_expert.py
-#
-# 注意事项:
-# 1. Image Expert使用Qwen-7B-Chat文本模型训练
-# 2. 输入是图像描述的JSON文本,不是图像本身
-# 3. 权重保存到: lora_weights/experts/image_expert/

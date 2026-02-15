@@ -1,10 +1,10 @@
 """
 通用专家训练脚本
 功能：训练General Expert，作为兜底专家处理各类需求（text + image + uml）
-环境：instruction_generator（transformers==4.51.0）
+环境：instruction_generator（transformers==4.57.0）
 基础模型：Qwen3-8B（默认）
-数据集：text_dataset + image_dataset + uml_dataset_qwen3_v3
-输出：lora_weights/experts/general_expert/
+数据集：text_dataset + image_dataset + uml_dataset
+输出：checkpoints/lora_moe/general_expert/
 
 使用方法：
   # 方法1: 通过环境管理脚本运行（推荐）
@@ -15,7 +15,7 @@
   python scripts/training/train_general_expert.py
 
 作者：Training System
-日期：2025-02-13
+日期：2025-02-15
 """
 
 import sys
@@ -26,7 +26,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.training.expert_trainer import ExpertTrainer
+from src.training.lora_trainer import LoRATrainer
 from config.settings import get_path_config, get_training_config, get_lora_config
 from src.utils.logger import get_logger
 
@@ -57,17 +57,14 @@ def print_config(use_4bit: bool, use_rtx4090_opt: bool):
     train_cfg = get_training_config()
     lora_cfg = get_lora_config('conservative')
 
-    # 生成输出路径
-    output_dir = path_cfg.LORA_WEIGHTS_DIR / 'experts' / 'general_expert'
-
     print("训练配置信息:")
     print("-" * 80)
-    print(f"专家类型: General Expert (兜底专家)")
-    print(f"数据集: text + image + uml_dataset_qwen3_v3")
+    print(f"专家类型: General Expert（兜底专家）")
+    print(f"数据集: text + image + uml_dataset")
     print(f"基础模型: {path_cfg.QWEN_7B_CHAT_PATH}")
-    print(f"输出目录: {output_dir}")
+    print(f"输出目录: checkpoints/lora_moe/general_expert/")
     print()
-    print(f"数据来源: 文本(全部) + 图像(全部) + UML(1500条)")
+    print(f"数据来源: 文本（全部）+ 图像（全部）+ UML（1500条）")
     print()
     print(f"LoRA配置:")
     print(f"  - Rank: {lora_cfg.rank}")
@@ -116,7 +113,7 @@ def validate_environment():
         version = transformers.__version__
         print(f"Transformers版本: {version}")
 
-        # General Expert应该使用transformers 4.51.0（Qwen3-8B要求）
+        # General Expert应该使用transformers 4.57.0（统一环境）
         try:
             v_parts = version.split('.')
             major, minor = int(v_parts[0]), int(v_parts[1])
@@ -183,7 +180,7 @@ def main():
     # 创建训练器（会自动打印实际配置）
     logger.info(f"创建通用专家训练器...")
     try:
-        trainer = ExpertTrainer(
+        trainer = LoRATrainer(
             expert_type='general',
             use_4bit=args.use_4bit,
             use_rtx4090_optimization=use_rtx4090_opt
@@ -205,7 +202,7 @@ def main():
     print(f"  - 验证样本: {status['val_samples']}")
     print(f"  - 数据来源: text + image + uml")
     print()
-    print(f"注意：通用专家使用文本(全部) + 图像(全部) + UML(1500条)")
+    print(f"注意：通用专家使用文本（全部）+ 图像（全部）+ UML（1500条）")
     print()
 
     # 设置模型
@@ -231,9 +228,9 @@ def main():
         print()
 
         path_cfg = get_path_config()
-        output_path = path_cfg.LORA_WEIGHTS_DIR / 'experts' / 'general_expert'
+        output_path = path_cfg.PROJECT_ROOT / 'checkpoints' / 'lora_moe' / 'general_expert'
         print(f"LoRA权重已保存至: {output_path}")
-        print(f"检查点目录: {path_cfg.get_checkpoint_path('general_expert')}")
+        print(f"检查点目录: {output_path / 'training_checkpoints'}")
         print()
         print("下一步:")
         print("  1. 可以使用该权重进行推理测试")
@@ -253,9 +250,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-# 使用示例：
-# python scripts/run_with_env.py --env text --script scripts/training/train_general_expert.py
-#
-# 注意：通用专家使用Qwen-7B-Chat模型，结合text + image + uml数据集训练
