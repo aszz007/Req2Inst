@@ -85,9 +85,19 @@ class PTuningTrainer(BaseTrainer):
         # P-Tuning v2不支持gradient checkpointing
         self.disable_gradient_checkpointing = True
 
-        # P-Tuning v2显存占用更大，减小max_seq_length
-        # 从2048减小到1536，减少约25%显存占用，同时保留大部分长样本
-        self.train_cfg.max_seq_length = 1536
+        # 分层序列长度策略（质量优先）
+        # Text和Image数据样本相对规整，1536足够
+        # UML数据虽然长但结构重复，1536能覆盖核心信息
+        # General混合数据集，使用1280平衡质量和显存
+        if expert_type == 'general':
+            self.train_cfg.max_seq_length = 1280
+            logger.info("General专家使用max_seq_length=1280（混合数据集优化）")
+        elif expert_type == 'uml':
+            self.train_cfg.max_seq_length = 1536
+            logger.info("UML专家使用max_seq_length=1536（保留长样本信息）")
+        else:  # text, image
+            self.train_cfg.max_seq_length = 1536
+            logger.info(f"{expert_type}专家使用max_seq_length=1536")
 
         # P-Tuning v2专用：减少dataloader workers以节省系统内存
         self.reduced_workers = True
@@ -96,9 +106,9 @@ class PTuningTrainer(BaseTrainer):
         logger.info(f"P-Tuning v2配置: virtual_tokens={self.ptuning_cfg.num_virtual_tokens}, "
                     f"encoder_hidden_size={self.ptuning_cfg.encoder_hidden_size}, "
                     f"prefix_projection={self.ptuning_cfg.prefix_projection}")
-        logger.info(f"Max序列长度: {self.train_cfg.max_seq_length} (P-Tuning v2优化)")
+        logger.info(f"Max序列长度: {self.train_cfg.max_seq_length} (质量优先优化)")
         logger.info("注意: P-Tuning v2不支持gradient checkpointing，已禁用")
-        logger.info("注意: P-Tuning v2使用更小的batch size和序列长度以避免OOM")
+        logger.info("注意: 将在训练前清空GPU缓存以最大化可用显存")
 
         self._print_training_config()
 
@@ -109,16 +119,22 @@ class PTuningTrainer(BaseTrainer):
         P-Tuning v2不能使用gradient checkpointing，显存占用更大，
         需要使用更小的batch size和更大的gradient accumulation
 
+        针对UML和General专家，使用更激进的配置以避免OOM
+
         Returns:
             (batch_size, gradient_accumulation_steps)
         """
-        if self.use_rtx4090_optimization:
-            # RTX 4090优化配置 - P-Tuning v2专用
-            # 由于不能用gradient checkpointing，使用更小的batch size
-            return 1, 16  # 有效batch=16（与LoRA保持一致）
+        if self.expert_type in ['uml', 'general']:
+            # UML和General数据量大，使用极小batch + 大梯度累积
+            # 有效batch=32，比text/image的16更大，可能提升训练质量
+            logger.info(f"{self.expert_type}专家使用激进配置: batch=1, grad_accum=32 (有效batch=32)")
+            return 1, 32
         else:
-            # 标准配置 - P-Tuning v2专用
-            return 1, 16  # 有效batch=16
+            # Text和Image专家使用标准配置
+            if self.use_rtx4090_optimization:
+                return 1, 16  # 有效batch=16
+            else:
+                return 1, 16  # 有效batch=16
 
     def setup_model(self) -> bool:
         """
@@ -131,6 +147,11 @@ class PTuningTrainer(BaseTrainer):
             bool: 是否成功
         """
         try:
+            # 清空GPU缓存，最大化可用显存
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                logger.info("已清空GPU缓存")
+
             logger.info("加载基础模型...")
 
             # 配置4bit量化（如果启用）

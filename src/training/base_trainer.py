@@ -358,6 +358,12 @@ class BaseTrainer(ABC):
             return False
 
         try:
+            # 训练前清空GPU缓存（对UML和General专家尤其重要）
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                if self.expert_type in ['uml', 'general']:
+                    logger.info(f"{self.expert_type}专家训练前已清空GPU缓存，最大化可用显存")
+
             # 创建输出目录
             self.output_dir.mkdir(parents=True, exist_ok=True)
             self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
