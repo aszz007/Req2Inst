@@ -1,67 +1,39 @@
 """
-Prompt Tuning Image Expert训练脚本
+Prompt Tuning图像专家训练脚本
 
-功能：使用Prompt Tuning方法训练Image Expert
-环境：instruction_generator（transformers==4.51.0）
-基础模型：Qwen3-8B
-方法：Prompt Tuning（软提示优化）
+功能：使用Prompt Tuning方法训练Image Expert，将图像描述转换为标注指令
+环境：instruction_generator（transformers==4.57.0）
+基础模型：Qwen3-8B（默认）
+方法：Prompt Tuning（soft prompts / virtual tokens）
+数据集：image_dataset.csv
 输出：checkpoints/prompt_tuning/image_expert/
 
 对比实验说明：
-  - Prompt Tuning vs LoRA：验证不同参数高效微调方法的效果
-  - 使用Soft Prompts（10个virtual tokens）
-  - 直接优化可学习的embedding vectors
+  Prompt Tuning vs LoRA：验证不同参数高效微调方法的效果
 
 使用方法：
-  python scripts/training/prompt_tuning/train_image_expert.py
+  python scripts/run_with_env.py --env text --script scripts/training/prompt_tuning/train_image_expert.py
 
-作者：Comparative Training System
+作者：Training System
 日期：2025-02-15
 """
 
 import sys
 import argparse
-import torch
 from pathlib import Path
 
-# 添加项目根目录到路径
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    TrainingArguments,
-    Trainer,
-    BitsAndBytesConfig
-)
-from peft import (
-    PromptTuningConfig,
-    get_peft_model,
-    prepare_model_for_kbit_training,
-    TaskType,
-    PromptTuningInit
-)
-from config.settings import (
-    get_path_config,
-    get_training_config,
-    get_prompt_tuning_config
-)
-from src.training.data_loader import (
-    ImageDatasetLoader,
-    InstructionDataset,
-    InstructionDataCollator,
-    split_dataset_for_expert
-)
-from models.prompt_templates.image_template import ImageInstructionTemplate
+from src.training.prompt_tuning_trainer import PromptTuningTrainer
 from src.utils.logger import get_logger
 
 logger = get_logger('training.prompt_tuning.image_expert')
 
 
 def detect_rtx4090() -> bool:
-    """检测是否为RTX 4090显卡"""
     try:
+        import torch
         if torch.cuda.is_available():
             gpu_name = torch.cuda.get_device_name(0)
             return 'RTX 4090' in gpu_name or 'RTX 4090D' in gpu_name
@@ -71,170 +43,137 @@ def detect_rtx4090() -> bool:
 
 
 def print_header():
-    """打印训练开始的标题"""
     print("=" * 80)
-    print(" " * 15 + "Prompt Tuning Image Expert训练 (Soft Prompts)")
+    print(" " * 15 + "Prompt Tuning图像专家训练 (Image Expert Training)")
     print("=" * 80)
     print()
 
 
+def validate_environment() -> bool:
+    print("验证运行环境...")
+    print("-" * 80)
+
+    try:
+        import transformers
+        print(f"Transformers版本: {transformers.__version__}")
+        v = transformers.__version__.split('.')
+        major, minor = int(v[0]), int(v[1])
+        if not (major > 4 or (major == 4 and minor >= 51)):
+            logger.warning(f"推荐使用transformers>=4.51.0，当前: {transformers.__version__}")
+    except ImportError:
+        logger.error("未安装transformers库")
+        return False
+
+    try:
+        import peft
+        print(f"PEFT版本: {peft.__version__}")
+    except ImportError:
+        logger.error("未安装PEFT库，请运行: pip install peft")
+        return False
+
+    try:
+        import torch
+        print(f"PyTorch版本: {torch.__version__}")
+        if torch.cuda.is_available():
+            print(f"CUDA可用: {torch.cuda.get_device_name(0)}")
+            print(f"显存: {torch.cuda.get_device_properties(0).total_memory / 1024 ** 3:.2f}GB")
+        else:
+            logger.warning("CUDA不可用，将使用CPU训练（速度极慢）")
+    except ImportError:
+        logger.error("未安装PyTorch库")
+        return False
+
+    print("-" * 80)
+    print()
+    return True
+
+
 def main():
-    """主训练流程"""
-    parser = argparse.ArgumentParser(description='使用Prompt Tuning训练Image Expert')
+    parser = argparse.ArgumentParser(description='使用Prompt Tuning训练图像专家')
     parser.add_argument('--use_4bit', action='store_true', default=True,
                         help='使用4bit量化训练（默认：True）')
     parser.add_argument('--no_4bit', dest='use_4bit', action='store_false',
                         help='不使用4bit量化')
+    parser.add_argument('--no_rtx4090_opt', action='store_true',
+                        help='禁用RTX 4090优化（默认：自动检测）')
     args = parser.parse_args()
 
-    # 打印标题
+    is_rtx4090 = detect_rtx4090()
+    use_rtx4090_opt = is_rtx4090 and not args.no_rtx4090_opt
+
+    if is_rtx4090:
+        if use_rtx4090_opt:
+            logger.info("检测到RTX 4090，启用优化配置")
+        else:
+            logger.info("检测到RTX 4090，但优化已禁用")
+
     print_header()
 
-    # 获取配置
-    path_cfg = get_path_config()
-    train_cfg = get_training_config()
-    prompt_cfg = get_prompt_tuning_config()
+    if not validate_environment():
+        logger.error("环境验证失败，请检查依赖库")
+        return 1
 
-    # 检测RTX 4090
-    is_rtx4090 = detect_rtx4090()
-    if is_rtx4090:
-        logger.info("检测到RTX 4090，启用优化配置")
+    logger.info("创建Prompt Tuning图像专家训练器...")
+    try:
+        trainer = PromptTuningTrainer(
+            expert_type='image',
+            use_4bit=args.use_4bit,
+            use_rtx4090_optimization=use_rtx4090_opt
+        )
+    except Exception as e:
+        logger.error(f"创建训练器失败: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return 1
 
-    # 打印实验说明
-    print("=" * 80)
-    print("对比实验：Prompt Tuning vs LoRA")
-    print("=" * 80)
-    print("方法：Prompt Tuning（Soft Prompts）")
-    print("配置：")
-    print(f"  - Virtual Tokens: {prompt_cfg.num_virtual_tokens}")
-    print(f"  - Initialization: {prompt_cfg.prompt_tuning_init}")
-    print("=" * 80)
+    # setup_model()必须在prepare_data()之前调用
+    # InstructionDataset初始化时需要tokenizer已完成加载
+    logger.info("设置模型和Prompt Tuning配置...")
+    if not trainer.setup_model():
+        logger.error("模型设置失败")
+        return 1
+
+    logger.info("准备训练数据...")
+    if not trainer.prepare_data():
+        logger.error("数据准备失败")
+        return 1
+
+    status = trainer.get_training_status()
+    print(f"数据统计:")
+    print(f"  - 训练样本: {status['train_samples']}")
+    print(f"  - 验证样本: {status['val_samples']}")
     print()
 
-    # 1. 加载数据
-    logger.info("加载Image数据集...")
-    data_loader = ImageDatasetLoader()
-    raw_data = data_loader.load_csv_file()
-
-    # 划分数据集
-    train_data, val_data, _ = split_dataset_for_expert(raw_data, 'image')
-    logger.info(f"训练样本: {len(train_data)}, 验证样本: {len(val_data)}")
-
-    # 2. 加载模型和分词器
-    logger.info("加载基础模型...")
-    model_path = path_cfg.get_text_model_path()
-
-    # 4bit量化配置
-    if args.use_4bit:
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.bfloat16 if is_rtx4090 else torch.float16,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4"
-        )
-        model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            quantization_config=bnb_config,
-            device_map="auto",
-            trust_remote_code=True
-        )
-        model = prepare_model_for_kbit_training(model)
-    else:
-        model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            device_map="auto",
-            trust_remote_code=True,
-            torch_dtype=torch.bfloat16 if is_rtx4090 else torch.float16
-        )
-
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_path,
-        trust_remote_code=True,
-        padding_side='right'
-    )
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
-    # 3. 应用Prompt Tuning配置
-    logger.info("配置Prompt Tuning...")
-    peft_config = PromptTuningConfig(
-        task_type=TaskType.CAUSAL_LM,
-        num_virtual_tokens=prompt_cfg.num_virtual_tokens,
-        prompt_tuning_init=PromptTuningInit.RANDOM,
-        tokenizer_name_or_path=str(model_path)
-    )
-
-    model = get_peft_model(model, peft_config)
-    model.print_trainable_parameters()
-
-    # 4. 准备数据集
-    logger.info("准备训练数据集...")
-
-    train_dataset = InstructionDataset(
-        data=train_data,
-        tokenizer=tokenizer,
-        max_length=2048
-    )
-    val_dataset = InstructionDataset(
-        data=val_data,
-        tokenizer=tokenizer,
-        max_length=2048
-    )
-
-    data_collator = InstructionDataCollator(tokenizer=tokenizer)
-
-    # 5. 设置训练参数
-    output_dir = path_cfg.PROMPT_TUNING_CKPTS['image']
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    training_args = TrainingArguments(
-        output_dir=str(output_dir),
-        num_train_epochs=train_cfg.num_epochs,
-        per_device_train_batch_size=2 if is_rtx4090 else train_cfg.batch_size,
-        per_device_eval_batch_size=2 if is_rtx4090 else train_cfg.batch_size,
-        gradient_accumulation_steps=8 if is_rtx4090 else train_cfg.gradient_accumulation_steps,
-        learning_rate=train_cfg.learning_rate,
-        weight_decay=train_cfg.weight_decay,
-        warmup_ratio=train_cfg.warmup_ratio,
-        lr_scheduler_type=train_cfg.lr_scheduler_type,
-        logging_steps=train_cfg.logging_steps,
-        save_strategy="epoch",
-        eval_strategy="epoch",
-        save_total_limit=train_cfg.save_total_limit,
-        load_best_model_at_end=True,
-        metric_for_best_model="eval_loss",
-        greater_is_better=False,
-        bf16=is_rtx4090,
-        fp16=not is_rtx4090 and train_cfg.fp16,
-        dataloader_num_workers=8 if is_rtx4090 else 2,
-        remove_unused_columns=False,
-        report_to="none"
-    )
-
-    # 6. 创建训练器并开始训练
     logger.info("开始训练...")
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=val_dataset,
-        data_collator=data_collator
-    )
-
-    trainer.train()
-
-    # 7. 保存最终模型
-    logger.info(f"保存模型至: {output_dir}")
-    trainer.save_model(output_dir)
-
-    print()
     print("=" * 80)
-    print(" " * 25 + "训练成功完成！")
+    print("训练开始 - 这可能需要较长时间，请耐心等待...")
     print("=" * 80)
-    print(f"Prompt Tuning权重已保存至: {output_dir}")
     print()
 
-    return 0
+    success = trainer.train()
+
+    if success:
+        print()
+        print("=" * 80)
+        print(" " * 25 + "训练成功完成！")
+        print("=" * 80)
+        print()
+        print(f"Prompt Tuning权重已保存至: {trainer.output_dir}")
+        print(f"检查点目录: {trainer.output_dir / 'training_checkpoints'}")
+        print()
+        print("下一步:")
+        print("  1. 可以使用该权重进行推理测试")
+        print("  2. 继续训练其他专家（Text, UML, General）")
+        print()
+        return 0
+    else:
+        print()
+        print("=" * 80)
+        print(" " * 28 + "训练失败")
+        print("=" * 80)
+        print()
+        logger.error("训练过程中出现错误，请查看日志")
+        return 1
 
 
 if __name__ == "__main__":
