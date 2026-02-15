@@ -22,7 +22,8 @@ from .data_loader import (
     create_dataloader,
 )
 
-from .expert_trainer import ExpertTrainer
+from .base_trainer import BaseTrainer
+from .prompt_tuning_trainer import PromptTuningTrainer
 
 __all__ = [
     # 数据加载器
@@ -43,7 +44,8 @@ __all__ = [
     'create_dataloader',
 
     # 训练器
-    'ExpertTrainer',
+    'BaseTrainer',
+    'PromptTuningTrainer',
 ]
 
 # 版本信息
