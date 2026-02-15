@@ -170,9 +170,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例：
+  # 训练所有方法和专家
   python scripts/training/train_all_experts.py
+  
+  # 仅训练Prompt Tuning
   python scripts/training/train_all_experts.py --method prompt_tuning
+  
+  # 仅训练文本专家（所有方法）
   python scripts/training/train_all_experts.py --expert text
+  
+  # 自动跳过失败的任务继续训练
+  python scripts/training/train_all_experts.py --skip-failed
         """
     )
 
@@ -188,6 +196,13 @@ def main():
         choices=['text', 'image', 'uml', 'general', 'all'],
         default='all',
         help='仅训练指定专家（默认：all）'
+    )
+
+    parser.add_argument(
+        '--skip-failed',
+        action='store_true',
+        default=False,
+        help='自动跳过失败的任务继续训练（默认：失败后停止）'
     )
 
     args = parser.parse_args()
@@ -206,6 +221,7 @@ def main():
 
     overall_start = time.time()
     results = []
+    failed_tasks = []  # 记录失败的任务
 
     try:
         session_num = 1
@@ -235,13 +251,25 @@ def main():
                 })
 
                 if not success:
-                    print("\n" + "=" * 80)
-                    print("训练失败！")
-                    print("=" * 80)
-                    print(f"失败任务: {method}/{expert}")
-                    print("停止执行。")
-                    print("=" * 80 + "\n")
-                    return 1
+                    failed_tasks.append((method, expert))
+
+                    if args.skip_failed:
+                        print("\n" + "=" * 80)
+                        print("任务失败，跳过并继续训练下一个任务")
+                        print("=" * 80)
+                        print(f"失败任务: {method}/{expert}")
+                        print("继续执行...")
+                        print("=" * 80 + "\n")
+                        continue
+                    else:
+                        print("\n" + "=" * 80)
+                        print("训练失败！")
+                        print("=" * 80)
+                        print(f"失败任务: {method}/{expert}")
+                        print("停止执行。")
+                        print("提示: 使用 --skip-failed 参数可自动跳过失败任务")
+                        print("=" * 80 + "\n")
+                        return 1
 
     except KeyboardInterrupt:
         print("\n\n" + "=" * 80)
@@ -252,20 +280,41 @@ def main():
     overall_elapsed = time.time() - overall_start
 
     print("\n\n" + "=" * 80)
-    print(" " * 28 + "训练完成！")
+    if failed_tasks:
+        print(" " * 25 + "训练完成（有失败任务）")
+    else:
+        print(" " * 28 + "训练完成！")
     print("=" * 80)
     print(f"\n总耗时: {format_time(overall_elapsed)}")
-    print(f"已完成任务: {len(results)}/{len(results)}")
+
+    success_count = sum(1 for r in results if r['success'])
+    print(f"成功任务: {success_count}/{len(results)}")
+
+    if failed_tasks:
+        print(f"失败任务: {len(failed_tasks)}/{len(results)}")
+
     print("\n结果：")
     print("-" * 80)
 
     for result in results:
-        status = "成功" if result['success'] else "失败"
+        status = "✓ 成功" if result['success'] else "✗ 失败"
         print(f"  {result['method']:20s} / {result['expert']:10s} : {status}")
+
+    if failed_tasks:
+        print("\n" + "=" * 80)
+        print("失败任务详情:")
+        print("=" * 80)
+        for method, expert in failed_tasks:
+            print(f"  - {method}/{expert}")
+        print("\n建议:")
+        print("  1. 检查对应专家的训练日志: logs/training/")
+        print("  2. 如果是OOM错误，考虑进一步降低序列长度或batch size")
+        print("  3. 如果是配置错误，检查 config/settings.py")
+        print("  4. 可以单独重新训练失败的专家")
 
     print("=" * 80 + "\n")
 
-    return 0
+    return 0 if not failed_tasks or args.skip_failed else 1
 
 
 if __name__ == "__main__":

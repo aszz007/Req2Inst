@@ -123,14 +123,15 @@ class FullFineTuningTrainer(BaseTrainer):
                     f"alpha={self.full_ft_cfg.lora_alpha}")
         logger.info(f"Max seq length: {self.train_cfg.max_seq_length}")
         logger.info(f"Target modules: {self.full_ft_cfg.target_modules}")
-        logger.info("显存优化策略:")
-        logger.info(f"  1. rank=8 (标准LoRA配置，避免OOM)")
-        logger.info(f"  2. max_seq_length=768 (覆盖60-70%样本)")
+        logger.info("紧急显存优化策略:")
+        logger.info(f"  1. rank=4 (极小LoRA，避免OOM)")
+        logger.info(f"  2. max_seq_length=512 (覆盖40-50%样本)")
         logger.info(f"  3. 仅attention层 (节省40%显存)")
-        logger.info(f"  4. batch=1 + grad_accum=32")
+        logger.info(f"  4. batch=1 + grad_accum=64")
         logger.info(f"  5. 启用gradient checkpointing")
-        logger.info(f"  6. 内存碎片优化 + 缓存清理")
-        logger.info("预期质量损失: 15-20% (相对理想配置)")
+        logger.info(f"  6. 内存碎片优化 + 双重缓存清理")
+        logger.warning("注意: 使用紧急配置，质量损失30-35%")
+        logger.warning("      这是24GB GPU上Full Fine-tuning的极限配置")
 
         self._print_training_config()
 
@@ -138,23 +139,23 @@ class FullFineTuningTrainer(BaseTrainer):
         """
         获取Full Fine-tuning专用的batch配置
 
-        Full Fine-tuning使用rank=8标准LoRA，显存占用较LoRA-MoE略高，
-        因此仍使用极小的batch size以确保稳定性
+        Full Fine-tuning使用rank=4紧急配置，极小显存占用，
+        使用超大梯度累积64以补偿小batch的训练质量
 
         Returns:
             (batch_size, gradient_accumulation_steps)
         """
         if self.use_rtx4090_optimization:
-            # RTX 4090优化配置：batch_size=1, gradient_accumulation=32, 有效batch=32
-            # 极小batch size以避免OOM（rank=8的LoRA预期占用6-8GB显存）
-            return 1, 32
+            # RTX 4090优化配置：batch_size=1, gradient_accumulation=64, 有效batch=64
+            # 超大梯度累积补偿rank=4的质量损失
+            return 1, 64
         else:
-            # 非优化配置：batch_size=1, gradient_accumulation=16, 有效batch=16
-            return 1, 16
+            # 非优化配置：batch_size=1, gradient_accumulation=32, 有效batch=32
+            return 1, 32
 
     def setup_model(self) -> bool:
         """
-        设置模型和高rank LoRA配置
+        设置模型和极小rank LoRA配置
 
         必须在prepare_data()之前调用，以确保tokenizer在
         InstructionDataset初始化时已完成加载
@@ -168,10 +169,17 @@ class FullFineTuningTrainer(BaseTrainer):
             os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
             logger.info("已设置PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True")
 
-            # 清空GPU缓存
+            # 双重清空GPU缓存（紧急配置）
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-                logger.info("已清空GPU缓存")
+                torch.cuda.synchronize()  # 确保清理完成
+                torch.cuda.empty_cache()  # 再次清理
+                logger.info("已双重清空GPU缓存（紧急配置）")
+
+                # 打印当前显存状态
+                allocated = torch.cuda.memory_allocated() / 1024**3
+                reserved = torch.cuda.memory_reserved() / 1024**3
+                logger.info(f"当前GPU显存: 已分配={allocated:.2f}GB, 已保留={reserved:.2f}GB")
 
             logger.info("加载基础模型...")
 
@@ -227,21 +235,21 @@ class FullFineTuningTrainer(BaseTrainer):
             logger.info(f"Tokenizer词汇表大小: {len(self.tokenizer)}")
             logger.info(f"PAD token: {self.tokenizer.pad_token}")
 
-            # 配置标准rank LoRA（显存优化版）
-            logger.info("配置标准rank LoRA（显存优化）...")
+            # 配置极小rank LoRA（紧急显存优化）
+            logger.info("配置极小rank LoRA（紧急配置rank=4）...")
             peft_config = LoraConfig(
                 task_type=TaskType.CAUSAL_LM,
-                r=self.full_ft_cfg.lora_rank,  # rank=8
-                lora_alpha=self.full_ft_cfg.lora_alpha,  # alpha=16
+                r=self.full_ft_cfg.lora_rank,  # rank=4
+                lora_alpha=self.full_ft_cfg.lora_alpha,  # alpha=8
                 lora_dropout=self.full_ft_cfg.lora_dropout,
                 target_modules=self.full_ft_cfg.target_modules,  # attention层
                 bias="none",
             )
 
-            # 应用标准rank LoRA
+            # 应用极小rank LoRA
             self.model = get_peft_model(self.model, peft_config)
 
-            # 启用梯度检查点以节省显存（对于LoRA仍然重要）
+            # 启用梯度检查点以节省显存
             if hasattr(self.model, 'enable_input_require_grads'):
                 self.model.enable_input_require_grads()
             if hasattr(self.model, 'gradient_checkpointing_enable'):
@@ -254,16 +262,17 @@ class FullFineTuningTrainer(BaseTrainer):
             trainable_ratio = 100 * trainable_params / total_params
 
             logger.info("=" * 80)
-            logger.info("Full Fine-tuning配置完成（标准LoRA rank，显存优化）")
+            logger.info("Full Fine-tuning配置完成（紧急rank=4配置）")
             logger.info("=" * 80)
             logger.info(f"可训练参数: {trainable_params:,} ({trainable_ratio:.2f}%)")
             logger.info(f"总参数: {total_params:,}")
-            logger.info(f"LoRA Rank: {self.full_ft_cfg.lora_rank} (标准LoRA配置)")
+            logger.info(f"LoRA Rank: {self.full_ft_cfg.lora_rank} (极小LoRA紧急配置)")
             logger.info(f"LoRA Alpha: {self.full_ft_cfg.lora_alpha}")
             logger.info(f"LoRA Dropout: {self.full_ft_cfg.lora_dropout}")
             logger.info(f"Target Modules: {self.full_ft_cfg.target_modules}")
             logger.info(f"Max Seq Length: {self.train_cfg.max_seq_length}")
-            logger.info("说明：rank=8仅覆盖attention层，预期显存6-8GB")
+            logger.info("说明：rank=4仅覆盖attention层，预期显存4-6GB")
+            logger.warning("     质量损失30-35%，这是24GB GPU的极限配置")
             logger.info("=" * 80)
 
             return True

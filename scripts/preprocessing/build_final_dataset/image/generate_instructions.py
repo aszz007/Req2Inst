@@ -26,11 +26,11 @@ import json
 
 # ==================== 配置参数 ====================
 CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-DATASET_PATH = r"D:\MyPyProject\crowdsourcing_instruction_generator\dataset\Requirements_data\Image_Data"
+DATASET_PATH = r"D:\MyPyProject\crowdsourcing_instruction_generator\dataset\image"
 GPT_URL = "https://sass-node1.chatshare.biz/"
 
 # ✨ 修改：单个CSV文件
-CSV_FILE = "image_data.csv"
+CSV_FILE = "image_interim_coco_1k.csv"
 
 # ✨ 修改：优化批次参数
 BATCH_SIZE = 5  # 每批5条，质量优先
