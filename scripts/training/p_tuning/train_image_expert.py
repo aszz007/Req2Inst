@@ -2,7 +2,7 @@
 P-Tuning v2 Image Expert训练脚本
 
 功能：使用P-Tuning v2方法训练Image Expert
-环境：instruction_generator（transformers==4.51.0）
+环境：instruction_generator（transformers==4.57.0）
 基础模型：Qwen3-8B
 方法：P-Tuning v2（前缀微调）
 输出：checkpoints/p_tuning/image_expert/
@@ -13,6 +13,11 @@ P-Tuning v2 Image Expert训练脚本
   - 通过MLP编码器学习任务特定的前缀表示
 
 使用方法：
+  # 方法1: 通过环境管理脚本运行（推荐）
+  python scripts/run_with_env.py --env text --script scripts/training/p_tuning/train_image_expert.py
+
+  # 方法2: 直接在instruction_generator环境中运行
+  conda activate instruction_generator
   python scripts/training/p_tuning/train_image_expert.py
 
 作者：Comparative Training System
@@ -21,38 +26,14 @@ P-Tuning v2 Image Expert训练脚本
 
 import sys
 import argparse
-import torch
 from pathlib import Path
 
 # 添加项目根目录到路径
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    TrainingArguments,
-    Trainer,
-    BitsAndBytesConfig
-)
-from peft import (
-    PrefixTuningConfig,
-    get_peft_model,
-    prepare_model_for_kbit_training,
-    TaskType
-)
-from config.settings import (
-    get_path_config,
-    get_training_config,
-    get_ptuning_config
-)
-from src.training.data_loader import (
-    ImageDatasetLoader,
-    InstructionDataset,
-    InstructionDataCollator,
-    split_dataset_for_expert
-)
-from models.prompt_templates.image_template import ImageInstructionTemplate
+from src.training.p_tuning_trainer import PTuningTrainer
+from config.settings import get_path_config, get_ptuning_config
 from src.utils.logger import get_logger
 
 logger = get_logger('training.p_tuning.image_expert')
@@ -61,6 +42,7 @@ logger = get_logger('training.p_tuning.image_expert')
 def detect_rtx4090() -> bool:
     """检测是否为RTX 4090显卡"""
     try:
+        import torch
         if torch.cuda.is_available():
             gpu_name = torch.cuda.get_device_name(0)
             return 'RTX 4090' in gpu_name or 'RTX 4090D' in gpu_name
@@ -89,17 +71,15 @@ def main():
     # 打印标题
     print_header()
 
-    # 获取配置
-    path_cfg = get_path_config()
-    train_cfg = get_training_config()
-    ptuning_cfg = get_ptuning_config()
-
     # 检测RTX 4090
     is_rtx4090 = detect_rtx4090()
+    use_rtx4090_opt = is_rtx4090
+
     if is_rtx4090:
         logger.info("检测到RTX 4090，启用优化配置")
 
     # 打印实验说明
+    ptuning_cfg = get_ptuning_config()
     print("=" * 80)
     print("对比实验：P-Tuning v2 vs LoRA")
     print("=" * 80)
@@ -107,134 +87,76 @@ def main():
     print("配置：")
     print(f"  - Virtual Tokens: {ptuning_cfg.num_virtual_tokens}")
     print(f"  - Encoder Hidden Size: {ptuning_cfg.encoder_hidden_size}")
-    print(f"  - Encoder Layers: {ptuning_cfg.encoder_num_layers}")
+    print(f"  - Prefix Projection: {ptuning_cfg.prefix_projection}")
     print("=" * 80)
     print()
 
-    # 1. 加载数据
-    logger.info("加载Image数据集...")
-    data_loader = ImageDatasetLoader()
-    raw_data = data_loader.load_csv_file()
-
-    # 划分数据集
-    train_data, val_data, _ = split_dataset_for_expert(raw_data, 'image')
-    logger.info(f"训练样本: {len(train_data)}, 验证样本: {len(val_data)}")
-
-    # 2. 加载模型和分词器
-    logger.info("加载基础模型...")
-    model_path = path_cfg.get_text_model_path()
-
-    # 4bit量化配置
-    if args.use_4bit:
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.bfloat16 if is_rtx4090 else torch.float16,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4"
+    # 创建训练器
+    logger.info("创建P-Tuning v2图像专家训练器...")
+    try:
+        trainer = PTuningTrainer(
+            expert_type='image',
+            use_4bit=args.use_4bit,
+            use_rtx4090_optimization=use_rtx4090_opt
         )
-        model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            quantization_config=bnb_config,
-            device_map="auto",
-            trust_remote_code=True
-        )
-        model = prepare_model_for_kbit_training(model)
-    else:
-        model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            device_map="auto",
-            trust_remote_code=True,
-            torch_dtype=torch.bfloat16 if is_rtx4090 else torch.float16
-        )
+    except Exception as e:
+        logger.error(f"创建训练器失败: {e}")
+        return 1
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_path,
-        trust_remote_code=True,
-        padding_side='right'
-    )
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
+    # 设置模型（必须在prepare_data之前调用）
+    logger.info("设置模型和P-Tuning v2配置...")
+    if not trainer.setup_model():
+        logger.error("模型设置失败")
+        return 1
 
-    # 3. 应用P-Tuning v2配置
-    logger.info("配置P-Tuning v2...")
-    peft_config = PrefixTuningConfig(
-        task_type=TaskType.CAUSAL_LM,
-        num_virtual_tokens=ptuning_cfg.num_virtual_tokens,
-        encoder_hidden_size=ptuning_cfg.encoder_hidden_size,
-        prefix_projection=ptuning_cfg.prefix_projection
-    )
+    # 准备数据
+    logger.info("准备训练数据...")
+    if not trainer.prepare_data():
+        logger.error("数据准备失败")
+        return 1
 
-    model = get_peft_model(model, peft_config)
-    model.print_trainable_parameters()
+    # 打印数据统计
+    status = trainer.get_training_status()
+    print(f"数据统计:")
+    print(f"  - 训练样本: {status['train_samples']}")
+    print(f"  - 验证样本: {status['val_samples']}")
+    print()
 
-    # 4. 准备数据集
-    logger.info("准备训练数据集...")
-
-    train_dataset = InstructionDataset(
-        data=train_data,
-        tokenizer=tokenizer,
-        max_length=2048
-    )
-    val_dataset = InstructionDataset(
-        data=val_data,
-        tokenizer=tokenizer,
-        max_length=2048
-    )
-
-    data_collator = InstructionDataCollator(tokenizer=tokenizer)
-
-    # 5. 设置训练参数
-    output_dir = path_cfg.PTUNING_CKPTS['image']
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    training_args = TrainingArguments(
-        output_dir=str(output_dir),
-        num_train_epochs=train_cfg.num_epochs,
-        per_device_train_batch_size=2 if is_rtx4090 else train_cfg.batch_size,
-        per_device_eval_batch_size=2 if is_rtx4090 else train_cfg.batch_size,
-        gradient_accumulation_steps=8 if is_rtx4090 else train_cfg.gradient_accumulation_steps,
-        learning_rate=train_cfg.learning_rate,
-        weight_decay=train_cfg.weight_decay,
-        warmup_ratio=train_cfg.warmup_ratio,
-        lr_scheduler_type=train_cfg.lr_scheduler_type,
-        logging_steps=train_cfg.logging_steps,
-        save_strategy="epoch",
-        eval_strategy="epoch",
-        save_total_limit=train_cfg.save_total_limit,
-        load_best_model_at_end=True,
-        metric_for_best_model="eval_loss",
-        greater_is_better=False,
-        bf16=is_rtx4090,
-        fp16=not is_rtx4090 and train_cfg.fp16,
-        dataloader_num_workers=8 if is_rtx4090 else 2,
-        remove_unused_columns=False,
-        report_to="none"
-    )
-
-    # 6. 创建训练器并开始训练
+    # 开始训练
     logger.info("开始训练...")
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=val_dataset,
-        data_collator=data_collator
-    )
-
-    trainer.train()
-
-    # 7. 保存最终模型
-    logger.info(f"保存模型至: {output_dir}")
-    trainer.save_model(output_dir)
-
-    print()
     print("=" * 80)
-    print(" " * 25 + "训练成功完成！")
+    print("训练开始 - 这可能需要较长时间，请耐心等待...")
     print("=" * 80)
-    print(f"P-Tuning v2权重已保存至: {output_dir}")
     print()
 
-    return 0
+    success = trainer.train()
+
+    if success:
+        print()
+        print("=" * 80)
+        print(" " * 25 + "训练成功完成！")
+        print("=" * 80)
+        print()
+
+        path_cfg = get_path_config()
+        output_path = path_cfg.PTUNING_CKPTS['image']
+        print(f"P-Tuning v2权重已保存至: {output_path}")
+        print(f"检查点目录: {output_path / 'training_checkpoints'}")
+        print()
+        print("下一步:")
+        print("  1. 可以使用该权重进行推理测试")
+        print("  2. 继续训练其他专家（Text, UML, General）")
+        print()
+
+        return 0
+    else:
+        print()
+        print("=" * 80)
+        print(" " * 28 + "训练失败")
+        print("=" * 80)
+        print()
+        logger.error("训练过程中出现错误，请查看日志")
+        return 1
 
 
 if __name__ == "__main__":
