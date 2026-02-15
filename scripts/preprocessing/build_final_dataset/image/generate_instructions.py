@@ -789,16 +789,16 @@ class GPTAutomator:
             # 如果不是有效JSON，直接使用
             json_str = description
 
-        # 硬编码完整Prompt（参考image_template.py的英文模板）
-        SYSTEM_PROMPT_HARDCODED = """You are a computer vision data expert and crowdsourcing task designer. Based on the input image analysis structured data, write an English image annotation instruction for crowdsourcing workers.
+        # 硬编码完整Prompt（采用纯文本格式，与UML代码一致）
+        prompt = f"""You are a computer vision data expert and crowdsourcing task designer. Based on the input image analysis structured data, write an English image annotation instruction for crowdsourcing workers.
 
 Core Principles:
 1. Annotation Focus: The instruction must explicitly require workers to draw bounding boxes.
 2. Foreground Extraction: Extract main foreground objects (e.g., people, vehicles) from the objects list as annotation targets. Ignore background elements.
 3. Direct Reference: Use English terms directly from the JSON data. Do not replace with synonyms.
-4. Extreme Conciseness: Keep Emphasis and Avoid sections brief. Use "-" if no significant visual features or distractors exist."""
+4. Extreme Conciseness: Keep Emphasis and Avoid sections brief. Use "-" if no significant visual features or distractors exist.
 
-        FORMAT_INSTRUCTIONS_HARDCODED = """Output Format Requirements:
+Output Format Requirements:
 
 Definition: Use a clear imperative sentence to describe the annotation targets. Must start with "In this task," and explicitly mention "draw bounding boxes around".
 Emphasis & Caution: Only list highly distinctive visual features (e.g., specific colors, positions). Use "-" if nothing specific to emphasize.
@@ -809,26 +809,12 @@ CRITICAL RULES:
 - Each line must start with the section label (Definition: / Emphasis & Caution: / Things to Avoid:)
 - Definition must include "draw bounding boxes around" and list specific objects from JSON data
 - Keep all sections concise
-- Output ONLY these three lines, nothing else"""
+- Output ONLY these three lines, nothing else
 
-        # 构建用户消息
-        user_message = f"""Image analysis structured data (JSON format):
+Image analysis structured data (JSON format):
 ```json
 {json_str}
 ```
-
-{FORMAT_INSTRUCTIONS_HARDCODED}"""
-
-        # 构建完整的Qwen格式prompt（assistant部分使用空think块禁用Qwen3思考模式）
-        prompt = f"""<|im_start|>system
-{SYSTEM_PROMPT_HARDCODED}<|im_end|>
-<|im_start|>user
-{user_message}<|im_end|>
-<|im_start|>assistant
-<think>
-
-</think>
-
 """
 
         # 最大重试次数
