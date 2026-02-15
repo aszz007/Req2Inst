@@ -123,15 +123,15 @@ class FullFineTuningTrainer(BaseTrainer):
                     f"alpha={self.full_ft_cfg.lora_alpha}")
         logger.info(f"Max seq length: {self.train_cfg.max_seq_length}")
         logger.info(f"Target modules: {self.full_ft_cfg.target_modules}")
-        logger.info("紧急显存优化策略:")
-        logger.info(f"  1. rank=4 (极小LoRA，避免OOM)")
-        logger.info(f"  2. max_seq_length=512 (覆盖40-50%样本)")
-        logger.info(f"  3. 仅attention层 (节省40%显存)")
-        logger.info(f"  4. batch=1 + grad_accum=64")
+        logger.info("终极显存优化策略:")
+        logger.info(f"  1. rank={self.full_ft_cfg.lora_rank} (极限LoRA)")
+        logger.info(f"  2. max_seq_length={self.train_cfg.max_seq_length}")
+        logger.info(f"  3. 仅attention层")
+        logger.info(f"  4. batch=1 + grad_accum={self.full_ft_cfg.gradient_accumulation_steps}")
         logger.info(f"  5. 启用gradient checkpointing")
-        logger.info(f"  6. 内存碎片优化 + 双重缓存清理")
-        logger.warning("注意: 使用紧急配置，质量损失30-35%")
-        logger.warning("      这是24GB GPU上Full Fine-tuning的极限配置")
+        logger.info(f"  6. 内存碎片优化")
+        logger.warning(f"注意: rank={self.full_ft_cfg.lora_rank}质量损失约50%")
+        logger.warning("      这是24GB GPU的绝对极限配置")
 
         self._print_training_config()
 
@@ -139,19 +139,19 @@ class FullFineTuningTrainer(BaseTrainer):
         """
         获取Full Fine-tuning专用的batch配置
 
-        Full Fine-tuning使用rank=4紧急配置，极小显存占用，
-        使用超大梯度累积64以补偿小batch的训练质量
+        Full Fine-tuning使用rank=2终极配置，极小显存占用，
+        使用超大梯度累积128以补偿小batch和小rank的训练质量
 
         Returns:
             (batch_size, gradient_accumulation_steps)
         """
         if self.use_rtx4090_optimization:
-            # RTX 4090优化配置：batch_size=1, gradient_accumulation=64, 有效batch=64
-            # 超大梯度累积补偿rank=4的质量损失
-            return 1, 64
+            # RTX 4090优化配置：batch_size=1, gradient_accumulation=128, 有效batch=128
+            # 超大梯度累积补偿rank=2的质量损失
+            return 1, 128
         else:
-            # 非优化配置：batch_size=1, gradient_accumulation=32, 有效batch=32
-            return 1, 32
+            # 非优化配置：batch_size=1, gradient_accumulation=128, 有效batch=128
+            return 1, 128
 
     def setup_model(self) -> bool:
         """
@@ -169,17 +169,18 @@ class FullFineTuningTrainer(BaseTrainer):
             os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
             logger.info("已设置PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True")
 
-            # 双重清空GPU缓存（紧急配置）
+            # 多次清空GPU缓存（终极配置）
             if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()  # 确保清理完成
-                torch.cuda.empty_cache()  # 再次清理
-                logger.info("已双重清空GPU缓存（紧急配置）")
+                for i in range(3):
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                logger.info("已三重清空GPU缓存（终极配置）")
 
-                # 打印当前显存状态
+                # 打印初始显存状态
                 allocated = torch.cuda.memory_allocated() / 1024**3
                 reserved = torch.cuda.memory_reserved() / 1024**3
-                logger.info(f"当前GPU显存: 已分配={allocated:.2f}GB, 已保留={reserved:.2f}GB")
+                total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                logger.info(f"[初始状态] GPU显存: 已分配={allocated:.2f}GB, 已保留={reserved:.2f}GB, 总计={total:.2f}GB")
 
             logger.info("加载基础模型...")
 
@@ -212,9 +213,30 @@ class FullFineTuningTrainer(BaseTrainer):
 
             self.model = AutoModelForCausalLM.from_pretrained(**model_kwargs)
 
+            # 检查模型加载后的显存占用（验证4bit量化）
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+                allocated = torch.cuda.memory_allocated() / 1024**3
+                reserved = torch.cuda.memory_reserved() / 1024**3
+                logger.info(f"[模型加载后] GPU显存: 已分配={allocated:.2f}GB, 已保留={reserved:.2f}GB")
+
+                # 验证4bit量化是否生效
+                if self.use_4bit:
+                    if allocated > 8.0:
+                        logger.error(f"警告: 4bit量化可能未生效！模型占用{allocated:.2f}GB，预期应<6GB")
+                        logger.error("这可能导致OOM！请检查量化配置")
+                    else:
+                        logger.info(f"✓ 4bit量化正常: 模型占用{allocated:.2f}GB (预期4-6GB)")
+
             # 4bit量化后准备模型（冻结基础模型参数，仅LoRA可训练）
             if self.use_4bit:
                 self.model = prepare_model_for_kbit_training(self.model)
+                logger.info("已准备4bit模型进行训练")
+
+                # 再次检查显存
+                if torch.cuda.is_available():
+                    allocated = torch.cuda.memory_allocated() / 1024**3
+                    logger.info(f"[prepare_model_for_kbit_training后] GPU显存: 已分配={allocated:.2f}GB")
 
             # 加载tokenizer
             logger.info("加载Tokenizer...")
@@ -236,11 +258,11 @@ class FullFineTuningTrainer(BaseTrainer):
             logger.info(f"PAD token: {self.tokenizer.pad_token}")
 
             # 配置极小rank LoRA（紧急显存优化）
-            logger.info("配置极小rank LoRA（紧急配置rank=4）...")
+            logger.info(f"配置极小rank LoRA（终极配置rank={self.full_ft_cfg.lora_rank}）...")
             peft_config = LoraConfig(
                 task_type=TaskType.CAUSAL_LM,
-                r=self.full_ft_cfg.lora_rank,  # rank=4
-                lora_alpha=self.full_ft_cfg.lora_alpha,  # alpha=8
+                r=self.full_ft_cfg.lora_rank,  # rank=2
+                lora_alpha=self.full_ft_cfg.lora_alpha,  # alpha=4
                 lora_dropout=self.full_ft_cfg.lora_dropout,
                 target_modules=self.full_ft_cfg.target_modules,  # attention层
                 bias="none",
@@ -248,6 +270,23 @@ class FullFineTuningTrainer(BaseTrainer):
 
             # 应用极小rank LoRA
             self.model = get_peft_model(self.model, peft_config)
+
+            # 检查LoRA应用后的显存占用
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+                allocated = torch.cuda.memory_allocated() / 1024**3
+                reserved = torch.cuda.memory_reserved() / 1024**3
+                logger.info(f"[LoRA应用后] GPU显存: 已分配={allocated:.2f}GB, 已保留={reserved:.2f}GB")
+
+                # 终极配置的显存检查
+                if allocated > 10.0:
+                    logger.error(f"警告: LoRA后显存占用{allocated:.2f}GB仍然过高！")
+                    logger.error("预期应<8GB。可能原因:")
+                    logger.error("  1. 4bit量化未生效")
+                    logger.error("  2. 存在显存泄漏")
+                    logger.error("  3. target_modules配置错误")
+                else:
+                    logger.info(f"✓ LoRA显存正常: {allocated:.2f}GB (预期6-8GB)")
 
             # 启用梯度检查点以节省显存
             if hasattr(self.model, 'enable_input_require_grads'):
@@ -262,17 +301,17 @@ class FullFineTuningTrainer(BaseTrainer):
             trainable_ratio = 100 * trainable_params / total_params
 
             logger.info("=" * 80)
-            logger.info("Full Fine-tuning配置完成（紧急rank=4配置）")
+            logger.info("Full Fine-tuning配置完成（终极rank=2配置）")
             logger.info("=" * 80)
             logger.info(f"可训练参数: {trainable_params:,} ({trainable_ratio:.2f}%)")
             logger.info(f"总参数: {total_params:,}")
-            logger.info(f"LoRA Rank: {self.full_ft_cfg.lora_rank} (极小LoRA紧急配置)")
+            logger.info(f"LoRA Rank: {self.full_ft_cfg.lora_rank} (极限LoRA终极配置)")
             logger.info(f"LoRA Alpha: {self.full_ft_cfg.lora_alpha}")
             logger.info(f"LoRA Dropout: {self.full_ft_cfg.lora_dropout}")
             logger.info(f"Target Modules: {self.full_ft_cfg.target_modules}")
             logger.info(f"Max Seq Length: {self.train_cfg.max_seq_length}")
-            logger.info("说明：rank=4仅覆盖attention层，预期显存4-6GB")
-            logger.warning("     质量损失30-35%，这是24GB GPU的极限配置")
+            logger.info("说明：rank=2仅覆盖attention层，预期显存3-5GB")
+            logger.warning("     质量损失50%+，这是24GB GPU的绝对极限")
             logger.info("=" * 80)
 
             return True

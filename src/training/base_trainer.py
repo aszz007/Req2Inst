@@ -358,11 +358,33 @@ class BaseTrainer(ABC):
             return False
 
         try:
-            # 训练前清空GPU缓存（对UML和General专家尤其重要）
+            # 训练前强制清空GPU缓存
             if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                if self.expert_type in ['uml', 'general']:
-                    logger.info(f"{self.expert_type}专家训练前已清空GPU缓存，最大化可用显存")
+                # Full Fine-tuning需要更激进的显存清理
+                if self.method_name == 'full_finetuning':
+                    for i in range(3):
+                        torch.cuda.empty_cache()
+                        torch.cuda.synchronize()
+                    logger.info("Full Fine-tuning: 已三重清空GPU缓存")
+                else:
+                    torch.cuda.empty_cache()
+                    if self.expert_type in ['uml', 'general']:
+                        logger.info(f"{self.expert_type}专家训练前已清空GPU缓存，最大化可用显存")
+
+                # 打印训练前显存状态
+                allocated = torch.cuda.memory_allocated() / 1024**3
+                reserved = torch.cuda.memory_reserved() / 1024**3
+                total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                free = total - allocated
+                logger.info(f"[训练前] GPU显存: 已用={allocated:.2f}GB, 可用≈{free:.2f}GB, 总计={total:.2f}GB")
+
+                # Full Fine-tuning的显存预警
+                if self.method_name == 'full_finetuning' and allocated > 10.0:
+                    logger.error(f"警告: 训练前显存已占用{allocated:.2f}GB，可能导致OOM！")
+                    logger.error("建议:")
+                    logger.error("  1. 检查是否有其他进程占用GPU (nvidia-smi)")
+                    logger.error("  2. 重启Python进程清理显存")
+                    logger.error("  3. 关闭不必要的程序")
 
             # 创建输出目录
             self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -425,9 +447,13 @@ class BaseTrainer(ABC):
 
             # RTX 4090优化配置
             if self.use_rtx4090_optimization:
-                # 检查是否需要减少workers（如P-Tuning v2）
-                # UML和General专家使用更激进的worker配置
-                if self.expert_type in ['uml', 'general'] and getattr(self, 'reduced_workers', False):
+                # 检查是否需要减少workers（如P-Tuning v2或Full Fine-tuning）
+                # Full Fine-tuning使用最小worker配置
+                if self.method_name == 'full_finetuning':
+                    num_workers = 2
+                    prefetch_factor = 1
+                    logger.info(f"Full Fine-tuning使用最小dataloader配置: workers=2, prefetch=1")
+                elif self.expert_type in ['uml', 'general'] and getattr(self, 'reduced_workers', False):
                     num_workers = 2
                     prefetch_factor = 1
                     logger.info(f"{self.expert_type}专家使用最小dataloader配置: workers=2, prefetch=1")
@@ -446,7 +472,7 @@ class BaseTrainer(ABC):
                     'dataloader_prefetch_factor': prefetch_factor,
                 })
 
-                if getattr(self, 'reduced_workers', False):
+                if getattr(self, 'reduced_workers', False) or self.method_name == 'full_finetuning':
                     logger.info(f"使用减少的dataloader workers: {num_workers} (显存优化)")
             else:
                 training_args_dict['fp16'] = torch.cuda.is_available()

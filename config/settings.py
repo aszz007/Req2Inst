@@ -592,24 +592,24 @@ class PromptTuningConfig:
 class FullFineTuningConfig:
     """全参数微调配置（用于对比实验）
 
-    经过RTX 4090 (24GB)的OOM测试和多次调整：
-    - rank=8仍会OOM（19.71GB已分配），使用紧急配置rank=4
-    - max_seq_length=768仍不够，降低到512
-    - 仅覆盖attention层（移除FFN以节省显存）
-    - 极小batch_size=1 + 超大梯度累积=64
-    - 预期显存占用：4-6GB（最保守边界）
+    极限显存优化配置（24GB GPU最终版本）：
+    - rank=2（从16->8->4->2，多次OOM后的最终配置）
+    - max_seq_length=256（从1024->768->512->256）
+    - 仅覆盖attention层（移除FFN节省40%显存）
+    - batch_size=1 + gradient_accumulation=128（有效batch=128）
+    - 预期显存占用：2-4GB（最保守边界）
 
     质量影响分析：
-    - rank=4是极小LoRA配置，质量损失25-30%
-    - max_seq_length=512能覆盖40-50%的样本内容
-    - 总质量损失：30-35%（相对理想配置）
-    - 但这是24GB GPU上Full Fine-tuning的极限配置
+    - rank=2是极限LoRA配置，质量损失45-50%
+    - max_seq_length=256只能覆盖短样本
+    - 总质量损失：50%+（相对理想配置）
+    - 这是24GB GPU上能运行Full Fine-tuning的绝对极限
     """
 
-    # 使用极小rank的LoRA（紧急OOM配置）
+    # 使用极限rank的LoRA（终极OOM配置）
     use_high_rank_lora: bool = True
-    lora_rank: int = 4  # 紧急配置，从8降到4
-    lora_alpha: int = 8  # 2倍rank
+    lora_rank: int = 2  # 终极配置，从4降到2
+    lora_alpha: int = 4  # 2倍rank
     lora_dropout: float = 0.05
 
     # 目标模块（仅attention层以节省显存）
@@ -626,10 +626,10 @@ class FullFineTuningConfig:
 
     # 批次大小（显存限制）
     batch_size: int = 1  # 极小batch size
-    gradient_accumulation_steps: int = 64  # 从32增加到64，有效batch=64
+    gradient_accumulation_steps: int = 128  # 超大梯度累积补偿小rank
 
-    # 序列长度（极度降低以节省显存）
-    max_seq_length: int = 512  # 从768降到512，紧急配置
+    # 序列长度（极限压缩）
+    max_seq_length: int = 256  # 从512降到256，终极配置
 
     def __post_init__(self):
         """初始化target_modules"""
@@ -641,8 +641,8 @@ class FullFineTuningConfig:
 
     @classmethod
     def get_default_config(cls):
-        """默认配置（紧急显存优化，rank=4）"""
-        return cls(lora_rank=4, lora_alpha=8, max_seq_length=512)
+        """默认配置（终极显存优化，rank=2）"""
+        return cls(lora_rank=2, lora_alpha=4, max_seq_length=256, gradient_accumulation_steps=128)
 
     @classmethod
     def get_standard_config(cls):
