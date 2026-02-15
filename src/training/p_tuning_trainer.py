@@ -58,7 +58,7 @@ class PTuningTrainer(BaseTrainer):
                  output_dir: Optional[str] = None,
                  use_4bit: bool = True,
                  use_rtx4090_optimization: bool = True,
-                 debug_samples: bool = True):
+                 debug_samples: bool = False):
         """
         初始化P-Tuning v2训练器
 
@@ -68,7 +68,7 @@ class PTuningTrainer(BaseTrainer):
             output_dir: 输出目录（None则使用checkpoints/p_tuning/{expert_type}_expert/）
             use_4bit: 是否使用4bit量化训练
             use_rtx4090_optimization: 是否启用RTX 4090优化
-            debug_samples: 是否在训练开始前打印前3个训练样本（默认开启）
+            debug_samples: 是否在训练开始前打印前3个训练样本（默认关闭）
         """
         super().__init__(
             expert_type=expert_type,
@@ -84,6 +84,9 @@ class PTuningTrainer(BaseTrainer):
 
         # P-Tuning v2不支持gradient checkpointing
         self.disable_gradient_checkpointing = True
+
+        # P-Tuning v2不支持load_best_model_at_end（会导致embedding shape mismatch）
+        self.disable_load_best_model = True
 
         # 更激进的序列长度策略（质量损失最小化）
         # UML数据虽长但JSON结构高度重复，1024能覆盖核心逻辑

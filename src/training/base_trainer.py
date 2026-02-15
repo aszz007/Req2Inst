@@ -127,7 +127,7 @@ class BaseTrainer(ABC):
                  base_model_path: Optional[str] = None,
                  output_dir: Optional[str] = None,
                  use_rtx4090_optimization: bool = True,
-                 debug_samples: bool = True):
+                 debug_samples: bool = False):
         """
         初始化基础训练器
 
@@ -137,7 +137,7 @@ class BaseTrainer(ABC):
             base_model_path: 基础模型路径（None则从配置获取）
             output_dir: 输出目录（None则从配置获取）
             use_rtx4090_optimization: 是否启用RTX 4090优化
-            debug_samples: 是否在训练开始前打印前3个训练样本（默认开启）
+            debug_samples: 是否在训练开始前打印前3个训练样本（默认关闭）
         """
         valid_types = ['text', 'image', 'uml', 'general']
         if expert_type not in valid_types:
@@ -426,12 +426,18 @@ class BaseTrainer(ABC):
                 'eval_steps': eval_steps,
                 'save_steps': eval_steps,
                 'save_total_limit': 3,
-                'load_best_model_at_end': True,
                 'metric_for_best_model': 'eval_loss',
                 'greater_is_better': False,
                 'report_to': 'none',
                 'remove_unused_columns': False,
             }
+
+            # load_best_model_at_end（某些方法如P-Tuning v2和Prompt Tuning不支持）
+            if not getattr(self, 'disable_load_best_model', False):
+                training_args_dict['load_best_model_at_end'] = True
+            else:
+                training_args_dict['load_best_model_at_end'] = False
+                logger.info("load_best_model_at_end已禁用（当前训练方法不支持）")
 
             # Gradient checkpointing（某些方法如P-Tuning v2不支持）
             if not getattr(self, 'disable_gradient_checkpointing', False):
