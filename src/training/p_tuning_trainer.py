@@ -82,6 +82,30 @@ class PTuningTrainer(BaseTrainer):
         self.use_4bit = use_4bit
         self.ptuning_cfg = get_ptuning_config()
 
+        # ===== NaN防护配置 =====
+        # P-Tuning v2容易产生NaN验证损失，需要更保守的配置
+
+        # 1. 降低学习率（从0.0002降到0.00008，降低60%）
+        #    原因：P-Tuning只训练~500万参数，对学习率极其敏感
+        original_lr = self.train_cfg.learning_rate
+        self.train_cfg.learning_rate = 8e-5
+        logger.warning("=" * 80)
+        logger.warning("P-Tuning v2 NaN防护配置已启用")
+        logger.warning("=" * 80)
+        logger.warning(f"学习率调整: {original_lr} → {self.train_cfg.learning_rate} (降低60%)")
+        logger.warning("原因: P-Tuning v2参数少，学习率过大会导致NaN验证损失")
+
+        # 2. 检查encoder_hidden_size（如果太小会警告）
+        if self.ptuning_cfg.encoder_hidden_size < 128:
+            logger.warning(f"Encoder Hidden Size={self.ptuning_cfg.encoder_hidden_size}偏小")
+            logger.warning("如果训练中出现NaN，建议在config中增加到128或256")
+
+        logger.warning("其他NaN防护措施:")
+        logger.warning("  - 严格梯度裁剪: max_grad_norm=0.5 (已在base_trainer中启用)")
+        logger.warning("  - NaN-aware早停: 忽略NaN值，只基于有效loss判断")
+        logger.warning("  - 增加warmup: 让模型有更多步骤稳定下来")
+        logger.warning("=" * 80)
+
         # P-Tuning v2不支持gradient checkpointing
         self.disable_gradient_checkpointing = True
 

@@ -24,8 +24,7 @@ from transformers import (
     AutoTokenizer,
     TrainingArguments,
     Trainer,
-    TrainerCallback,
-    EarlyStoppingCallback
+    TrainerCallback
 )
 
 from config.settings import (
@@ -63,6 +62,70 @@ def _should_use_eval_strategy():
         return (major > 4) or (major == 4 and minor >= 46)
     except:
         return False
+
+
+class NaNAwareEarlyStoppingCallback(TrainerCallback):
+    """
+    NaN-aware早停回调
+
+    标准的EarlyStoppingCallback在遇到NaN时可能错误触发早停。
+    此回调忽略NaN值，只基于有效的eval_loss值判断是否早停。
+    """
+
+    def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: float = 0.0):
+        self.early_stopping_patience = early_stopping_patience
+        self.early_stopping_threshold = early_stopping_threshold
+        self.best_metric = None
+        self.patience_counter = 0
+        self.nan_count = 0
+
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        """在每次验证后调用"""
+        if metrics is None:
+            return
+
+        eval_loss = metrics.get('eval_loss')
+
+        # 检查NaN
+        if eval_loss is None or (isinstance(eval_loss, float) and math.isnan(eval_loss)):
+            self.nan_count += 1
+            logger.warning(f"检测到NaN验证损失（第{self.nan_count}次）- 跳过本次早停检查")
+            logger.warning("NaN可能原因: 1) 模型训练不稳定 2) 学习率过大 3) P-Tuning配置问题")
+            # 不更新patience计数器，跳过本次早停检查
+            return control
+
+        # 有效的eval_loss
+        metric = eval_loss
+
+        # 初始化best_metric
+        if self.best_metric is None:
+            self.best_metric = metric
+            logger.info(f"初始化最佳验证损失: {metric:.4f}")
+            return control
+
+        # 检查是否改进
+        if metric < (self.best_metric - self.early_stopping_threshold):
+            # 有改进
+            self.best_metric = metric
+            self.patience_counter = 0
+            logger.info(f"验证损失改进: {metric:.4f} (最佳: {self.best_metric:.4f})")
+        else:
+            # 无改进
+            self.patience_counter += 1
+            logger.info(f"验证损失无改进: {metric:.4f} vs 最佳{self.best_metric:.4f} "
+                       f"(patience: {self.patience_counter}/{self.early_stopping_patience})")
+
+            if self.patience_counter >= self.early_stopping_patience:
+                logger.info("=" * 80)
+                logger.info(f"早停触发: 连续{self.early_stopping_patience}次验证无改进")
+                logger.info(f"最佳验证损失: {self.best_metric:.4f}")
+                logger.info(f"当前验证损失: {metric:.4f}")
+                if self.nan_count > 0:
+                    logger.info(f"训练期间遇到{self.nan_count}次NaN验证损失（已忽略）")
+                logger.info("=" * 80)
+                control.should_training_stop = True
+
+        return control
 
 
 class TrainingHistoryCallback(TrainerCallback):
@@ -402,7 +465,15 @@ class BaseTrainer(ABC):
             num_train_samples = len(self.train_dataset)
             steps_per_epoch = num_train_samples // (batch_size * gradient_accumulation_steps)
             total_steps = steps_per_epoch * self.train_cfg.num_epochs
-            warmup_steps = int(total_steps * 0.1)
+
+            # P-Tuning v2和Prompt Tuning需要更长的warmup以防止早期NaN
+            if self.method_name in ['p_tuning', 'prompt_tuning']:
+                warmup_ratio = 0.15  # 增加到15%（标准是10%）
+                logger.info(f"{self.method_name}使用增加的warmup比例: {warmup_ratio} (防止早期NaN)")
+            else:
+                warmup_ratio = 0.1
+
+            warmup_steps = int(total_steps * warmup_ratio)
 
             logger.info(f"训练步数配置:")
             logger.info(f"  每epoch步数: {steps_per_epoch}")
@@ -420,7 +491,7 @@ class BaseTrainer(ABC):
                 'gradient_accumulation_steps': gradient_accumulation_steps,
                 'learning_rate': self.train_cfg.learning_rate,
                 'weight_decay': 0.01,
-                'max_grad_norm': 1.0,
+                'max_grad_norm': 1.0,  # 标准设置
                 'lr_scheduler_type': 'cosine',
                 'warmup_steps': warmup_steps,
                 'logging_steps': 10,
@@ -432,6 +503,11 @@ class BaseTrainer(ABC):
                 'report_to': 'none',
                 'remove_unused_columns': False,
             }
+
+            # P-Tuning v2和Prompt Tuning需要更严格的梯度裁剪以防止NaN
+            if self.method_name in ['p_tuning', 'prompt_tuning']:
+                training_args_dict['max_grad_norm'] = 0.5  # 更严格的裁剪
+                logger.warning(f"{self.method_name}使用严格梯度裁剪(0.5)以防止NaN验证损失")
 
             # load_best_model_at_end（某些方法如P-Tuning v2和Prompt Tuning不支持）
             if not getattr(self, 'disable_load_best_model', False):
@@ -511,8 +587,8 @@ class BaseTrainer(ABC):
                 logger.info("[调试输出结束] 请检查上述样本的prompt是否包含完整JSON结构")
                 logger.info("=" * 80)
 
-            # 创建Trainer
-            early_stopping_callback = EarlyStoppingCallback(
+            # 创建Trainer（使用NaN-aware早停callback）
+            early_stopping_callback = NaNAwareEarlyStoppingCallback(
                 early_stopping_patience=early_stopping_patience,
                 early_stopping_threshold=0.0001
             )
@@ -537,6 +613,18 @@ class BaseTrainer(ABC):
             # 保存训练指标
             metrics = train_result.metrics
             logger.info(f"训练完成！最终损失: {metrics.get('train_loss', 'N/A')}")
+
+            # 报告NaN统计（如果有）
+            if early_stopping_callback.nan_count > 0:
+                logger.warning("=" * 80)
+                logger.warning(f"训练期间检测到{early_stopping_callback.nan_count}次NaN验证损失")
+                logger.warning("NaN验证损失可能表明:")
+                logger.warning("  1. 学习率过大导致训练不稳定")
+                logger.warning("  2. P-Tuning v2的配置需要调整（如encoder_hidden_size）")
+                logger.warning("  3. 数据集中存在异常样本")
+                logger.warning("  4. Virtual tokens初始化不当")
+                logger.warning("建议: 检查training_history.json中的eval_loss值")
+                logger.warning("=" * 80)
 
             # 保存训练指标到文件
             metrics_file = self.output_dir / "training_metrics.json"
@@ -689,8 +777,31 @@ class BaseTrainer(ABC):
                     learning_rates.append(lr_val)
 
         # 数据质量检查和警告
+        total_entries = len(training_history)
+        nan_eval_count = sum(1 for e in training_history if 'eval_loss' in e and
+                            (e['eval_loss'] is None or (isinstance(e['eval_loss'], float) and math.isnan(e['eval_loss']))))
+
+        if total_entries < 10:
+            logger.warning(f"训练历史记录很少（{total_entries}条），可能因早停提前结束")
+
+        if len(losses) < 3:
+            logger.warning(f"训练损失数据点很少（{len(losses)}个）")
         if len(eval_losses) == 0:
-            logger.warning("没有验证损失数据")
+            if nan_eval_count > 0:
+                logger.warning(f"所有{nan_eval_count}个验证损失都是NaN（已过滤），无法绘制验证曲线")
+                logger.warning("这表明训练过程不稳定，建议检查:")
+                logger.warning("  1. 降低学习率")
+                logger.warning("  2. 调整P-Tuning/Prompt Tuning配置")
+                logger.warning("  3. 检查数据集质量")
+            else:
+                logger.warning("没有验证损失数据")
+        elif len(eval_losses) < 3:
+            if nan_eval_count > 0:
+                logger.warning(f"验证损失数据点很少（{len(eval_losses)}个有效值，{nan_eval_count}个NaN已过滤）")
+            else:
+                logger.warning(f"验证损失数据点很少（{len(eval_losses)}个）")
+        elif nan_eval_count > 0:
+            logger.info(f"过滤了{nan_eval_count}个NaN验证损失，保留{len(eval_losses)}个有效值")
 
         logger.info(f"曲线数据统计: Loss={len(losses)}点, EvalLoss={len(eval_losses)}点, GradNorm={len(grad_norms)}点, LR={len(learning_rates)}点")
 

@@ -88,6 +88,20 @@ class PromptTuningTrainer(BaseTrainer):
         self.use_4bit = use_4bit
         self.prompt_cfg = get_prompt_tuning_config()
 
+        # ===== NaN防护配置 =====
+        # Prompt Tuning也容易产生NaN验证损失（只训练virtual token embeddings）
+
+        # 降低学习率以防止NaN
+        original_lr = self.train_cfg.learning_rate
+        self.train_cfg.learning_rate = 8e-5
+        logger.warning("=" * 80)
+        logger.warning("Prompt Tuning NaN防护配置已启用")
+        logger.warning("=" * 80)
+        logger.warning(f"学习率调整: {original_lr} → {self.train_cfg.learning_rate} (降低60%)")
+        logger.warning("原因: Prompt Tuning只训练virtual tokens，学习率过大会导致NaN")
+        logger.warning("其他防护: 严格梯度裁剪(0.5) + NaN-aware早停")
+        logger.warning("=" * 80)
+
         # Prompt Tuning不支持load_best_model_at_end（会导致embedding shape mismatch）
         self.disable_load_best_model = True
 

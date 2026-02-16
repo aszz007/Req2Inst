@@ -116,15 +116,30 @@ def plot_training_curves(training_history, expert_type, method_name, output_path
 
     # 数据质量检查和警告
     total_entries = len(training_history)
+    nan_eval_count = sum(1 for e in training_history if 'eval_loss' in e and
+                        (e['eval_loss'] is None or (isinstance(e['eval_loss'], float) and math.isnan(e['eval_loss']))))
+
     if total_entries < 10:
-        logger.warning(f"训练历史记录很少（{total_entries}条），可能导致曲线不完整")
+        logger.warning(f"训练历史记录很少（{total_entries}条），可能因早停提前结束")
 
     if len(losses) < 3:
         logger.warning(f"训练损失数据点很少（{len(losses)}个）")
     if len(eval_losses) == 0:
-        logger.warning("没有验证损失数据")
+        if nan_eval_count > 0:
+            logger.warning(f"所有{nan_eval_count}个验证损失都是NaN（已过滤），无法绘制验证曲线")
+            logger.warning("这表明训练过程不稳定，建议:")
+            logger.warning("  1. 降低学习率（当前可能过大）")
+            logger.warning("  2. 调整参数高效微调配置")
+            logger.warning("  3. 检查数据集质量和预处理")
+        else:
+            logger.warning("没有验证损失数据")
     elif len(eval_losses) < 3:
-        logger.warning(f"验证损失数据点很少（{len(eval_losses)}个）")
+        if nan_eval_count > 0:
+            logger.warning(f"验证损失数据点很少（{len(eval_losses)}个有效，{nan_eval_count}个NaN已过滤）")
+        else:
+            logger.warning(f"验证损失数据点很少（{len(eval_losses)}个）")
+    elif nan_eval_count > 0:
+        logger.info(f"过滤了{nan_eval_count}个NaN验证损失，保留{len(eval_losses)}个有效值")
 
     # 创建图表
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
