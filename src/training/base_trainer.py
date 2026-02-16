@@ -426,15 +426,21 @@ class BaseTrainer(ABC):
 
     def _get_eval_steps(self) -> int:
         """
-        根据专家类型确定验证步数
+        根据专家类型和数据量确定验证步数，确保至少验证5-7次
 
         Returns:
             int: eval_steps
         """
-        if self.expert_type == 'uml':
-            return 30
+        if self.expert_type == 'text':
+            return 8
+        elif self.expert_type == 'image':
+            return 4
+        elif self.expert_type == 'uml':
+            return 5
+        elif self.expert_type == 'general':
+            return 15
         else:
-            return 50
+            return 10
 
     def train(self) -> bool:
         """
@@ -523,7 +529,7 @@ class BaseTrainer(ABC):
                 'weight_decay': 0.01,
                 'lr_scheduler_type': 'cosine',
                 'warmup_steps': warmup_steps,
-                'logging_steps': 10,
+                'logging_steps': 5 if self.expert_type in ['text', 'general'] else 3,
                 'eval_steps': eval_steps,
                 'save_steps': eval_steps,
                 'save_total_limit': 3,

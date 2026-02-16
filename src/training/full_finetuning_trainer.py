@@ -143,18 +143,30 @@ class FullFineTuningTrainer(BaseTrainer):
         """
         获取Full Fine-tuning专用的batch配置
 
-        Full Fine-tuning使用rank=2终极配置，极小显存占用，
-        使用超大梯度累积128以补偿小batch和小rank的训练质量
+        根据实际显存使用情况优化：
+        - General (16GB使用): batch=2, grad_accum=64
+        - Text (类似General): batch=2, grad_accum=64
+        - UML (中等长度): batch=2, grad_accum=64
+        - Image (13GB使用，数据最短): batch=4, grad_accum=32
+
+        保持有效batch=128以保证训练稳定性
 
         Returns:
             (batch_size, gradient_accumulation_steps)
         """
         if self.use_rtx4090_optimization:
-            # RTX 4090优化配置：batch_size=1, gradient_accumulation=128, 有效batch=128
-            # 超大梯度累积补偿rank=2的质量损失
-            return 1, 128
+            # 根据专家类型优化batch配置
+            if self.expert_type == 'image':
+                # Image数据最短（~500 tokens），显存占用最少，可用更大batch
+                return 4, 32
+            elif self.expert_type in ['text', 'uml', 'general']:
+                # Text/UML/General使用中等batch配置
+                return 2, 64
+            else:
+                # 默认保守配置
+                return 1, 128
         else:
-            # 非优化配置：batch_size=1, gradient_accumulation=128, 有效batch=128
+            # 非优化配置：使用保守设置
             return 1, 128
 
     def setup_model(self) -> bool:

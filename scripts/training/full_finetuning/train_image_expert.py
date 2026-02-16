@@ -11,10 +11,10 @@ Full Fine-tuning Image Expert训练脚本（保守高质量策略）
   - LoRA Rank: 16（高质量，损失5-10%）
   - LoRA Alpha: 32（标准配置）
   - Max Seq Length: 2048（Image数据集最长~500 tokens，100%覆盖）
-  - Batch Size: 1（保守配置）
-  - Gradient Accumulation: 16（有效batch=16）
+  - Batch Size: 4（优化配置，数据最短）
+  - Gradient Accumulation: 32（有效batch=128）
   - 4bit量化 + Gradient Checkpointing
-  - 预期显存：15-18GB（安全边界）
+  - 预期显存：13-15GB
 
 样本覆盖率：
   - Image短样本（~300 tokens）：100%完整
@@ -78,11 +78,11 @@ def main():
     print(f"  - LoRA Rank: 16 (高质量)")
     print(f"  - LoRA Alpha: 32")
     print(f"  - Max Seq Length: 2048 (Image数据集100%覆盖)")
-    print(f"  - Batch Size: 1")
-    print(f"  - Gradient Accumulation: 16")
+    print(f"  - Batch Size: 4")
+    print(f"  - Gradient Accumulation: 32 (有效batch=128)")
     print(f"  - 4bit量化: {args.use_4bit}")
     print("说明：Image数据集最长~500 tokens，可完整覆盖")
-    print("预期：显存15-18GB，质量损失5-10%")
+    print("预期：显存13-15GB，质量损失5-10%")
     print("=" * 80)
     print()
 
@@ -122,7 +122,7 @@ def main():
     print("训练总结：")
     print("  - 样本覆盖率：Image 100%完整")
     print("  - 训练质量：损失5-10%（非常好）")
-    print("  - 稳定性：batch=1最保守配置")
+    print("  - 配置：batch=4, 有效batch=128（优化）")
     print()
 
     return 0
