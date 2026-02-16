@@ -555,47 +555,78 @@ class GPTAutomator:
 
     def parse_image_instruction(self, response_text):
         """
-        解析单条图像标注指令（新版，参考UML的稳定逻辑）
-        返回标准三段式指令文本
+        解析单条图像标注指令（新版，支持标注后换行和bullet points格式）
+        返回标准三段式指令文本，每个标注和内容在同一行，多行内容用分号分隔
         """
         response_text = response_text.strip()
 
-        # 方法1：直接提取三段式内容
-        if 'Definition:' in response_text and 'Emphasis & Caution:' in response_text and 'Things to Avoid:' in response_text:
-            # 找到三个关键标记的位置
-            def_pos = response_text.find('Definition:')
-            emp_pos = response_text.find('Emphasis & Caution:')
-            avoid_pos = response_text.find('Things to Avoid:')
+        # 检查是否包含三个必要的标注
+        if 'Definition:' not in response_text or 'Emphasis & Caution:' not in response_text or 'Things to Avoid:' not in response_text:
+            print(f"  ⚠ 缺少必要的标注")
+            return None
 
-            # 确保顺序正确
-            if def_pos < emp_pos < avoid_pos:
-                # 提取每个部分
-                definition = response_text[def_pos:emp_pos].strip()
-                emphasis = response_text[emp_pos:avoid_pos].strip()
-                avoid = response_text[avoid_pos:].strip()
+        # 找到三个关键标记的位置
+        def_pos = response_text.find('Definition:')
+        emp_pos = response_text.find('Emphasis & Caution:')
+        avoid_pos = response_text.find('Things to Avoid:')
 
-                # 移除末尾的多余内容（如果有）
-                avoid_lines = avoid.split('\n')
-                if len(avoid_lines) > 1:
-                    # 只保留第一行
-                    avoid = avoid_lines[0].strip()
+        # 确保顺序正确
+        if not (def_pos < emp_pos < avoid_pos):
+            print(f"  ⚠ 标注顺序不正确")
+            return None
 
-                instruction = f"{definition}\n{emphasis}\n{avoid}"
-                return instruction
+        # 提取每个部分的原始文本
+        def_text = response_text[def_pos + len('Definition:'):emp_pos].strip()
+        emp_text = response_text[emp_pos + len('Emphasis & Caution:'):avoid_pos].strip()
+        avoid_text = response_text[avoid_pos + len('Things to Avoid:'):].strip()
 
-        # 方法2：使用正则表达式提取
-        pattern = r'Definition:\s*(.*?)\s*Emphasis & Caution:\s*(.*?)\s*Things to Avoid:\s*(.*?)(?:\n|$)'
-        match = re.search(pattern, response_text, re.DOTALL)
-        if match:
-            definition = f"Definition: {match.group(1).strip()}"
-            emphasis = f"Emphasis & Caution: {match.group(2).strip()}"
-            avoid = f"Things to Avoid: {match.group(3).strip()}"
-            instruction = f"{definition}\n{emphasis}\n{avoid}"
-            return instruction
+        # 清理和合并每个部分的内容
+        def_content = self._clean_and_merge_content(def_text)
+        emp_content = self._clean_and_merge_content(emp_text)
+        avoid_content = self._clean_and_merge_content(avoid_text)
 
-        # 如果无法解析，返回None
-        print(f"  ⚠ 无法解析指令格式")
-        return None
+        # 组合成最终格式
+        instruction = f"Definition: {def_content}\nEmphasis & Caution: {emp_content}\nThings to Avoid: {avoid_content}"
+        return instruction
+
+    def _clean_and_merge_content(self, text):
+        """
+        清理和合并内容：
+        1. 移除换行符
+        2. 处理bullet points，用分号分隔
+        3. 清理多余空格
+        """
+        if not text:
+            return ""
+
+        # 按行分割
+        lines = text.split('\n')
+        cleaned_lines = []
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            # 移除bullet points标记
+            line = re.sub(r'^[•\-\*]\s*', '', line)
+            line = line.strip()
+
+            if line:
+                cleaned_lines.append(line)
+
+        # 用分号连接多行内容
+        if len(cleaned_lines) > 1:
+            result = '; '.join(cleaned_lines)
+        elif len(cleaned_lines) == 1:
+            result = cleaned_lines[0]
+        else:
+            result = ""
+
+        # 清理多余空格
+        result = re.sub(r'\s+', ' ', result).strip()
+
+        return result
 
     def normalize_three_part_format(self, instruction):
         """
