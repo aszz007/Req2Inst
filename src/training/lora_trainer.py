@@ -83,6 +83,10 @@ class LoRATrainer(BaseTrainer):
         logger.info(f"4bit量化: {use_4bit}")
         logger.info(f"LoRA配置: rank={self.lora_cfg.rank}, alpha={self.lora_cfg.alpha}")
         logger.info(f"Target modules: {self.target_modules}")
+        logger.info("训练稳定性配置:")
+        logger.info("  - 梯度裁剪: max_grad_norm=1.0 (标准设置)")
+        logger.info("  - Warmup比例: 10% (标准设置)")
+        logger.info("  - NaN-aware早停: 自动忽略NaN验证损失")
 
         # 打印配置
         self._print_training_config()

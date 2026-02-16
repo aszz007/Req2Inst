@@ -468,7 +468,7 @@ class BaseTrainer(ABC):
 
             # P-Tuning v2和Prompt Tuning需要更长的warmup以防止早期NaN
             if self.method_name in ['p_tuning', 'prompt_tuning']:
-                warmup_ratio = 0.15  # 增加到15%（标准是10%）
+                warmup_ratio = 0.2  # 增加到20%以提供更好的训练稳定性
                 logger.info(f"{self.method_name}使用增加的warmup比例: {warmup_ratio} (防止早期NaN)")
             else:
                 warmup_ratio = 0.1
@@ -491,7 +491,6 @@ class BaseTrainer(ABC):
                 'gradient_accumulation_steps': gradient_accumulation_steps,
                 'learning_rate': self.train_cfg.learning_rate,
                 'weight_decay': 0.01,
-                'max_grad_norm': 1.0,  # 标准设置
                 'lr_scheduler_type': 'cosine',
                 'warmup_steps': warmup_steps,
                 'logging_steps': 10,
@@ -504,10 +503,19 @@ class BaseTrainer(ABC):
                 'remove_unused_columns': False,
             }
 
-            # P-Tuning v2和Prompt Tuning需要更严格的梯度裁剪以防止NaN
+            # 梯度裁剪配置（防止梯度爆炸导致NaN）
+            # P-Tuning v2和Prompt Tuning：最严格裁剪（参数少，对梯度更敏感）
+            # Full Finetuning：严格裁剪（rank小，需要稳定训练）
+            # LoRA：标准裁剪（参数适中，相对稳定）
             if self.method_name in ['p_tuning', 'prompt_tuning']:
-                training_args_dict['max_grad_norm'] = 0.5  # 更严格的裁剪
+                training_args_dict['max_grad_norm'] = 0.5
                 logger.warning(f"{self.method_name}使用严格梯度裁剪(0.5)以防止NaN验证损失")
+            elif self.method_name == 'full_finetuning':
+                training_args_dict['max_grad_norm'] = 0.8
+                logger.info(f"{self.method_name}使用较严格梯度裁剪(0.8)以保证训练稳定性")
+            else:
+                training_args_dict['max_grad_norm'] = 1.0
+                logger.info(f"{self.method_name}使用标准梯度裁剪(1.0)")
 
             # load_best_model_at_end（某些方法如P-Tuning v2和Prompt Tuning不支持）
             if not getattr(self, 'disable_load_best_model', False):

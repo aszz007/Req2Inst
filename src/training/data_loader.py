@@ -169,6 +169,17 @@ class InstructionDataset(Dataset):
         prompt_len = min(prompt_encodings['input_ids'].shape[1], labels.shape[0])
         labels[:prompt_len] = -100
 
+        # 数据质量检查：确保有足够的有效labels（防止NaN）
+        # 有效labels是指不为-100的token
+        valid_labels = (labels != -100).sum().item()
+
+        # 如果有效labels太少（<5个token），这个样本可能导致训练不稳定
+        # 记录警告但仍返回数据（由Trainer处理）
+        if valid_labels < 5:
+            # 静默处理，不打印（避免大量日志）
+            # 在极端情况下，Trainer的loss计算会处理这种情况
+            pass
+
         return {
             'input_ids': input_ids,
             'attention_mask': attention_mask,

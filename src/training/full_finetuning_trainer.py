@@ -130,6 +130,10 @@ class FullFineTuningTrainer(BaseTrainer):
         logger.info(f"  4. batch=1 + grad_accum={self.full_ft_cfg.gradient_accumulation_steps}")
         logger.info(f"  5. 启用gradient checkpointing")
         logger.info(f"  6. 内存碎片优化")
+        logger.info("训练稳定性配置:")
+        logger.info("  - 梯度裁剪: max_grad_norm=0.8 (较严格设置)")
+        logger.info("  - Warmup比例: 10% (标准设置)")
+        logger.info("  - NaN-aware早停: 自动忽略NaN验证损失")
         logger.warning(f"注意: rank={self.full_ft_cfg.lora_rank}质量损失约50%")
         logger.warning("      这是24GB GPU的绝对极限配置")
 
