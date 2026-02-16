@@ -575,6 +575,7 @@ class ImageBatchRepairer:
         1. 移除换行符
         2. 处理bullet points，用分号分隔
         3. 清理多余空格
+        4. 保留单独的"-"（表示无内容）
         """
         if not text:
             return ""
@@ -588,12 +589,15 @@ class ImageBatchRepairer:
             if not line:
                 continue
 
-            # 移除bullet points标记
-            line = re.sub(r'^[•\-\*]\s*', '', line)
-            line = line.strip()
-
-            if line:
+            # 特殊处理：如果整行只是一个"-"，保留它（表示Things to Avoid无内容）
+            if line == '-':
                 cleaned_lines.append(line)
+            else:
+                # 移除bullet points标记（只移除后面有空格和内容的）
+                line = re.sub(r'^[•\-\*]\s+', '', line)
+                line = line.strip()
+                if line:
+                    cleaned_lines.append(line)
 
         # 用分号连接多行内容
         if len(cleaned_lines) > 1:
@@ -603,8 +607,9 @@ class ImageBatchRepairer:
         else:
             result = ""
 
-        # 清理多余空格
-        result = re.sub(r'\s+', ' ', result).strip()
+        # 清理多余空格（但不清理单独的"-"）
+        if result != '-':
+            result = re.sub(r'\s+', ' ', result).strip()
 
         return result
 
