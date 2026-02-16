@@ -406,6 +406,84 @@ class GPTAutomator:
             print(f"✗ 提取回复失败: {e}")
             return ""
 
+    def _clean_and_merge_content(self, text):
+        """
+        清理和合并内容：
+        1. 移除换行符
+        2. 处理bullet points，用分号分隔
+        3. 清理多余空格
+        4. 保留单独的"-"（表示无内容）
+        """
+        if not text:
+            return ""
+
+        # 按行分割
+        lines = text.split('\n')
+        cleaned_lines = []
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            # 特殊处理：如果整行只是一个"-"，保留它（表示无内容）
+            if line == '-':
+                cleaned_lines.append(line)
+            else:
+                # 移除bullet points标记（只移除后面有空格和内容的）
+                line = re.sub(r'^[•\-\*]\s+', '', line)
+                line = line.strip()
+                if line:
+                    cleaned_lines.append(line)
+
+        # 用分号连接多行内容
+        if len(cleaned_lines) > 1:
+            result = '; '.join(cleaned_lines)
+        elif len(cleaned_lines) == 1:
+            result = cleaned_lines[0]
+        else:
+            result = ""
+
+        # 清理多余空格（但不清理单独的"-"）
+        if result != '-':
+            result = re.sub(r'\s+', ' ', result).strip()
+
+        return result
+
+    def normalize_three_part_format(self, text):
+        """
+        标准化三段式格式：解析并合并多行内容
+        """
+        if not text:
+            return text
+
+        # 检查是否包含三个必要的标注
+        if 'Definition:' not in text or 'Emphasis & Caution:' not in text or 'Things to Avoid:' not in text:
+            return text
+
+        # 找到三个关键标记的位置
+        def_pos = text.find('Definition:')
+        emp_pos = text.find('Emphasis & Caution:')
+        avoid_pos = text.find('Things to Avoid:')
+
+        # 确保顺序正确
+        if not (def_pos < emp_pos < avoid_pos):
+            return text
+
+        # 提取每个部分的原始文本
+        def_text = text[def_pos + len('Definition:'):emp_pos].strip()
+        emp_text = text[emp_pos + len('Emphasis & Caution:'):avoid_pos].strip()
+        avoid_text = text[avoid_pos + len('Things to Avoid:'):].strip()
+
+        # 清理和合并每个部分的内容
+        def_content = self._clean_and_merge_content(def_text)
+        emp_content = self._clean_and_merge_content(emp_text)
+        avoid_content = self._clean_and_merge_content(avoid_text)
+
+        # 组合成最终格式
+        result = f"Definition: {def_content}\nEmphasis & Caution: {emp_content}\nThings to Avoid: {avoid_content}"
+        return result
+
     def parse_instructions(self, response_text, expected_count):
         """解析LLM回复,提取指令"""
         instructions = []
@@ -415,12 +493,18 @@ class GPTAutomator:
 
         if len(matches) == expected_count:
             for match in matches:
-                instructions.append(match.strip())
+                instruction = match.strip()
+                # 标准化三段式格式
+                instruction = self.normalize_three_part_format(instruction)
+                instructions.append(instruction)
         else:
             parts = response_text.split('Definition:')
             for part in parts[1:]:
                 if 'Emphasis & Caution:' in part and 'Things to Avoid:' in part:
-                    instructions.append('Definition:' + part.strip())
+                    instruction = 'Definition:' + part.strip()
+                    # 标准化三段式格式
+                    instruction = self.normalize_three_part_format(instruction)
+                    instructions.append(instruction)
 
         return instructions
 

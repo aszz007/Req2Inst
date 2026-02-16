@@ -632,27 +632,33 @@ class BaseTrainer(ABC):
         curves_dir = self.path_cfg.PROJECT_ROOT / 'outputs' / 'training_curves'
         curves_dir.mkdir(parents=True, exist_ok=True)
 
-        # 提取数据
-        steps = []
+        # 提取数据 - 为每个指标单独记录对应的steps
+        loss_steps = []
         losses = []
+        eval_steps = []
         eval_losses = []
+        grad_norm_steps = []
         grad_norms = []
+        lr_steps = []
         learning_rates = []
 
         for entry in training_history:
             step = entry.get('step', 0)
-            steps.append(step)
 
             if 'loss' in entry:
+                loss_steps.append(step)
                 losses.append(entry['loss'])
 
             if 'eval_loss' in entry:
+                eval_steps.append(step)
                 eval_losses.append(entry['eval_loss'])
 
             if 'grad_norm' in entry:
+                grad_norm_steps.append(step)
                 grad_norms.append(entry['grad_norm'])
 
             if 'learning_rate' in entry:
+                lr_steps.append(step)
                 learning_rates.append(entry['learning_rate'])
 
         # 创建图表
@@ -662,7 +668,6 @@ class BaseTrainer(ABC):
 
         # 1. Training Loss
         if losses:
-            loss_steps = steps[:len(losses)]
             axes[0, 0].plot(loss_steps, losses, 'b-', linewidth=1.5, alpha=0.7)
             axes[0, 0].set_xlabel('Step')
             axes[0, 0].set_ylabel('Loss')
@@ -671,8 +676,7 @@ class BaseTrainer(ABC):
 
         # 2. Eval Loss
         if eval_losses:
-            eval_steps_list = [entry['step'] for entry in training_history if 'eval_loss' in entry]
-            axes[0, 1].plot(eval_steps_list, eval_losses, 'r-', linewidth=2, marker='o', markersize=4)
+            axes[0, 1].plot(eval_steps, eval_losses, 'r-', linewidth=2, marker='o', markersize=4)
             axes[0, 1].set_xlabel('Step')
             axes[0, 1].set_ylabel('Eval Loss')
             axes[0, 1].set_title('Validation Loss')
@@ -680,8 +684,7 @@ class BaseTrainer(ABC):
 
         # 3. Gradient Norm
         if grad_norms:
-            grad_steps = steps[:len(grad_norms)]
-            axes[1, 0].plot(grad_steps, grad_norms, 'g-', linewidth=1, alpha=0.6)
+            axes[1, 0].plot(grad_norm_steps, grad_norms, 'g-', linewidth=1, alpha=0.6)
             axes[1, 0].set_xlabel('Step')
             axes[1, 0].set_ylabel('Gradient Norm')
             axes[1, 0].set_title('Gradient Norm')
@@ -689,7 +692,6 @@ class BaseTrainer(ABC):
 
         # 4. Learning Rate
         if learning_rates:
-            lr_steps = steps[:len(learning_rates)]
             axes[1, 1].plot(lr_steps, learning_rates, 'm-', linewidth=1.5)
             axes[1, 1].set_xlabel('Step')
             axes[1, 1].set_ylabel('Learning Rate')

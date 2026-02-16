@@ -871,43 +871,83 @@ class UMLBatchRepairer:
             print(f"  ✗ 提取回复失败: {e}")
             return ""
 
+    def _clean_and_merge_content(self, text):
+        """
+        清理和合并内容：
+        1. 移除换行符
+        2. 处理bullet points，用分号分隔
+        3. 清理多余空格
+        4. 保留单独的"-"（表示无内容）
+        """
+        if not text:
+            return ""
+
+        # 按行分割
+        lines = text.split('\n')
+        cleaned_lines = []
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            # 特殊处理：如果整行只是一个"-"，保留它（表示无内容）
+            if line == '-':
+                cleaned_lines.append(line)
+            else:
+                # 移除bullet points标记（只移除后面有空格和内容的）
+                line = re.sub(r'^[•\-\*]\s+', '', line)
+                line = line.strip()
+                if line:
+                    cleaned_lines.append(line)
+
+        # 用分号连接多行内容
+        if len(cleaned_lines) > 1:
+            result = '; '.join(cleaned_lines)
+        elif len(cleaned_lines) == 1:
+            result = cleaned_lines[0]
+        else:
+            result = ""
+
+        # 清理多余空格（但不清理单独的"-"）
+        if result != '-':
+            result = re.sub(r'\s+', ' ', result).strip()
+
+        return result
+
     def normalize_three_part_format(self, text):
         """
-        标准化三段式格式：确保三个关键词前有换行符
-        处理模型将三段式放在一句话中的情况
+        标准化三段式格式：解析并合并多行内容
         """
         if not text:
             return text
 
-        # 检测三个关键词
-        keywords = ['Definition:', 'Emphasis & Caution:', 'Things to Avoid:']
-
-        # 检查是否都存在
-        all_present = all(keyword in text for keyword in keywords)
-        if not all_present:
+        # 检查是否包含三个必要的标注
+        if 'Definition:' not in text or 'Emphasis & Caution:' not in text or 'Things to Avoid:' not in text:
             return text
 
-        # 在每个关键词前确保有换行符（除非已经在开头）
-        result = text
-        for keyword in keywords:
-            # 查找关键词的位置
-            parts = result.split(keyword)
-            if len(parts) > 1:
-                # 重组：确保关键词前有换行符
-                normalized_parts = []
-                for i, part in enumerate(parts):
-                    if i == 0:
-                        # 第一部分保持原样
-                        normalized_parts.append(part.rstrip())
-                    else:
-                        # 后续部分在关键词前添加换行符
-                        if normalized_parts:
-                            normalized_parts.append('\n' + keyword + part)
-                        else:
-                            normalized_parts.append(keyword + part)
-                result = ''.join(normalized_parts)
+        # 找到三个关键标记的位置
+        def_pos = text.find('Definition:')
+        emp_pos = text.find('Emphasis & Caution:')
+        avoid_pos = text.find('Things to Avoid:')
 
-        return result.strip()
+        # 确保顺序正确
+        if not (def_pos < emp_pos < avoid_pos):
+            return text
+
+        # 提取每个部分的原始文本
+        def_text = text[def_pos + len('Definition:'):emp_pos].strip()
+        emp_text = text[emp_pos + len('Emphasis & Caution:'):avoid_pos].strip()
+        avoid_text = text[avoid_pos + len('Things to Avoid:'):].strip()
+
+        # 清理和合并每个部分的内容
+        def_content = self._clean_and_merge_content(def_text)
+        emp_content = self._clean_and_merge_content(emp_text)
+        avoid_content = self._clean_and_merge_content(avoid_text)
+
+        # 组合成最终格式
+        result = f"Definition: {def_content}\nEmphasis & Caution: {emp_content}\nThings to Avoid: {avoid_content}"
+        return result
 
     def parse_uml_instruction(self, response_text):
         """
@@ -1060,6 +1100,9 @@ class UMLBatchRepairer:
             elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
                 has_emphasis = True
                 content = line.split(':', 1)[1].strip() if ':' in line else ""
+                # 强制检查：Emphasis & Caution不能为空（除非是"-"）
+                if not content:
+                    errors.append("Emphasis & Caution内容为空")
                 # 检查是否以句号结尾(如果不是"-")
                 if ENABLE_PERIOD_CHECK and content and content != '-' and not content.endswith('.'):
                     errors.append("Emphasis & Caution缺少结尾句号")
@@ -1067,9 +1110,9 @@ class UMLBatchRepairer:
             elif line.startswith('Things to Avoid:'):
                 has_avoid = True
                 content = line[len('Things to Avoid:'):].strip()
-                # 检查是否以句号结尾(如果不是"-")
-                if ENABLE_PERIOD_CHECK and content and content != '-' and not content.endswith('.'):
-                    errors.append("Things to Avoid缺少结尾句号")
+                # 强制检查：Things to Avoid必须以句号结尾（除非是"-"）
+                if content and content != '-' and not content.endswith('.'):
+                    errors.append("Things to Avoid未以句号结尾（可能生成不完整）")
 
         if not has_definition:
             errors.append("缺少Definition部分")
