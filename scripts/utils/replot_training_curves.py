@@ -4,15 +4,37 @@
 功能：
   - 读取已保存的training_history.json文件
   - 重新生成训练曲线可视化
-  - 支持所有专家类型和微调方法
+  - 支持所有专家类型和微调方法（lora_moe, lora_single, p_tuning, prompt_tuning, full_finetuning）
+  - 自动从路径推断方法名（如果training_history.json中未记录）
   - 无需重新训练
 
-用法：
-  python scripts/utils/replot_training_curves.py checkpoints/prompt_tuning/text_expert/training_history.json
-  python scripts/utils/replot_training_curves.py checkpoints/p_tuning/uml_expert/training_history.json
+输出组织结构：
+  outputs/training_curves/{timestamp}/
+    ├── lora_moe/
+    │   ├── text_expert.png
+    │   ├── image_expert.png
+    │   ├── uml_expert.png
+    │   └── general_expert.png
+    ├── lora_single/
+    │   └── unified_expert.png
+    ├── p_tuning/
+    │   ├── text_expert.png
+    │   ├── image_expert.png
+    │   ├── uml_expert.png
+    │   └── general_expert.png
+    ├── prompt_tuning/
+    │   └── ...
+    └── full_finetuning/
+        └── ...
 
-  或批量处理：
-  python scripts/utils/replot_training_curves.py --all
+用法：
+  单文件模式：
+    python scripts/utils/replot_training_curves.py checkpoints/prompt_tuning/text_expert/training_history.json
+    创建新的时间戳目录，包含单个图片
+
+  批量处理模式：
+    python scripts/utils/replot_training_curves.py --all
+    创建单个时间戳目录，包含所有方法和专家的图片，便于对比
 
 作者：Training System
 日期：2025-02-16
@@ -93,7 +115,7 @@ def plot_training_curves(training_history, expert_type, method_name, output_path
         axes[0, 0].grid(True, alpha=0.3)
     else:
         axes[0, 0].text(0.5, 0.5, 'No training loss data',
-                        ha='center', va='center', transform=axes[0, 0].transAxes)
+                       ha='center', va='center', transform=axes[0, 0].transAxes)
 
     # 2. Eval Loss
     if eval_losses:
@@ -104,7 +126,7 @@ def plot_training_curves(training_history, expert_type, method_name, output_path
         axes[0, 1].grid(True, alpha=0.3)
     else:
         axes[0, 1].text(0.5, 0.5, 'No validation loss data',
-                        ha='center', va='center', transform=axes[0, 1].transAxes)
+                       ha='center', va='center', transform=axes[0, 1].transAxes)
 
     # 3. Gradient Norm
     if grad_norms:
@@ -115,7 +137,7 @@ def plot_training_curves(training_history, expert_type, method_name, output_path
         axes[1, 0].grid(True, alpha=0.3)
     else:
         axes[1, 0].text(0.5, 0.5, 'No gradient norm data',
-                        ha='center', va='center', transform=axes[1, 0].transAxes)
+                       ha='center', va='center', transform=axes[1, 0].transAxes)
 
     # 4. Learning Rate
     if learning_rates:
@@ -127,7 +149,7 @@ def plot_training_curves(training_history, expert_type, method_name, output_path
         axes[1, 1].ticklabel_format(style='sci', axis='y', scilimits=(0, 0))
     else:
         axes[1, 1].text(0.5, 0.5, 'No learning rate data',
-                        ha='center', va='center', transform=axes[1, 1].transAxes)
+                       ha='center', va='center', transform=axes[1, 1].transAxes)
 
     plt.tight_layout()
 
@@ -139,12 +161,40 @@ def plot_training_curves(training_history, expert_type, method_name, output_path
     return True
 
 
-def replot_single_history(history_file):
+def infer_method_from_path(history_path):
+    """
+    从文件路径推断微调方法名称
+
+    Args:
+        history_path: Path对象，training_history.json的路径
+
+    Returns:
+        str: 推断出的方法名
+    """
+    path_str = str(history_path)
+
+    # 从路径中查找方法目录
+    if 'lora_moe' in path_str or 'lora-moe' in path_str:
+        return 'lora_moe'
+    elif 'lora_single' in path_str or 'lora-single' in path_str:
+        return 'lora_single'
+    elif 'p_tuning' in path_str or 'p-tuning' in path_str:
+        return 'p_tuning'
+    elif 'prompt_tuning' in path_str or 'prompt-tuning' in path_str:
+        return 'prompt_tuning'
+    elif 'full_finetuning' in path_str or 'full-finetuning' in path_str:
+        return 'full_finetuning'
+    else:
+        return 'unknown'
+
+
+def replot_single_history(history_file, output_timestamp_dir=None):
     """
     为单个训练历史文件重新绘制曲线
 
     Args:
         history_file: training_history.json文件路径
+        output_timestamp_dir: 可选的时间戳目录，用于批量处理时统一输出位置
 
     Returns:
         bool: 是否成功
@@ -161,7 +211,13 @@ def replot_single_history(history_file):
             history_data = json.load(f)
 
         expert_type = history_data.get('expert_type', 'unknown')
-        method_name = history_data.get('method_name', 'unknown')
+        method_name = history_data.get('method_name', None)
+
+        # 如果method_name为空或unknown，从路径推断
+        if not method_name or method_name == 'unknown':
+            method_name = infer_method_from_path(history_path)
+            logger.info(f"从路径推断方法名: {method_name}")
+
         training_history = history_data.get('history', [])
 
         if not training_history:
@@ -171,16 +227,23 @@ def replot_single_history(history_file):
         logger.info(f"正在重新绘制曲线: {expert_type} expert, {method_name} method")
         logger.info(f"训练步数: {len(training_history)}")
 
-        # 创建输出目录
-        output_dir = PROJECT_ROOT / 'outputs' / 'training_curves'
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # 确定输出目录结构
+        if output_timestamp_dir:
+            # 批量模式：使用统一的时间戳目录
+            method_dir = output_timestamp_dir / method_name
+        else:
+            # 单文件模式：创建新的时间戳目录
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            base_dir = PROJECT_ROOT / 'outputs' / 'training_curves'
+            timestamp_dir = base_dir / timestamp
+            method_dir = timestamp_dir / method_name
 
-        # 生成时间戳
-        from datetime import datetime
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        # 创建方法目录
+        method_dir.mkdir(parents=True, exist_ok=True)
 
-        # 输出文件路径
-        output_path = output_dir / f'{expert_type}_expert_{method_name}_training_curves_{timestamp}.png'
+        # 输出文件路径：简化命名，只包含专家类型
+        output_path = method_dir / f'{expert_type}_expert.png'
 
         # 绘制曲线
         success = plot_training_curves(training_history, expert_type, method_name, output_path)
@@ -222,13 +285,23 @@ def replot_all_histories():
     logger.info(f"找到 {len(history_files)} 个训练历史文件")
     logger.info("=" * 80)
 
+    # 创建统一的时间戳目录（批量处理时所有图片放在同一个时间戳目录下）
+    from datetime import datetime
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    base_dir = PROJECT_ROOT / 'outputs' / 'training_curves'
+    output_timestamp_dir = base_dir / timestamp
+    output_timestamp_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"批量输出目录: {output_timestamp_dir}")
+    logger.info("=" * 80)
+
     success_count = 0
     fail_count = 0
 
     for i, history_file in enumerate(history_files, 1):
         logger.info(f"[{i}/{len(history_files)}] 处理: {history_file.relative_to(PROJECT_ROOT)}")
 
-        if replot_single_history(history_file):
+        if replot_single_history(history_file, output_timestamp_dir):
             success_count += 1
         else:
             fail_count += 1
@@ -237,6 +310,7 @@ def replot_all_histories():
 
     logger.info("=" * 80)
     logger.info(f"批量处理完成: 成功 {success_count}, 失败 {fail_count}")
+    logger.info(f"所有图片已保存至: {output_timestamp_dir}")
     logger.info("=" * 80)
 
     return success_count, fail_count

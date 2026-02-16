@@ -220,7 +220,6 @@ logs/
 # 其他
 .idea/
 inputs/
-checkpoints/
 chrome_user_data/
 chrome_user_data_repair/
 chrome_user_data_uml_repair/
