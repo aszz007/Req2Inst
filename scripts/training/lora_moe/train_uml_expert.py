@@ -206,6 +206,12 @@ def main():
         logger.error(traceback.format_exc())
         return 1
 
+    # 设置模型
+    logger.info("设置模型和LoRA配置...")
+    if not trainer.setup_model():
+        logger.error("模型设置失败")
+        return 1
+
     # 准备数据
     logger.info("准备训练数据...")
     if not trainer.prepare_data():
@@ -221,12 +227,6 @@ def main():
     print()
     print("注意：1500条数据使用标准80:10:10划分策略")
     print()
-
-    # 设置模型
-    logger.info("设置模型和LoRA配置...")
-    if not trainer.setup_model():
-        logger.error("模型设置失败")
-        return 1
 
     # 开始训练
     logger.info("开始训练...")

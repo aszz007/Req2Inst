@@ -189,6 +189,12 @@ def main():
         logger.error(f"创建训练器失败: {e}")
         return 1
 
+    # 设置模型
+    logger.info("设置模型和LoRA配置...")
+    if not trainer.setup_model():
+        logger.error("模型设置失败")
+        return 1
+
     # 准备数据
     logger.info("准备训练数据...")
     if not trainer.prepare_data():
@@ -204,12 +210,6 @@ def main():
     print()
     print(f"注意：通用专家使用文本（全部）+ 图像（全部）+ UML（1500条）")
     print()
-
-    # 设置模型
-    logger.info("设置模型和LoRA配置...")
-    if not trainer.setup_model():
-        logger.error("模型设置失败")
-        return 1
 
     # 开始训练
     logger.info("开始训练...")
