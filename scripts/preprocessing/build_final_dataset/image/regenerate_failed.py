@@ -979,6 +979,9 @@ Image analysis structured data (JSON format):
             elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
                 has_emphasis = True
                 content = line.split(':', 1)[1].strip() if ':' in line else ""
+                # 【新增】强制检查：Emphasis & Caution不能为空（除非是"-"）
+                if not content:
+                    errors.append("Emphasis & Caution内容为空")
                 # 检查是否以句号结尾(如果不是"-")
                 if ENABLE_PERIOD_CHECK and content and content != '-' and not content.endswith('.'):
                     errors.append("Emphasis & Caution缺少结尾句号")
@@ -986,9 +989,10 @@ Image analysis structured data (JSON format):
             elif line.startswith('Things to Avoid:'):
                 has_avoid = True
                 content = line[len('Things to Avoid:'):].strip()
-                # 检查是否以句号结尾(如果不是"-")
-                if ENABLE_PERIOD_CHECK and content and content != '-' and not content.endswith('.'):
-                    errors.append("Things to Avoid缺少结尾句号")
+                # 【新增】强制检查：Things to Avoid必须以句号结尾（除非是"-"）
+                # 这是为了检测生成不完整的情况
+                if content and content != '-' and not content.endswith('.'):
+                    errors.append("Things to Avoid未以句号结尾（可能生成不完整）")
 
         if not has_definition:
             errors.append("缺少Definition部分")
