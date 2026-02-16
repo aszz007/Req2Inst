@@ -113,21 +113,9 @@ class PTuningTrainer(BaseTrainer):
         # P-Tuning v2不支持load_best_model_at_end（会导致embedding shape mismatch）
         self.disable_load_best_model = True
 
-        # 更激进的序列长度策略（质量损失最小化）
-        # UML数据虽长但JSON结构高度重复，1024能覆盖核心逻辑
-        # General混合数据集，1024是质量和显存的最佳平衡点
-        if expert_type == 'general':
-            self.train_cfg.max_seq_length = 1024
-            logger.info("General专家使用max_seq_length=1024（显存优化，质量损失<10%）")
-        elif expert_type == 'uml':
-            self.train_cfg.max_seq_length = 1024
-            logger.info("UML专家使用max_seq_length=1024（JSON重复结构多，质量损失<10%）")
-        elif expert_type == 'text':
-            self.train_cfg.max_seq_length = 1280
-            logger.info("Text专家使用max_seq_length=1280（质量优先）")
-        else:  # image
-            self.train_cfg.max_seq_length = 1280
-            logger.info("Image专家使用max_seq_length=1280（质量优先）")
+        # 使用统一的序列长度管理（由base_trainer的_get_max_seq_length()决定）
+        self.train_cfg.max_seq_length = self._get_max_seq_length()
+        logger.info(f"Max序列长度: {self.train_cfg.max_seq_length} (由base_trainer统一管理)")
 
         # P-Tuning v2专用：减少dataloader workers以节省系统内存
         self.reduced_workers = True
@@ -152,25 +140,28 @@ class PTuningTrainer(BaseTrainer):
         """
         获取P-Tuning v2专用的batch配置
 
-        P-Tuning v2不能使用gradient checkpointing，显存占用更大，
-        需要使用更小的batch size和更大的gradient accumulation
+        P-Tuning v2不能使用gradient checkpointing，显存占用更大
+        根据实际显存监控调整：
+        - Text/Image: 可适当增大batch
+        - UML/General: 保持保守配置
 
-        针对UML和General专家，使用更激进的配置以避免OOM
+        针对不同expert优化：
+        - Text (预计14-16GB): batch=2, grad_accum=64
+        - Image (预计12-14GB): batch=4, grad_accum=32
+        - UML (预计16-18GB): batch=1, grad_accum=128
+        - General (预计18-20GB): batch=1, grad_accum=128
 
         Returns:
             (batch_size, gradient_accumulation_steps)
         """
-        if self.expert_type in ['uml', 'general']:
-            # UML和General数据量大，使用极小batch + 大梯度累积
-            # 有效batch=32，比text/image的16更大，可能提升训练质量
-            logger.info(f"{self.expert_type}专家使用激进配置: batch=1, grad_accum=32 (有效batch=32)")
-            return 1, 32
+        if self.expert_type == 'image':
+            return 4, 32
+        elif self.expert_type == 'text':
+            return 2, 64
+        elif self.expert_type in ['uml', 'general']:
+            return 1, 128
         else:
-            # Text和Image专家使用标准配置
-            if self.use_rtx4090_optimization:
-                return 1, 16  # 有效batch=16
-            else:
-                return 1, 16  # 有效batch=16
+            return 1, 128
 
     def setup_model(self) -> bool:
         """

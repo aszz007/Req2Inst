@@ -248,12 +248,15 @@ class BaseTrainer(ABC):
         self.device_cfg = get_device_config()
         self.model_cfg = get_model_config()
 
-        # 从环境变量读取训练参数
+        # 从环境变量读取训练参数（优先级最高）
+        # 注意：如果未设置环境变量，epochs将在prepare_data()后根据数据量自动计算
+        self.epochs_from_env = False
         if 'TRAIN_EPOCHS' in os.environ:
             try:
                 epochs = int(os.environ['TRAIN_EPOCHS'])
                 self.train_cfg.num_epochs = epochs
-                logger.info(f"从环境变量读取训练轮数: {epochs}")
+                self.epochs_from_env = True
+                logger.info(f"从环境变量读取训练轮数: {epochs} (固定值)")
             except ValueError:
                 logger.warning(f"无效的TRAIN_EPOCHS环境变量: {os.environ['TRAIN_EPOCHS']}")
 
@@ -335,6 +338,75 @@ class BaseTrainer(ABC):
         else:
             return self.train_cfg.batch_size, self.train_cfg.gradient_accumulation_steps
 
+    def _get_max_seq_length(self) -> int:
+        """
+        根据专家类型和训练方法确定最大序列长度
+
+        平衡质量和显存占用：
+        - Full Fine-tuning: 显存受限，使用768
+        - P-Tuning/Prompt Tuning: UML/General使用1024（JSON重复多），Text/Image使用1280
+        - LoRA: 显存充足，使用完整2048
+
+        Returns:
+            int: 最大序列长度
+        """
+        if self.method_name == 'full_finetuning':
+            return 768
+
+        elif self.method_name in ['p_tuning', 'prompt_tuning']:
+            if self.expert_type in ['uml', 'general']:
+                return 1024
+            else:
+                return 1280
+
+        else:
+            return 2048
+
+    def _get_num_epochs_from_data(self) -> int:
+        """
+        根据实际数据量、专家类型和训练方法确定训练轮数
+
+        基本原则：
+        - 数据量越少，需要更多epochs以充分学习
+        - 不同微调方法收敛速度不同，允许使用不同epochs
+        - 通过早停机制确保公平性
+
+        Returns:
+            int: 训练轮数
+        """
+        if not self.train_dataset:
+            logger.warning("训练数据集未准备，使用默认epochs")
+            return self.train_cfg.num_epochs
+
+        data_size = len(self.train_dataset)
+
+        # 根据专家类型基础epochs（基于数据量）
+        if self.expert_type == 'image':
+            base_epochs = 8
+        elif self.expert_type == 'text':
+            base_epochs = 5
+        elif self.expert_type == 'uml':
+            base_epochs = 6
+        elif self.expert_type == 'general':
+            base_epochs = 4
+        else:
+            base_epochs = 5
+
+        # 根据微调方法调整（P-Tuning和Prompt Tuning收敛较慢）
+        if self.method_name in ['p_tuning', 'prompt_tuning']:
+            method_epochs = base_epochs + 1
+        elif self.method_name == 'full_finetuning':
+            method_epochs = base_epochs
+        else:
+            method_epochs = base_epochs
+
+        logger.info(f"自适应epochs计算:")
+        logger.info(f"  数据量: {data_size}条")
+        logger.info(f"  专家类型: {self.expert_type} -> 基础epochs={base_epochs}")
+        logger.info(f"  微调方法: {self.method_name} -> 最终epochs={method_epochs}")
+
+        return method_epochs
+
     def prepare_data(self) -> bool:
         """
         准备训练数据
@@ -388,6 +460,14 @@ class BaseTrainer(ABC):
             logger.info(f"  验证集: {len(self.val_dataset)}条")
             logger.info(f"  测试集: {len(self.test_dataset)}条")
 
+            # 根据实际数据量重新计算epochs（如果未设置环境变量）
+            if not self.epochs_from_env:
+                calculated_epochs = self._get_num_epochs_from_data()
+                self.train_cfg.num_epochs = calculated_epochs
+                logger.info(f"根据数据量自动设置训练轮数: {calculated_epochs}")
+            else:
+                logger.info(f"使用环境变量指定的训练轮数: {self.train_cfg.num_epochs}")
+
             return True
 
         except Exception as e:
@@ -426,21 +506,45 @@ class BaseTrainer(ABC):
 
     def _get_eval_steps(self) -> int:
         """
-        根据专家类型和数据量确定验证步数，确保至少验证5-7次
+        根据数据量和batch配置动态计算验证步数
+
+        目标：每个epoch验证8-10次，确保eval-loss曲线足够平滑
+        最少不低于5次/epoch（即使是小数据集）
 
         Returns:
             int: eval_steps
         """
-        if self.expert_type == 'text':
-            return 8
-        elif self.expert_type == 'image':
-            return 4
-        elif self.expert_type == 'uml':
-            return 5
-        elif self.expert_type == 'general':
-            return 15
-        else:
-            return 10
+        if not self.train_dataset:
+            logger.warning("训练数据集未准备，使用默认eval_steps=50")
+            return 50
+
+        batch_size, gradient_accumulation_steps = self._get_batch_config()
+        num_samples = len(self.train_dataset)
+
+        # 计算每个epoch的步数
+        steps_per_epoch = max(1, num_samples // (batch_size * gradient_accumulation_steps))
+
+        # 目标：每epoch验证8-10次（确保曲线平滑）
+        target_evals_per_epoch = 9
+        eval_steps = max(1, steps_per_epoch // target_evals_per_epoch)
+
+        # 确保至少验证5次/epoch
+        min_evals_per_epoch = 5
+        max_eval_steps = max(1, steps_per_epoch // min_evals_per_epoch)
+        if eval_steps > max_eval_steps:
+            eval_steps = max_eval_steps
+
+        actual_evals = steps_per_epoch / eval_steps if eval_steps > 0 else 0
+
+        logger.info(f"动态eval_steps配置:")
+        logger.info(f"  训练样本数: {num_samples}")
+        logger.info(f"  有效batch大小: {batch_size * gradient_accumulation_steps}")
+        logger.info(f"  每epoch步数: {steps_per_epoch}")
+        logger.info(f"  目标验证次数/epoch: {target_evals_per_epoch}")
+        logger.info(f"  计算得到eval_steps: {eval_steps}")
+        logger.info(f"  实际验证次数/epoch: {actual_evals:.1f}")
+
+        return eval_steps
 
     def train(self) -> bool:
         """

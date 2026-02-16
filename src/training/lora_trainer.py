@@ -91,6 +91,32 @@ class LoRATrainer(BaseTrainer):
         # 打印配置
         self._print_training_config()
 
+    def _get_batch_config(self):
+        """
+        获取LoRA专用的batch配置，针对不同expert优化
+
+        LoRA显存占用适中，可以使用较大的batch_size
+        根据实际显存监控优化：
+        - Text (16GB -> 可增大): batch=4, grad_accum=32
+        - Image (最短，预计12-14GB): batch=8, grad_accum=16
+        - UML (中等长度，预计14-16GB): batch=4, grad_accum=32
+        - General (最长，预计16-18GB): batch=4, grad_accum=32
+
+        保持有效batch=128以保证训练稳定性
+
+        Returns:
+            (batch_size, gradient_accumulation_steps)
+        """
+        if self.use_rtx4090_optimization:
+            if self.expert_type == 'image':
+                return 8, 16
+            elif self.expert_type in ['text', 'uml', 'general']:
+                return 4, 32
+            else:
+                return 4, 32
+        else:
+            return self.train_cfg.batch_size, self.train_cfg.gradient_accumulation_steps
+
     def _get_target_modules(self) -> list:
         """
         根据模型版本自动选择target_modules

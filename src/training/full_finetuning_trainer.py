@@ -113,15 +113,13 @@ class FullFineTuningTrainer(BaseTrainer):
         # Full Fine-tuning显存优化：减少dataloader workers
         self.reduced_workers = True
 
-        # 覆盖max_seq_length以使用full_finetuning配置
-        if hasattr(self.full_ft_cfg, 'max_seq_length'):
-            self.train_cfg.max_seq_length = self.full_ft_cfg.max_seq_length
-            logger.info(f"覆盖max_seq_length: {self.full_ft_cfg.max_seq_length}")
+        # 使用统一的序列长度管理（由base_trainer的_get_max_seq_length()决定）
+        self.train_cfg.max_seq_length = self._get_max_seq_length()
 
         logger.info(f"4bit量化: {use_4bit}")
         logger.info(f"Full Fine-tuning配置: rank={self.full_ft_cfg.lora_rank}, "
                     f"alpha={self.full_ft_cfg.lora_alpha}")
-        logger.info(f"Max seq length: {self.train_cfg.max_seq_length}")
+        logger.info(f"Max seq length: {self.train_cfg.max_seq_length} (由base_trainer统一管理)")
         logger.info(f"Target modules: {self.full_ft_cfg.target_modules}")
         logger.info("终极显存优化策略:")
         logger.info(f"  1. rank={self.full_ft_cfg.lora_rank} (极限LoRA)")

@@ -143,28 +143,30 @@ class PromptTuningTrainer(BaseTrainer):
 
     def _get_batch_config(self):
         """
-        获取Prompt Tuning专用的batch配置（更保守以避免OOM）
+        获取Prompt Tuning专用的batch配置
 
-        Prompt Tuning由于需要存储virtual tokens的梯度，
-        显存占用比LoRA更高，因此使用更小的batch size
+        Prompt Tuning由于需要存储virtual tokens的梯度，显存占用较高
+        根据实际显存监控优化：
+        - Text (预计14-16GB): batch=2, grad_accum=64
+        - Image (预计12-14GB): batch=4, grad_accum=32
+        - UML (预计16-18GB): batch=2, grad_accum=64
+        - General (预计18-20GB): batch=1, grad_accum=128
 
-        UML和General专家的样本更长，需要进一步降低batch size
+        保持有效batch=128以保证训练稳定性
 
         Returns:
             (batch_size, gradient_accumulation_steps)
         """
         if self.use_rtx4090_optimization:
-            # 根据专家类型调整batch配置
-            if self.expert_type in ['uml', 'general']:
-                # UML和General：样本更长，使用更小的batch
-                # batch_size=2, gradient_accumulation=8, 有效batch=16
-                return 2, 8
+            if self.expert_type == 'image':
+                return 4, 32
+            elif self.expert_type in ['text', 'uml']:
+                return 2, 64
+            elif self.expert_type == 'general':
+                return 1, 128
             else:
-                # Text和Image：样本较短，可以使用较大的batch
-                # batch_size=4, gradient_accumulation=4, 有效batch=16
-                return 4, 4
+                return 2, 64
         else:
-            # 非优化配置：使用基础配置
             return self.train_cfg.batch_size, self.train_cfg.gradient_accumulation_steps
 
     def setup_model(self) -> bool:
