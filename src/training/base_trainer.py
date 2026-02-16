@@ -529,7 +529,7 @@ class BaseTrainer(ABC):
                 'weight_decay': 0.01,
                 'lr_scheduler_type': 'cosine',
                 'warmup_steps': warmup_steps,
-                'logging_steps': 5 if self.expert_type in ['text', 'general'] else 3,
+                'logging_steps': 1,
                 'eval_steps': eval_steps,
                 'save_steps': eval_steps,
                 'save_total_limit': 3,
