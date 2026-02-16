@@ -41,6 +41,7 @@
 """
 
 import json
+import math
 import argparse
 from pathlib import Path
 import sys
@@ -72,7 +73,7 @@ def plot_training_curves(training_history, expert_type, method_name, output_path
         logger.error("matplotlib未安装，无法生成可视化")
         return False
 
-    # 提取数据 - 为每个指标单独记录对应的steps
+    # 提取数据 - 为每个指标单独记录对应的steps，并过滤掉None/NaN值
     loss_steps = []
     losses = []
     eval_steps = []
@@ -85,21 +86,45 @@ def plot_training_curves(training_history, expert_type, method_name, output_path
     for entry in training_history:
         step = entry.get('step', 0)
 
+        # 处理loss（过滤None和NaN）
         if 'loss' in entry:
-            loss_steps.append(step)
-            losses.append(entry['loss'])
+            loss_val = entry['loss']
+            if loss_val is not None and not (isinstance(loss_val, float) and math.isnan(loss_val)):
+                loss_steps.append(step)
+                losses.append(loss_val)
 
+        # 处理eval_loss（过滤None和NaN）
         if 'eval_loss' in entry:
-            eval_steps.append(step)
-            eval_losses.append(entry['eval_loss'])
+            eval_val = entry['eval_loss']
+            if eval_val is not None and not (isinstance(eval_val, float) and math.isnan(eval_val)):
+                eval_steps.append(step)
+                eval_losses.append(eval_val)
 
+        # 处理grad_norm（过滤None和NaN）
         if 'grad_norm' in entry:
-            grad_norm_steps.append(step)
-            grad_norms.append(entry['grad_norm'])
+            grad_val = entry['grad_norm']
+            if grad_val is not None and not (isinstance(grad_val, float) and math.isnan(grad_val)):
+                grad_norm_steps.append(step)
+                grad_norms.append(grad_val)
 
+        # 处理learning_rate（过滤None和NaN）
         if 'learning_rate' in entry:
-            lr_steps.append(step)
-            learning_rates.append(entry['learning_rate'])
+            lr_val = entry['learning_rate']
+            if lr_val is not None and not (isinstance(lr_val, float) and math.isnan(lr_val)):
+                lr_steps.append(step)
+                learning_rates.append(lr_val)
+
+    # 数据质量检查和警告
+    total_entries = len(training_history)
+    if total_entries < 10:
+        logger.warning(f"训练历史记录很少（{total_entries}条），可能导致曲线不完整")
+
+    if len(losses) < 3:
+        logger.warning(f"训练损失数据点很少（{len(losses)}个）")
+    if len(eval_losses) == 0:
+        logger.warning("没有验证损失数据")
+    elif len(eval_losses) < 3:
+        logger.warning(f"验证损失数据点很少（{len(eval_losses)}个）")
 
     # 创建图表
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
@@ -116,6 +141,9 @@ def plot_training_curves(training_history, expert_type, method_name, output_path
     else:
         axes[0, 0].text(0.5, 0.5, 'No training loss data',
                        ha='center', va='center', transform=axes[0, 0].transAxes)
+        axes[0, 0].set_xlabel('Step')
+        axes[0, 0].set_ylabel('Loss')
+        axes[0, 0].set_title('Training Loss')
 
     # 2. Eval Loss
     if eval_losses:
@@ -127,6 +155,9 @@ def plot_training_curves(training_history, expert_type, method_name, output_path
     else:
         axes[0, 1].text(0.5, 0.5, 'No validation loss data',
                        ha='center', va='center', transform=axes[0, 1].transAxes)
+        axes[0, 1].set_xlabel('Step')
+        axes[0, 1].set_ylabel('Eval Loss')
+        axes[0, 1].set_title('Validation Loss')
 
     # 3. Gradient Norm
     if grad_norms:
@@ -138,6 +169,9 @@ def plot_training_curves(training_history, expert_type, method_name, output_path
     else:
         axes[1, 0].text(0.5, 0.5, 'No gradient norm data',
                        ha='center', va='center', transform=axes[1, 0].transAxes)
+        axes[1, 0].set_xlabel('Step')
+        axes[1, 0].set_ylabel('Gradient Norm')
+        axes[1, 0].set_title('Gradient Norm')
 
     # 4. Learning Rate
     if learning_rates:
@@ -150,6 +184,9 @@ def plot_training_curves(training_history, expert_type, method_name, output_path
     else:
         axes[1, 1].text(0.5, 0.5, 'No learning rate data',
                        ha='center', va='center', transform=axes[1, 1].transAxes)
+        axes[1, 1].set_xlabel('Step')
+        axes[1, 1].set_ylabel('Learning Rate')
+        axes[1, 1].set_title('Learning Rate Schedule')
 
     plt.tight_layout()
 
@@ -158,6 +195,7 @@ def plot_training_curves(training_history, expert_type, method_name, output_path
     plt.close()
 
     logger.info(f"训练曲线已保存至: {output_path}")
+    logger.info(f"数据统计: Loss={len(losses)}点, EvalLoss={len(eval_losses)}点, GradNorm={len(grad_norms)}点, LR={len(learning_rates)}点")
     return True
 
 
@@ -206,9 +244,12 @@ def replot_single_history(history_file, output_timestamp_dir=None):
         return False
 
     try:
-        # 读取训练历史
+        # 读取训练历史，处理可能的NaN值
         with open(history_path, 'r') as f:
-            history_data = json.load(f)
+            content = f.read()
+            # 替换NaN为null，以便JSON正确解析
+            content = content.replace(': NaN', ': null')
+            history_data = json.loads(content)
 
         expert_type = history_data.get('expert_type', 'unknown')
         method_name = history_data.get('method_name', None)

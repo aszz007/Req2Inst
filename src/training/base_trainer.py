@@ -15,6 +15,7 @@
 
 import os
 import json
+import math
 import torch
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
@@ -548,6 +549,20 @@ class BaseTrainer(ABC):
 
             batch_size, gradient_accumulation_steps = self._get_batch_config()
 
+            # 清理训练历史中的NaN值（NaN不是有效的JSON）
+            def clean_nan_values(obj):
+                """递归清理字典/列表中的NaN值，替换为None"""
+                if isinstance(obj, dict):
+                    return {k: clean_nan_values(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [clean_nan_values(item) for item in obj]
+                elif isinstance(obj, float) and math.isnan(obj):
+                    return None
+                else:
+                    return obj
+
+            cleaned_history = clean_nan_values(training_history)
+
             history_data = {
                 'expert_type': self.expert_type,
                 'method_name': self.method_name,
@@ -558,7 +573,7 @@ class BaseTrainer(ABC):
                 'effective_batch_size': batch_size * gradient_accumulation_steps,
                 'learning_rate': self.train_cfg.learning_rate,
                 'use_rtx4090_optimization': self.use_rtx4090_optimization,
-                'history': training_history
+                'history': cleaned_history
             }
 
             with open(history_file, 'w') as f:
@@ -632,7 +647,7 @@ class BaseTrainer(ABC):
         curves_dir = self.path_cfg.PROJECT_ROOT / 'outputs' / 'training_curves'
         curves_dir.mkdir(parents=True, exist_ok=True)
 
-        # 提取数据 - 为每个指标单独记录对应的steps
+        # 提取数据 - 为每个指标单独记录对应的steps，并过滤掉None/NaN值
         loss_steps = []
         losses = []
         eval_steps = []
@@ -645,21 +660,39 @@ class BaseTrainer(ABC):
         for entry in training_history:
             step = entry.get('step', 0)
 
+            # 处理loss（过滤None和NaN）
             if 'loss' in entry:
-                loss_steps.append(step)
-                losses.append(entry['loss'])
+                loss_val = entry['loss']
+                if loss_val is not None and not (isinstance(loss_val, float) and math.isnan(loss_val)):
+                    loss_steps.append(step)
+                    losses.append(loss_val)
 
+            # 处理eval_loss（过滤None和NaN）
             if 'eval_loss' in entry:
-                eval_steps.append(step)
-                eval_losses.append(entry['eval_loss'])
+                eval_val = entry['eval_loss']
+                if eval_val is not None and not (isinstance(eval_val, float) and math.isnan(eval_val)):
+                    eval_steps.append(step)
+                    eval_losses.append(eval_val)
 
+            # 处理grad_norm（过滤None和NaN）
             if 'grad_norm' in entry:
-                grad_norm_steps.append(step)
-                grad_norms.append(entry['grad_norm'])
+                grad_val = entry['grad_norm']
+                if grad_val is not None and not (isinstance(grad_val, float) and math.isnan(grad_val)):
+                    grad_norm_steps.append(step)
+                    grad_norms.append(grad_val)
 
+            # 处理learning_rate（过滤None和NaN）
             if 'learning_rate' in entry:
-                lr_steps.append(step)
-                learning_rates.append(entry['learning_rate'])
+                lr_val = entry['learning_rate']
+                if lr_val is not None and not (isinstance(lr_val, float) and math.isnan(lr_val)):
+                    lr_steps.append(step)
+                    learning_rates.append(lr_val)
+
+        # 数据质量检查和警告
+        if len(eval_losses) == 0:
+            logger.warning("没有验证损失数据")
+
+        logger.info(f"曲线数据统计: Loss={len(losses)}点, EvalLoss={len(eval_losses)}点, GradNorm={len(grad_norms)}点, LR={len(learning_rates)}点")
 
         # 创建图表
         fig, axes = plt.subplots(2, 2, figsize=(15, 10))
@@ -673,6 +706,12 @@ class BaseTrainer(ABC):
             axes[0, 0].set_ylabel('Loss')
             axes[0, 0].set_title('Training Loss')
             axes[0, 0].grid(True, alpha=0.3)
+        else:
+            axes[0, 0].text(0.5, 0.5, 'No training loss data',
+                           ha='center', va='center', transform=axes[0, 0].transAxes)
+            axes[0, 0].set_xlabel('Step')
+            axes[0, 0].set_ylabel('Loss')
+            axes[0, 0].set_title('Training Loss')
 
         # 2. Eval Loss
         if eval_losses:
@@ -681,6 +720,12 @@ class BaseTrainer(ABC):
             axes[0, 1].set_ylabel('Eval Loss')
             axes[0, 1].set_title('Validation Loss')
             axes[0, 1].grid(True, alpha=0.3)
+        else:
+            axes[0, 1].text(0.5, 0.5, 'No validation loss data',
+                           ha='center', va='center', transform=axes[0, 1].transAxes)
+            axes[0, 1].set_xlabel('Step')
+            axes[0, 1].set_ylabel('Eval Loss')
+            axes[0, 1].set_title('Validation Loss')
 
         # 3. Gradient Norm
         if grad_norms:
@@ -689,6 +734,12 @@ class BaseTrainer(ABC):
             axes[1, 0].set_ylabel('Gradient Norm')
             axes[1, 0].set_title('Gradient Norm')
             axes[1, 0].grid(True, alpha=0.3)
+        else:
+            axes[1, 0].text(0.5, 0.5, 'No gradient norm data',
+                           ha='center', va='center', transform=axes[1, 0].transAxes)
+            axes[1, 0].set_xlabel('Step')
+            axes[1, 0].set_ylabel('Gradient Norm')
+            axes[1, 0].set_title('Gradient Norm')
 
         # 4. Learning Rate
         if learning_rates:
@@ -698,6 +749,12 @@ class BaseTrainer(ABC):
             axes[1, 1].set_title('Learning Rate Schedule')
             axes[1, 1].grid(True, alpha=0.3)
             axes[1, 1].ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+        else:
+            axes[1, 1].text(0.5, 0.5, 'No learning rate data',
+                           ha='center', va='center', transform=axes[1, 1].transAxes)
+            axes[1, 1].set_xlabel('Step')
+            axes[1, 1].set_ylabel('Learning Rate')
+            axes[1, 1].set_title('Learning Rate Schedule')
 
         plt.tight_layout()
 
