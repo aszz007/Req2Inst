@@ -621,7 +621,7 @@ class BaseTrainer(ABC):
                     clean_prompt = _remove_qwen_special_tokens(prompt_text)
                     logger.info(f"完整Prompt:\n{clean_prompt}")
                     logger.info("-" * 80)
-                    logger.info(f"期望输出:\n{sample['output'][:200]}...")
+                    logger.info(f"期望输出:\n{sample['output']}")
                     logger.info("-" * 80)
 
                 logger.info("=" * 80)
