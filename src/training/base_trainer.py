@@ -47,6 +47,36 @@ from src.utils.logger import get_logger
 logger = get_logger('training.base_trainer')
 
 
+def _remove_qwen_special_tokens(text: str) -> str:
+    """
+    Remove Qwen model special tokens from text
+
+    Removes tokens such as:
+    - <|im_start|>
+    - <|im_end|>
+    - <think>
+    - </think>
+
+    Args:
+        text: Input text containing special tokens
+
+    Returns:
+        str: Text with special tokens removed
+    """
+    if not text:
+        return text
+
+    # Remove Qwen chat format tokens
+    text = text.replace('<|im_start|>', '')
+    text = text.replace('<|im_end|>', '')
+
+    # Remove thinking tags
+    text = text.replace('<think>', '')
+    text = text.replace('</think>', '')
+
+    return text
+
+
 def _get_transformers_version():
     """获取transformers版本号"""
     import transformers
@@ -586,7 +616,10 @@ class BaseTrainer(ABC):
                     sample = self.train_dataset.data[i]
                     logger.info(f"\n样本 {i+1}:")
                     logger.info("-" * 80)
-                    logger.info(f"完整Prompt:\n{sample.get('input_with_prompt', 'N/A')}")
+                    # Remove Qwen special tokens before printing
+                    prompt_text = sample.get('input_with_prompt', 'N/A')
+                    clean_prompt = _remove_qwen_special_tokens(prompt_text)
+                    logger.info(f"完整Prompt:\n{clean_prompt}")
                     logger.info("-" * 80)
                     logger.info(f"期望输出:\n{sample['output'][:200]}...")
                     logger.info("-" * 80)
