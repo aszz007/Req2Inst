@@ -9,6 +9,7 @@
 3. 完全静默异常处理（避免乱码输出）
 4. 智能列名映射机制
 5. Windows换行符兼容
+6. 智能截断：防止长序列prompt截断output导致labels全-100引发NaN loss
 
 作者：Data Loader System
 日期：2025-01-29（修复版）
@@ -139,6 +140,10 @@ class InstructionDataset(Dataset):
         input_text = item.get('input_with_prompt', item['input'])
         output_text = item['output']
 
+        # 最少有效output token数阈值
+        # 当valid_labels低于此值时触发智能截断，防止全-100标签导致NaN loss
+        MIN_VALID_LABELS = 10
+
         # 组合输入输出
         # 注意:input_text已经包含了完整的prompt格式,直接拼接output即可
         full_text = f"{input_text}{output_text}"
@@ -169,16 +174,36 @@ class InstructionDataset(Dataset):
         prompt_len = min(prompt_encodings['input_ids'].shape[1], labels.shape[0])
         labels[:prompt_len] = -100
 
-        # 数据质量检查：确保有足够的有效labels（防止NaN）
-        # 有效labels是指不为-100的token
         valid_labels = (labels != -100).sum().item()
 
-        # 如果有效labels太少（<5个token），这个样本可能导致训练不稳定
-        # 记录警告但仍返回数据（由Trainer处理）
-        if valid_labels < 5:
-            # 静默处理，不打印（避免大量日志）
-            # 在极端情况下，Trainer的loss计算会处理这种情况
-            pass
+        # 当prompt占满整个序列导致output被完全截断时（valid_labels < MIN_VALID_LABELS），
+        # 应用智能截断：截短prompt，保留足够的output token，防止全-100标签导致NaN loss。
+        # 这种情况主要发生在UML/General专家的长JSON输入 + 短max_seq_length场景下。
+        if valid_labels < MIN_VALID_LABELS:
+            output_ids = self.tokenizer(
+                output_text,
+                truncation=True,
+                max_length=self.max_length - MIN_VALID_LABELS,
+                padding=False,
+                add_special_tokens=False,
+                return_tensors='pt'
+            )['input_ids'].squeeze()
+            output_len = min(output_ids.shape[0], self.max_length - MIN_VALID_LABELS)
+            output_ids = output_ids[:output_len]
+
+            max_prompt_len = self.max_length - output_len
+            prompt_ids = self.tokenizer(
+                input_text,
+                truncation=True,
+                max_length=max_prompt_len,
+                padding=False,
+                return_tensors='pt'
+            )['input_ids'].squeeze()
+
+            input_ids = torch.cat([prompt_ids, output_ids])
+            attention_mask = torch.ones(len(input_ids), dtype=torch.long)
+            labels = input_ids.clone()
+            labels[:len(prompt_ids)] = -100
 
         return {
             'input_ids': input_ids,
@@ -882,13 +907,13 @@ if __name__ == "__main__":
     text_loader = TextDatasetLoader()
     text_data = text_loader.load_csv_files()
     if text_data:
-        print(f"✓ 数据加载成功")
+        print(f"数据加载成功")
         print(f"  数据量: {len(text_data)}条")
         print(f"  示例来源: {text_data[0]['source']}")
         train, val, test = split_dataset_for_expert(text_data, 'text')
         print(f"  划分结果: 训练{len(train)}, 验证{len(val)}, 测试{len(test)}")
     else:
-        print("✗ 数据加载失败")
+        print("数据加载失败")
 
     # 测试图像数据加载
     print("\n【测试2】图像数据加载")
@@ -896,13 +921,13 @@ if __name__ == "__main__":
     image_loader = ImageDatasetLoader()
     image_data = image_loader.load_csv_file()
     if image_data:
-        print(f"✓ 数据加载成功")
+        print(f"数据加载成功")
         print(f"  数据量: {len(image_data)}条")
         print(f"  示例来源: {image_data[0]['source']}")
         train, val, test = split_dataset_for_expert(image_data, 'image')
         print(f"  划分结果: 训练{len(train)}, 验证{len(val)}, 测试{len(test)}")
     else:
-        print("✗ 数据加载失败")
+        print("数据加载失败")
 
     # 测试UML数据加载
     print("\n【测试3】UML数据加载")
@@ -910,12 +935,12 @@ if __name__ == "__main__":
     uml_loader = UMLDatasetLoader()
     uml_data = uml_loader.load_csv_file()
     if uml_data:
-        print(f"✓ 数据加载成功")
+        print(f"数据加载成功")
         print(f"  数据量: {len(uml_data)}条")
         print(f"  示例来源: {uml_data[0]['source']}")
         train, val, test = split_dataset_for_expert(uml_data, 'uml')
         print(f"  划分结果: 训练{len(train)}, 验证{len(val)}, 测试{len(test)}")
     else:
-        print("✗ 数据加载失败")
+        print("数据加载失败")
 
     print("\n数据加载器测试完成！")
