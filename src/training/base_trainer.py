@@ -224,7 +224,7 @@ class BaseTrainer(ABC):
                  base_model_path: Optional[str] = None,
                  output_dir: Optional[str] = None,
                  use_rtx4090_optimization: bool = True,
-                 debug_samples: bool = False):
+                 debug_samples: bool = True):
         """
         初始化基础训练器
 
@@ -644,6 +644,30 @@ class BaseTrainer(ABC):
             return False
 
         try:
+            # ----------------------------------------------------------------
+            # 调试：打印前3个训练样本（放在所有配置代码之前，确保一定能执行）
+            # 注意：此处只读取 .data 原始列表，不调用 tokenizer，与训练顺序无关
+            # ----------------------------------------------------------------
+            if self.debug_samples and self.train_dataset is not None and len(self.train_dataset) > 0:
+                logger.info("=" * 80)
+                logger.info("[调试输出] 打印前3个训练样本的prompt")
+                logger.info("=" * 80)
+
+                for i in range(min(3, len(self.train_dataset))):
+                    sample = self.train_dataset.data[i]
+                    logger.info(f"\n样本 {i+1}:")
+                    logger.info("-" * 80)
+                    prompt_text = sample.get('input_with_prompt', 'N/A')
+                    clean_prompt = _remove_qwen_special_tokens(prompt_text)
+                    logger.info(f"完整Prompt:\n{clean_prompt}")
+                    logger.info("-" * 80)
+                    logger.info(f"期望输出:\n{sample['output']}")
+                    logger.info("-" * 80)
+
+                logger.info("=" * 80)
+                logger.info("[调试输出结束] 请检查上述样本的prompt是否包含完整JSON结构")
+                logger.info("=" * 80)
+
             # 训练前强制清空GPU缓存
             if torch.cuda.is_available():
                 # Full Fine-tuning需要更激进的显存清理
@@ -812,28 +836,6 @@ class BaseTrainer(ABC):
                 tokenizer=self.tokenizer,
                 pad_to_multiple_of=8
             )
-
-            # 调试：打印前3个训练样本
-            if self.debug_samples and len(self.train_dataset) > 0:
-                logger.info("=" * 80)
-                logger.info("[调试输出] 打印前3个训练样本的prompt")
-                logger.info("=" * 80)
-
-                for i in range(min(3, len(self.train_dataset))):
-                    sample = self.train_dataset.data[i]
-                    logger.info(f"\n样本 {i+1}:")
-                    logger.info("-" * 80)
-                    # Remove Qwen special tokens before printing
-                    prompt_text = sample.get('input_with_prompt', 'N/A')
-                    clean_prompt = _remove_qwen_special_tokens(prompt_text)
-                    logger.info(f"完整Prompt:\n{clean_prompt}")
-                    logger.info("-" * 80)
-                    logger.info(f"期望输出:\n{sample['output']}")
-                    logger.info("-" * 80)
-
-                logger.info("=" * 80)
-                logger.info("[调试输出结束] 请检查上述样本的prompt是否包含完整JSON结构")
-                logger.info("=" * 80)
 
             # 创建Trainer（使用NaN-aware早停callback）
             early_stopping_callback = NaNAwareEarlyStoppingCallback(
