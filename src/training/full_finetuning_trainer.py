@@ -94,8 +94,13 @@ class FullFineTuningTrainer(BaseTrainer):
         self.lora_rank = 16
         self.lora_alpha = 32
         self.lora_dropout = 0.05
-        # 仅attention层，移除FFN以节省显存
-        self.target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+        # 【修改点】：扩展 Target Modules，包含所有线性层（MLP + Attention）
+        # 以前只有 ["q_proj", "k_proj", "v_proj", "o_proj"]
+        # 现在加入 MLP 层，这才是真正的 "QLoRA" 完全体
+        self.target_modules = [
+            "q_proj", "k_proj", "v_proj", "o_proj",  # Attention层
+            "gate_proj", "up_proj", "down_proj"  # MLP层 (新增)
+        ]
 
         # Full Fine-tuning显存优化：减少dataloader workers
         self.reduced_workers = True

@@ -91,6 +91,7 @@ def detect_csv_encoding(filepath: Path) -> str:
     encodings = [
         'utf-8-sig',       # 带BOM的UTF-8（你的生成脚本用的）
         'utf-8',           # 标准UTF-8
+        'cp1252',  # <--- 【新增】关键！修复 CM1/WARC 等西欧字符集乱码
         'gbk',             # Windows简体中文
         'gb2312',          # 简体中文
         'gb18030',         # 扩展GBK

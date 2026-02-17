@@ -421,26 +421,15 @@ class BaseTrainer(ABC):
     def _get_max_seq_length(self) -> int:
         """
         根据专家类型和训练方法确定最大序列长度
-
-        平衡质量和显存占用：
-        - Full Fine-tuning: 显存受限，使用768
-        - P-Tuning/Prompt Tuning: UML/General使用1024（JSON重复多），Text/Image使用1280
-        - LoRA: 显存充足，使用完整2048
+        4090 (24GB) 配合 batch_size=1, grad_accum=128, 4bit量化
+        完全可以支持 2048 长度的训练。
+        以前限制为 768/1024 会导致 UML 专家 50% 以上的数据被截断，必须修正。
+        【修改后】：统一所有方法使用 2048，确保公平性和数据完整性
 
         Returns:
             int: 最大序列长度
         """
-        if self.method_name == 'full_finetuning':
-            return 768
-
-        elif self.method_name in ['p_tuning', 'prompt_tuning']:
-            if self.expert_type in ['uml', 'general']:
-                return 1024
-            else:
-                return 1280
-
-        else:
-            return 2048
+        return 2048
 
     def _get_num_epochs_from_data(self) -> int:
         """
