@@ -138,27 +138,14 @@ class PTuningTrainer(BaseTrainer):
         获取P-Tuning v2专用的batch配置
 
         P-Tuning v2不能使用gradient checkpointing，显存占用更大
-        根据实际显存监控调整：
-        - Text/Image: 可适当增大batch
-        - UML/General: 保持保守配置
-
-        针对不同expert优化：
-        - Text (预计14-16GB): batch=2, grad_accum=64
-        - Image (预计12-14GB): batch=4, grad_accum=32
-        - UML (预计16-18GB): batch=1, grad_accum=128
-        - General (预计18-20GB): batch=1, grad_accum=128
+        统一使用保守配置避免OOM：
+        - 所有专家：batch=1, grad_accum=128（有效batch=128）
 
         Returns:
             (batch_size, gradient_accumulation_steps)
         """
-        if self.expert_type == 'image':
-            return 4, 32
-        elif self.expert_type == 'text':
-            return 2, 64
-        elif self.expert_type in ['uml', 'general']:
-            return 1, 128
-        else:
-            return 1, 128
+        # 统一配置，避免text和image专家OOM
+        return 1, 128
 
     def setup_model(self) -> bool:
         """
