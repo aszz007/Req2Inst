@@ -586,10 +586,10 @@ class BaseTrainer(ABC):
 
     def _get_eval_steps(self) -> int:
         """
-        根据数据量和batch配置动态计算验证步数
+        根据总训练步数动态计算验证步数
 
-        目标：每个epoch验证8-10次，确保eval-loss曲线足够平滑
-        最少不低于5次/epoch（即使是小数据集）
+        目标：整个训练过程总验证次数约10次，确保eval-loss曲线平滑且开销可控。
+        同时确保每个epoch至少验证1次（eval_steps不超过steps_per_epoch）。
 
         Returns:
             int: eval_steps
@@ -601,28 +601,30 @@ class BaseTrainer(ABC):
         batch_size, gradient_accumulation_steps = self._get_batch_config()
         num_samples = len(self.train_dataset)
 
-        # 计算每个epoch的步数
+        # 计算每个epoch的步数和总步数
         steps_per_epoch = max(1, num_samples // (batch_size * gradient_accumulation_steps))
+        total_steps = steps_per_epoch * self.train_cfg.num_epochs
 
-        # 目标：每epoch验证8-10次（确保曲线平滑）
-        target_evals_per_epoch = 9
-        eval_steps = max(1, steps_per_epoch // target_evals_per_epoch)
+        # 目标：整个训练过程总验证次数约10次
+        target_total_evals = 10
+        eval_steps = max(1, round(total_steps / target_total_evals))
 
-        # 确保至少验证5次/epoch
-        min_evals_per_epoch = 5
-        max_eval_steps = max(1, steps_per_epoch // min_evals_per_epoch)
-        if eval_steps > max_eval_steps:
-            eval_steps = max_eval_steps
+        # 确保每个epoch至少验证1次（eval_steps不超过steps_per_epoch）
+        eval_steps = min(eval_steps, steps_per_epoch)
+        eval_steps = max(1, eval_steps)
 
-        actual_evals = steps_per_epoch / eval_steps if eval_steps > 0 else 0
+        actual_total_evals = total_steps / eval_steps if eval_steps > 0 else 0
+        actual_evals_per_epoch = steps_per_epoch / eval_steps if eval_steps > 0 else 0
 
         logger.info(f"动态eval_steps配置:")
         logger.info(f"  训练样本数: {num_samples}")
         logger.info(f"  有效batch大小: {batch_size * gradient_accumulation_steps}")
         logger.info(f"  每epoch步数: {steps_per_epoch}")
-        logger.info(f"  目标验证次数/epoch: {target_evals_per_epoch}")
+        logger.info(f"  总训练步数: {total_steps}")
+        logger.info(f"  目标总验证次数: {target_total_evals}")
         logger.info(f"  计算得到eval_steps: {eval_steps}")
-        logger.info(f"  实际验证次数/epoch: {actual_evals:.1f}")
+        logger.info(f"  实际总验证次数: {actual_total_evals:.1f}")
+        logger.info(f"  实际验证次数/epoch: {actual_evals_per_epoch:.1f}")
 
         return eval_steps
 

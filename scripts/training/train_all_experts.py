@@ -49,6 +49,12 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 
 TRAINING_TASKS = {
+    'lora_moe': {
+        'text': 'scripts/training/lora_moe/train_text_expert.py',
+        'image': 'scripts/training/lora_moe/train_image_expert.py',
+        'uml': 'scripts/training/lora_moe/train_uml_expert.py',
+        'general': 'scripts/training/lora_moe/train_general_expert.py',
+    },
     'prompt_tuning': {
         'text': 'scripts/training/prompt_tuning/train_text_expert.py',
         'image': 'scripts/training/prompt_tuning/train_image_expert.py',
@@ -71,6 +77,7 @@ TRAINING_TASKS = {
 
 
 ESTIMATED_TIME = {
+    'lora_moe': {'text': 0.8, 'image': 0.2, 'uml': 0.5, 'general': 1.5},
     'prompt_tuning': {'text': 1.0, 'image': 0.3, 'uml': 0.75, 'general': 1.9},
     'p_tuning': {'text': 1.3, 'image': 0.4, 'uml': 0.9, 'general': 2.3},
     'full_finetuning': {'text': 1.8, 'image': 0.6, 'uml': 1.25, 'general': 3.0},
@@ -82,11 +89,12 @@ def print_header():
     print("\n" + "=" * 80)
     print(" " * 22 + "一键训练所有专家")
     print("=" * 80)
-    print("\n本脚本将按顺序训练12个模型：")
-    print("  - 第1轮：Prompt Tuning (4个专家，约4小时)")
-    print("  - 第2轮：P-Tuning v2 (4个专家，约5小时)")
-    print("  - 第3轮：准全参数微调 (4个专家，约7小时)")
-    print("\n总预计时间：约16小时")
+    print("\n本脚本将按顺序训练16个模型：")
+    print("  - 第1轮：LoRA-MoE (4个专家，约3小时)")
+    print("  - 第2轮：Prompt Tuning (4个专家，约4小时)")
+    print("  - 第3轮：P-Tuning v2 (4个专家，约5小时)")
+    print("  - 第4轮：准全参数微调 (4个专家，约7小时)")
+    print("\n总预计时间：约19小时")
     print("=" * 80 + "\n")
 
 
@@ -193,7 +201,7 @@ def main():
     parser.add_argument(
         '--method',
         nargs='+',
-        choices=['prompt_tuning', 'p_tuning', 'full_finetuning', 'all'],
+        choices=['lora_moe', 'prompt_tuning', 'p_tuning', 'full_finetuning', 'all'],
         default=['all'],
         help='训练指定方法，可指定多个（默认：all）'
     )
@@ -234,6 +242,7 @@ def main():
         session_num = 1
         for method in methods_to_train:
             method_display = {
+                'lora_moe': 'LoRA-MoE（混合专家微调）',
                 'prompt_tuning': 'Prompt Tuning（软提示）',
                 'p_tuning': 'P-Tuning v2（前缀微调）',
                 'full_finetuning': '准全参数微调'
