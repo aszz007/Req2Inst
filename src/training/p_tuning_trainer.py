@@ -76,26 +76,24 @@ class PTuningTrainer(BaseTrainer):
 
         # P-Tuning v2超参数（直接定义，便于实验调整）
         self.num_virtual_tokens = 20
-        self.encoder_hidden_size = 64
+        self.encoder_hidden_size = 128  # 从64增加到128，提升稳定性
         self.prefix_projection = True
 
         # ===== NaN防护配置 =====
         # P-Tuning v2容易产生NaN验证损失，需要更保守的配置
 
-        # 1. 降低学习率（从0.0002降到0.00005，降低75%）
+        # 1. 降低学习率（从0.0002降到0.00002，降低90%）
         #    原因：P-Tuning只训练~500万参数，对学习率极其敏感
+        #    grad_norm>1000表明学习率仍然过大，需要进一步降低
         original_lr = self.train_cfg.learning_rate
-        self.train_cfg.learning_rate = 5e-5
+        self.train_cfg.learning_rate = 2e-5
         logger.warning("=" * 80)
-        logger.warning("P-Tuning v2 NaN防护配置已启用")
+        logger.warning("P-Tuning v2 NaN防护配置已启用（增强版）")
         logger.warning("=" * 80)
-        logger.warning(f"学习率调整: {original_lr} → {self.train_cfg.learning_rate} (降低75%)")
+        logger.warning(f"学习率调整: {original_lr} → {self.train_cfg.learning_rate} (降低90%)")
         logger.warning("原因: P-Tuning v2参数少，学习率过大会导致NaN验证损失")
-
-        # 2. 检查encoder_hidden_size（如果太小会警告）
-        if self.encoder_hidden_size < 128:
-            logger.warning(f"Encoder Hidden Size={self.encoder_hidden_size}偏小")
-            logger.warning("如果训练中出现NaN，建议增加到128或256")
+        logger.warning(f"Encoder Hidden Size: {self.encoder_hidden_size} (已从64增加到128)")
+        logger.warning("原因: 更大的encoder提升表达能力和训练稳定性")
 
         logger.warning("其他NaN防护措施:")
         logger.warning("  - 严格梯度裁剪: max_grad_norm=0.5 (已在base_trainer中启用)")
@@ -121,15 +119,14 @@ class PTuningTrainer(BaseTrainer):
         logger.info(f"P-Tuning v2配置: virtual_tokens={self.num_virtual_tokens}, "
                     f"encoder_hidden_size={self.encoder_hidden_size}, "
                     f"prefix_projection={self.prefix_projection}")
-        logger.info(f"Max序列长度: {self.train_cfg.max_seq_length} (激进显存优化)")
+        logger.info(f"Max序列长度: {self.train_cfg.max_seq_length}")
         logger.info("显存优化策略:")
-        logger.info("  1. encoder_hidden_size=64 (50%内存减少)")
-        logger.info("  2. 激进序列长度 (UML/General=1024)")
+        logger.info("  1. encoder_hidden_size=128 (平衡性能和稳定性)")
+        logger.info("  2. 序列长度: UML/General=1024, Text/Image=512")
         logger.info("  3. 启用expandable_segments (减少碎片)")
-        logger.info("  4. 极小batch_size=1 + 大梯度累积")
+        logger.info("  4. batch_size=1 + 梯度累积=128")
+        logger.info("  5. 学习率=2e-5 (防止梯度爆炸)")
         logger.info("注意: P-Tuning v2不支持gradient checkpointing，已禁用")
-        if self.expert_type in ['uml', 'general']:
-            logger.warning("如果仍OOM，可考虑: encoder_hidden_size→32 或 num_virtual_tokens→15")
 
         self._print_training_config()
 
@@ -198,6 +195,30 @@ class PTuningTrainer(BaseTrainer):
             if hasattr(self.model, 'prompt_encoder'):
                 self.model.prompt_encoder.to(model_dtype)
                 logger.info(f"Prefix encoder已转换为{model_dtype}，与基础模型dtype保持一致")
+
+            # ===== 诊断性日志：检查模型各部分dtype =====
+            logger.info("=" * 80)
+            logger.info("模型Dtype诊断")
+            logger.info("=" * 80)
+
+            # 检查prompt_encoder的dtype
+            if hasattr(self.model, 'prompt_encoder'):
+                for name, param in self.model.prompt_encoder.named_parameters():
+                    logger.info(f"  prompt_encoder.{name}: dtype={param.dtype}, shape={param.shape}")
+
+            # 检查base model的部分层dtype
+            base_model = self.model.get_base_model()
+            if hasattr(base_model, 'model'):
+                # Qwen3-8B结构
+                if hasattr(base_model.model, 'layers') and len(base_model.model.layers) > 0:
+                    first_layer = base_model.model.layers[0]
+                    if hasattr(first_layer, 'self_attn'):
+                        attn = first_layer.self_attn
+                        if hasattr(attn, 'q_proj'):
+                            logger.info(f"  base_model.layers[0].self_attn.q_proj.weight: dtype={attn.q_proj.weight.dtype}")
+
+            logger.info(f"  目标dtype: {model_dtype} ({'bfloat16' if self.use_rtx4090_optimization else 'float16'})")
+            logger.info("=" * 80)
 
             trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
             total_params = sum(p.numel() for p in self.model.parameters())
