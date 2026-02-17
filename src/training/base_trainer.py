@@ -783,10 +783,25 @@ class BaseTrainer(ABC):
                     'dataloader_prefetch_factor': prefetch_factor,
                 })
 
+                # P-Tuning/Prompt Tuning: prefix encoder is float32 by default.
+                # Training uses torch.autocast(bfloat16) which silently casts it,
+                # but eval skips autocast when bf16_full_eval=False (the default),
+                # causing a float32/bfloat16 dtype mismatch in attention that
+                # produces NaN eval_loss. Setting bf16_full_eval=True makes eval
+                # use the same precision context as training.
+                if self.method_name in ['p_tuning', 'prompt_tuning']:
+                    training_args_dict['bf16_full_eval'] = True
+                    logger.info(f"{self.method_name}: 启用bf16_full_eval=True，确保eval与训练精度一致，防止NaN验证损失")
+
                 if getattr(self, 'reduced_workers', False) or self.method_name == 'full_finetuning':
                     logger.info(f"使用减少的dataloader workers: {num_workers} (显存优化)")
             else:
-                training_args_dict['fp16'] = torch.cuda.is_available()
+                if torch.cuda.is_available():
+                    training_args_dict['fp16'] = True
+                    # Same precision consistency fix for fp16 mode
+                    if self.method_name in ['p_tuning', 'prompt_tuning']:
+                        training_args_dict['fp16_full_eval'] = True
+                        logger.info(f"{self.method_name}: 启用fp16_full_eval=True，确保eval与训练精度一致，防止NaN验证损失")
 
             training_args = TrainingArguments(**training_args_dict)
 

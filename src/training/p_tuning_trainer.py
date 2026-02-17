@@ -202,6 +202,16 @@ class PTuningTrainer(BaseTrainer):
 
             self.model = get_peft_model(self.model, peft_config)
 
+            # Cast prefix encoder to match the base model dtype (bfloat16 or float16).
+            # The PrefixEncoder MLP is initialized in float32 by default. Without this
+            # cast, there is a dtype mismatch between the float32 prefix key/values and
+            # the bfloat16 attention layers, which causes NaN in eval (where autocast
+            # is not active) while training loss stays valid (autocast bridges the gap).
+            model_dtype = torch.bfloat16 if self.use_rtx4090_optimization else torch.float16
+            if hasattr(self.model, 'prompt_encoder'):
+                self.model.prompt_encoder.to(model_dtype)
+                logger.info(f"Prefix encoder已转换为{model_dtype}，与基础模型dtype保持一致")
+
             trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
             total_params = sum(p.numel() for p in self.model.parameters())
             trainable_ratio = 100 * trainable_params / total_params
