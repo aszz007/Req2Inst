@@ -21,7 +21,9 @@ from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 from abc import ABC, abstractmethod
 from transformers import (
+    AutoModelForCausalLM,
     AutoTokenizer,
+    BitsAndBytesConfig,
     TrainingArguments,
     Trainer,
     TrainerCallback
@@ -33,6 +35,7 @@ from config.settings import (
     get_device_config,
     get_model_config
 )
+from peft import prepare_model_for_kbit_training
 from src.training.data_loader import (
     TextDatasetLoader,
     ImageDatasetLoader,
@@ -325,6 +328,83 @@ class BaseTrainer(ABC):
         logger.info(f"学习率: {self.train_cfg.learning_rate}")
         logger.info(f"最大序列长度: {self.train_cfg.max_seq_length}")
         logger.info("=" * 80)
+
+    def _load_base_model(self, use_4bit: bool) -> bool:
+        """
+        加载基础模型和Tokenizer（所有微调方法共用）
+
+        负责：
+        - 4bit量化配置（可选）
+        - AutoModelForCausalLM加载
+        - Qwen3-8B思考模式禁用
+        - prepare_model_for_kbit_training（4bit量化后必须调用）
+        - Tokenizer加载与pad_token设置
+
+        子类在 setup_model() 中调用此方法后，仅需追加各自的PEFT配置。
+
+        Args:
+            use_4bit: 是否启用4bit量化
+
+        Returns:
+            bool: 是否成功
+        """
+        try:
+            logger.info("加载基础模型...")
+
+            quantization_config = None
+            if use_4bit:
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.bfloat16 if self.use_rtx4090_optimization else torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_quant_type="nf4"
+                )
+                logger.info("启用4bit量化")
+
+            model_kwargs = {
+                'pretrained_model_name_or_path': self.base_model_path,
+                'trust_remote_code': True,
+                'device_map': 'auto',
+                'dtype': torch.bfloat16 if self.use_rtx4090_optimization else torch.float16,
+            }
+            if quantization_config:
+                model_kwargs['quantization_config'] = quantization_config
+
+            self.model = AutoModelForCausalLM.from_pretrained(**model_kwargs)
+
+            if self.model_version == 'qwen3_8b':
+                if hasattr(self.model.config, 'enable_thinking'):
+                    self.model.config.enable_thinking = False
+                    logger.info("Qwen3-8B: 禁用思考模式（enable_thinking=False）")
+                else:
+                    logger.info("Qwen3-8B: 模型不支持enable_thinking配置，跳过")
+
+            if use_4bit:
+                self.model = prepare_model_for_kbit_training(self.model)
+
+            logger.info("加载Tokenizer...")
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.base_model_path,
+                trust_remote_code=True,
+                padding_side='left'
+            )
+
+            if self.tokenizer.pad_token is None:
+                if self.tokenizer.eos_token:
+                    self.tokenizer.pad_token = self.tokenizer.eos_token
+                else:
+                    self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+                    self.model.resize_token_embeddings(len(self.tokenizer))
+
+            logger.info(f"Tokenizer词汇表大小: {len(self.tokenizer)}")
+            logger.info(f"PAD token: {self.tokenizer.pad_token}")
+            return True
+
+        except Exception as e:
+            logger.error(f"基础模型加载失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
 
     def _get_batch_config(self) -> Tuple[int, int]:
         """
@@ -841,12 +921,27 @@ class BaseTrainer(ABC):
             logger.error(traceback.format_exc())
             return False
 
-    @abstractmethod
     def _save_weights(self):
         """
-        保存权重（子类必须实现）
+        保存权重（默认实现，子类如有特殊需求可覆盖）
+
+        保存 adapter 权重（PEFT）及 tokenizer 到 output_dir。
         """
-        pass
+        if self.model is None or self.tokenizer is None:
+            logger.error("模型或tokenizer未初始化，无法保存")
+            return
+
+        try:
+            logger.info(f"保存权重（{self.method_name}）...")
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            self.model.save_pretrained(str(self.output_dir))
+            self.tokenizer.save_pretrained(str(self.output_dir))
+            logger.info(f"权重已保存至: {self.output_dir}")
+
+        except Exception as e:
+            logger.error(f"保存权重失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
     def get_training_status(self) -> Dict:
         """

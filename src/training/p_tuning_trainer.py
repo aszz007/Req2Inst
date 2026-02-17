@@ -20,19 +20,12 @@ P-Tuning v2训练器 - P-Tuning v2方法的训练实现（对比实验）
 
 import torch
 from typing import Optional
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    BitsAndBytesConfig,
-)
 from peft import (
     PrefixTuningConfig,
     get_peft_model,
-    prepare_model_for_kbit_training,
     TaskType,
 )
 
-from config.settings import get_ptuning_config
 from src.training.base_trainer import BaseTrainer
 from src.utils.logger import get_logger
 
@@ -80,7 +73,11 @@ class PTuningTrainer(BaseTrainer):
         )
 
         self.use_4bit = use_4bit
-        self.ptuning_cfg = get_ptuning_config()
+
+        # P-Tuning v2超参数（直接定义，便于实验调整）
+        self.num_virtual_tokens = 20
+        self.encoder_hidden_size = 64
+        self.prefix_projection = True
 
         # ===== NaN防护配置 =====
         # P-Tuning v2容易产生NaN验证损失，需要更保守的配置
@@ -96,9 +93,9 @@ class PTuningTrainer(BaseTrainer):
         logger.warning("原因: P-Tuning v2参数少，学习率过大会导致NaN验证损失")
 
         # 2. 检查encoder_hidden_size（如果太小会警告）
-        if self.ptuning_cfg.encoder_hidden_size < 128:
-            logger.warning(f"Encoder Hidden Size={self.ptuning_cfg.encoder_hidden_size}偏小")
-            logger.warning("如果训练中出现NaN，建议在config中增加到128或256")
+        if self.encoder_hidden_size < 128:
+            logger.warning(f"Encoder Hidden Size={self.encoder_hidden_size}偏小")
+            logger.warning("如果训练中出现NaN，建议增加到128或256")
 
         logger.warning("其他NaN防护措施:")
         logger.warning("  - 严格梯度裁剪: max_grad_norm=0.5 (已在base_trainer中启用)")
@@ -121,9 +118,9 @@ class PTuningTrainer(BaseTrainer):
         self.reduced_workers = True
 
         logger.info(f"4bit量化: {use_4bit}")
-        logger.info(f"P-Tuning v2配置: virtual_tokens={self.ptuning_cfg.num_virtual_tokens}, "
-                    f"encoder_hidden_size={self.ptuning_cfg.encoder_hidden_size}, "
-                    f"prefix_projection={self.ptuning_cfg.prefix_projection}")
+        logger.info(f"P-Tuning v2配置: virtual_tokens={self.num_virtual_tokens}, "
+                    f"encoder_hidden_size={self.encoder_hidden_size}, "
+                    f"prefix_projection={self.prefix_projection}")
         logger.info(f"Max序列长度: {self.train_cfg.max_seq_length} (激进显存优化)")
         logger.info("显存优化策略:")
         logger.info("  1. encoder_hidden_size=64 (50%内存减少)")
@@ -174,97 +171,37 @@ class PTuningTrainer(BaseTrainer):
             bool: 是否成功
         """
         try:
-            # 设置PyTorch内存分配器优化（减少内存碎片）
             import os
             os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
             logger.info("已设置PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True（减少内存碎片）")
 
-            # 清空GPU缓存，最大化可用显存
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 logger.info("已清空GPU缓存")
 
-            logger.info("加载基础模型...")
-
-            # 配置4bit量化（如果启用）
-            quantization_config = None
-            if self.use_4bit:
-                quantization_config = BitsAndBytesConfig(
-                    load_in_4bit=True,
-                    bnb_4bit_compute_dtype=torch.bfloat16 if self.use_rtx4090_optimization else torch.float16,
-                    bnb_4bit_use_double_quant=True,
-                    bnb_4bit_quant_type="nf4"
-                )
-                logger.info("启用4bit量化")
-
-            # 构建模型加载参数
-            model_kwargs = {
-                'pretrained_model_name_or_path': self.base_model_path,
-                'trust_remote_code': True,
-                'device_map': 'auto',
-                'dtype': torch.bfloat16 if self.use_rtx4090_optimization else torch.float16,
-            }
-
-            if quantization_config:
-                model_kwargs['quantization_config'] = quantization_config
-
-            self.model = AutoModelForCausalLM.from_pretrained(**model_kwargs)
-
-            # Qwen3-8B需要禁用思考模式（加载后设置）
-            if self.model_version == 'qwen3_8b':
-                if hasattr(self.model.config, 'enable_thinking'):
-                    self.model.config.enable_thinking = False
-                    logger.info("Qwen3-8B: 禁用思考模式（enable_thinking=False）")
-                else:
-                    logger.info("Qwen3-8B: 模型不支持enable_thinking配置，跳过")
-
-            # 4bit量化后准备模型（冻结基础模型参数，仅prefix可训练）
-            if self.use_4bit:
-                self.model = prepare_model_for_kbit_training(self.model)
-
-            # 加载tokenizer
-            logger.info("加载Tokenizer...")
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.base_model_path,
-                trust_remote_code=True,
-                padding_side='left'
-            )
-
-            # 设置pad_token
-            if self.tokenizer.pad_token is None:
-                if self.tokenizer.eos_token:
-                    self.tokenizer.pad_token = self.tokenizer.eos_token
-                else:
-                    self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-                    self.model.resize_token_embeddings(len(self.tokenizer))
-
-            logger.info(f"Tokenizer词汇表大小: {len(self.tokenizer)}")
-            logger.info(f"PAD token: {self.tokenizer.pad_token}")
+            if not self._load_base_model(self.use_4bit):
+                return False
 
             # 配置P-Tuning v2（Prefix Tuning）
             logger.info("配置P-Tuning v2...")
 
-            # 关键：P-Tuning v2不支持gradient checkpointing，必须先禁用
             if hasattr(self.model, 'gradient_checkpointing_disable'):
                 self.model.gradient_checkpointing_disable()
                 logger.info("已禁用gradient checkpointing（P-Tuning v2要求）")
 
-            # 如果模型已经启用了gradient checkpointing，需要显式关闭
             if hasattr(self.model, 'config') and hasattr(self.model.config, 'use_cache'):
                 self.model.config.use_cache = True
                 logger.info("启用use_cache（P-Tuning v2优化）")
 
             peft_config = PrefixTuningConfig(
                 task_type=TaskType.CAUSAL_LM,
-                num_virtual_tokens=self.ptuning_cfg.num_virtual_tokens,
-                encoder_hidden_size=self.ptuning_cfg.encoder_hidden_size,
-                prefix_projection=self.ptuning_cfg.prefix_projection
+                num_virtual_tokens=self.num_virtual_tokens,
+                encoder_hidden_size=self.encoder_hidden_size,
+                prefix_projection=self.prefix_projection
             )
 
-            # 应用P-Tuning v2（仅prefix tokens和encoder可训练）
             self.model = get_peft_model(self.model, peft_config)
 
-            # 打印可训练参数统计
             trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
             total_params = sum(p.numel() for p in self.model.parameters())
             trainable_ratio = 100 * trainable_params / total_params
@@ -274,9 +211,9 @@ class PTuningTrainer(BaseTrainer):
             logger.info("=" * 80)
             logger.info(f"可训练参数: {trainable_params:,} ({trainable_ratio:.4f}%)")
             logger.info(f"总参数: {total_params:,}")
-            logger.info(f"Virtual Tokens: {self.ptuning_cfg.num_virtual_tokens}")
-            logger.info(f"Encoder Hidden Size: {self.ptuning_cfg.encoder_hidden_size}")
-            logger.info(f"Prefix Projection: {self.ptuning_cfg.prefix_projection}")
+            logger.info(f"Virtual Tokens: {self.num_virtual_tokens}")
+            logger.info(f"Encoder Hidden Size: {self.encoder_hidden_size}")
+            logger.info(f"Prefix Projection: {self.prefix_projection}")
             logger.info("=" * 80)
 
             return True
@@ -286,25 +223,3 @@ class PTuningTrainer(BaseTrainer):
             import traceback
             logger.error(traceback.format_exc())
             return False
-
-    def _save_weights(self):
-        """
-        保存P-Tuning v2权重（仅保存prefix tokens和encoder）
-        """
-        if self.model is None or self.tokenizer is None:
-            logger.error("模型或tokenizer未初始化，无法保存")
-            return
-
-        try:
-            logger.info("保存P-Tuning v2权重...")
-            self.output_dir.mkdir(parents=True, exist_ok=True)
-
-            self.model.save_pretrained(str(self.output_dir))
-            self.tokenizer.save_pretrained(str(self.output_dir))
-
-            logger.info(f"P-Tuning v2权重已保存至: {self.output_dir}")
-
-        except Exception as e:
-            logger.error(f"保存权重失败: {e}")
-            import traceback
-            logger.error(traceback.format_exc())

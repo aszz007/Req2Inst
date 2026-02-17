@@ -14,19 +14,12 @@ LoRA训练器 - LoRA-MoE方法的训练实现
 import torch
 from pathlib import Path
 from typing import Optional
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    BitsAndBytesConfig,
-)
 from peft import (
     LoraConfig,
     get_peft_model,
-    prepare_model_for_kbit_training,
     TaskType
 )
 
-from config.settings import get_lora_config
 from src.training.base_trainer import BaseTrainer
 from src.utils.logger import get_logger
 
@@ -74,14 +67,16 @@ class LoRATrainer(BaseTrainer):
 
         self.use_4bit = use_4bit
 
-        # 获取LoRA配置
-        self.lora_cfg = get_lora_config('conservative')
+        # LoRA超参数（直接定义，便于实验调整）
+        self.lora_rank = 8
+        self.lora_alpha = 16
+        self.lora_dropout = 0.05
 
         # 根据模型版本确定target_modules
         self.target_modules = self._get_target_modules()
 
         logger.info(f"4bit量化: {use_4bit}")
-        logger.info(f"LoRA配置: rank={self.lora_cfg.rank}, alpha={self.lora_cfg.alpha}")
+        logger.info(f"LoRA配置: rank={self.lora_rank}, alpha={self.lora_alpha}")
         logger.info(f"Target modules: {self.target_modules}")
         logger.info("训练稳定性配置:")
         logger.info("  - 梯度裁剪: max_grad_norm=1.0 (标准设置)")
@@ -143,78 +138,22 @@ class LoRATrainer(BaseTrainer):
             bool: 是否成功
         """
         try:
-            logger.info("加载基础模型...")
-
-            # 配置4bit量化（如果启用）
-            quantization_config = None
-            if self.use_4bit:
-                quantization_config = BitsAndBytesConfig(
-                    load_in_4bit=True,
-                    bnb_4bit_compute_dtype=torch.bfloat16 if self.use_rtx4090_optimization else torch.float16,
-                    bnb_4bit_use_double_quant=True,
-                    bnb_4bit_quant_type="nf4"
-                )
-                logger.info("启用4bit量化")
-
-            # 加载模型
-            model_kwargs = {
-                'pretrained_model_name_or_path': self.base_model_path,
-                'trust_remote_code': True,
-                'device_map': 'auto',
-                'dtype': torch.bfloat16 if self.use_rtx4090_optimization else torch.float16,
-            }
-
-            if quantization_config:
-                model_kwargs['quantization_config'] = quantization_config
-
-            self.model = AutoModelForCausalLM.from_pretrained(**model_kwargs)
-
-            # Qwen3-8B需要禁用思考模式（加载后设置）
-            if self.model_version == 'qwen3_8b':
-                if hasattr(self.model.config, 'enable_thinking'):
-                    self.model.config.enable_thinking = False
-                    logger.info("Qwen3-8B: 禁用思考模式（enable_thinking=False）")
-                else:
-                    logger.info("Qwen3-8B: 模型不支持enable_thinking配置，跳过")
-
-            # 如果使用4bit量化，准备模型
-            if self.use_4bit:
-                self.model = prepare_model_for_kbit_training(self.model)
-
-            # 加载tokenizer
-            logger.info("加载Tokenizer...")
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.base_model_path,
-                trust_remote_code=True,
-                padding_side='left'
-            )
-
-            # 设置pad_token
-            if self.tokenizer.pad_token is None:
-                if self.tokenizer.eos_token:
-                    self.tokenizer.pad_token = self.tokenizer.eos_token
-                else:
-                    self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-                    self.model.resize_token_embeddings(len(self.tokenizer))
-
-            logger.info(f"Tokenizer词汇表大小: {len(self.tokenizer)}")
-            logger.info(f"PAD token: {self.tokenizer.pad_token}")
+            if not self._load_base_model(self.use_4bit):
+                return False
 
             # 配置LoRA
             logger.info("配置LoRA...")
             lora_config = LoraConfig(
                 task_type=TaskType.CAUSAL_LM,
-                r=self.lora_cfg.rank,
-                lora_alpha=self.lora_cfg.alpha,
-                lora_dropout=self.lora_cfg.dropout,
+                r=self.lora_rank,
+                lora_alpha=self.lora_alpha,
+                lora_dropout=self.lora_dropout,
                 target_modules=self.target_modules,
                 bias="none",
             )
 
-            # 应用LoRA
             self.model = get_peft_model(self.model, lora_config)
 
-            # 打印可训练参数统计
             trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
             total_params = sum(p.numel() for p in self.model.parameters())
             trainable_ratio = 100 * trainable_params / total_params
@@ -224,9 +163,9 @@ class LoRATrainer(BaseTrainer):
             logger.info("=" * 80)
             logger.info(f"可训练参数: {trainable_params:,} ({trainable_ratio:.2f}%)")
             logger.info(f"总参数: {total_params:,}")
-            logger.info(f"LoRA Rank: {self.lora_cfg.rank}")
-            logger.info(f"LoRA Alpha: {self.lora_cfg.alpha}")
-            logger.info(f"LoRA Dropout: {self.lora_cfg.dropout}")
+            logger.info(f"LoRA Rank: {self.lora_rank}")
+            logger.info(f"LoRA Alpha: {self.lora_alpha}")
+            logger.info(f"LoRA Dropout: {self.lora_dropout}")
             logger.info(f"Target Modules: {self.target_modules}")
             logger.info("=" * 80)
 
@@ -238,28 +177,6 @@ class LoRATrainer(BaseTrainer):
             logger.error(traceback.format_exc())
             return False
 
-    def _save_weights(self):
-        """
-        保存LoRA权重
-        """
-        if self.model is None or self.tokenizer is None:
-            logger.error("模型或tokenizer未初始化，无法保存")
-            return
-
-        try:
-            logger.info("保存LoRA权重...")
-            self.output_dir.mkdir(parents=True, exist_ok=True)
-
-            # 保存LoRA权重
-            self.model.save_pretrained(str(self.output_dir))
-            self.tokenizer.save_pretrained(str(self.output_dir))
-
-            logger.info(f"LoRA权重已保存至: {self.output_dir}")
-
-        except Exception as e:
-            logger.error(f"保存权重失败: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
 
 
 # 测试代码
