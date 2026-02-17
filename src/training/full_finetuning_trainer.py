@@ -64,7 +64,7 @@ class FullFineTuningTrainer(BaseTrainer):
                  output_dir: Optional[str] = None,
                  use_4bit: bool = True,
                  use_rtx4090_optimization: bool = True,
-                 debug_samples: bool = False):
+                 debug_samples: bool = True):
         """
         初始化Full Fine-tuning训练器
 
@@ -74,7 +74,7 @@ class FullFineTuningTrainer(BaseTrainer):
             output_dir: 输出目录（None则使用checkpoints/full_finetuning/{expert_type}_expert/）
             use_4bit: 是否使用4bit量化训练
             use_rtx4090_optimization: 是否启用RTX 4090优化
-            debug_samples: 是否在训练开始前打印前3个训练样本（默认关闭）
+            debug_samples: 是否在训练开始前打印前3个训练样本（默认开启）
         """
         super().__init__(
             expert_type=expert_type,
@@ -84,6 +84,8 @@ class FullFineTuningTrainer(BaseTrainer):
             use_rtx4090_optimization=use_rtx4090_optimization,
             debug_samples=debug_samples
         )
+        # 显式再赋值，确保 __pycache__ 旧字节码不会覆盖用户传入的值
+        self.debug_samples = debug_samples
 
         self.use_4bit = use_4bit
 

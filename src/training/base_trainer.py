@@ -224,7 +224,7 @@ class BaseTrainer(ABC):
                  base_model_path: Optional[str] = None,
                  output_dir: Optional[str] = None,
                  use_rtx4090_optimization: bool = True,
-                 debug_samples: bool = True):
+                 debug_samples: bool = False):
         """
         初始化基础训练器
 
@@ -648,6 +648,11 @@ class BaseTrainer(ABC):
             # 调试：打印前3个训练样本（放在所有配置代码之前，确保一定能执行）
             # 注意：此处只读取 .data 原始列表，不调用 tokenizer，与训练顺序无关
             # ----------------------------------------------------------------
+            # 先打印 debug_samples 实际值，供诊断（无论是否开启均输出）
+            logger.info(f"[train() 入口] debug_samples={self.debug_samples}, "
+                        f"train_samples={len(self.train_dataset) if self.train_dataset else 0}, "
+                        f"method={self.method_name}, expert={self.expert_type}")
+
             if self.debug_samples and self.train_dataset is not None and len(self.train_dataset) > 0:
                 logger.info("=" * 80)
                 logger.info("[调试输出] 打印前3个训练样本的prompt")
