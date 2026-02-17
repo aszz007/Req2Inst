@@ -169,13 +169,13 @@ class PTuningTrainer(BaseTrainer):
             # 配置P-Tuning v2（Prefix Tuning）
             logger.info("配置P-Tuning v2...")
 
-            if hasattr(self.model, 'gradient_checkpointing_disable'):
-                self.model.gradient_checkpointing_disable()
-                logger.info("已禁用gradient checkpointing（P-Tuning v2要求）")
-
+            # use_cache must be False during training to avoid storing KV cache for every
+            # layer, which wastes significant GPU memory. (base_trainer already guarantees
+            # prepare_model_for_kbit_training is called without GC when
+            # disable_gradient_checkpointing=True, so no explicit disable needed here.)
             if hasattr(self.model, 'config') and hasattr(self.model.config, 'use_cache'):
-                self.model.config.use_cache = True
-                logger.info("启用use_cache（P-Tuning v2优化）")
+                self.model.config.use_cache = False
+                logger.info("已禁用use_cache（训练时禁止以节省显存）")
 
             peft_config = PrefixTuningConfig(
                 task_type=TaskType.CAUSAL_LM,
@@ -195,6 +195,25 @@ class PTuningTrainer(BaseTrainer):
             if hasattr(self.model, 'prompt_encoder'):
                 self.model.prompt_encoder.to(model_dtype)
                 logger.info(f"Prefix encoder已转换为{model_dtype}，与基础模型dtype保持一致")
+
+            # Enable gradient checkpointing on the PEFT-wrapped model to save activation
+            # memory. This is safe to call AFTER get_peft_model() because the PEFT
+            # ValueError check only runs during prompt encoder initialisation inside
+            # get_peft_model(). Once that succeeds, enabling GC on the resulting
+            # PeftModelForCausalLM instance does not re-trigger the check and allows
+            # the underlying transformer to recompute activations during backward,
+            # significantly reducing the peak activation memory at the cost of an
+            # extra forward pass per gradient-checkpointed block.
+            # disable_gradient_checkpointing=True is still set so that TrainingArguments
+            # does NOT call gradient_checkpointing_enable() a second time via the Trainer.
+            try:
+                if hasattr(self.model, 'enable_input_require_grads'):
+                    self.model.enable_input_require_grads()
+                if hasattr(self.model, 'gradient_checkpointing_enable'):
+                    self.model.gradient_checkpointing_enable()
+                    logger.info("已在PEFT包装后启用gradient checkpointing（显著节省activation显存）")
+            except Exception as gc_exc:
+                logger.warning(f"在PEFT包装后启用gradient checkpointing失败，将在不使用GC的情况下训练: {gc_exc}")
 
             # ===== 诊断性日志：检查模型各部分dtype =====
             logger.info("=" * 80)

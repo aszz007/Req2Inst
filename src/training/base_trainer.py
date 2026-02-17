@@ -380,7 +380,16 @@ class BaseTrainer(ABC):
                     logger.info("Qwen3-8B: 模型不支持enable_thinking配置，跳过")
 
             if use_4bit:
-                self.model = prepare_model_for_kbit_training(self.model)
+                # Certain PEFT methods (e.g. PrefixTuning) raise ValueError if gradient
+                # checkpointing is already enabled on the base model when get_peft_model()
+                # is called. When the subclass sets disable_gradient_checkpointing=True,
+                # skip enabling GC here so that PEFT initialisation succeeds. The subclass
+                # is then responsible for enabling GC on the PEFT-wrapped model afterwards.
+                use_gc_for_kbit = not getattr(self, 'disable_gradient_checkpointing', False)
+                self.model = prepare_model_for_kbit_training(
+                    self.model,
+                    use_gradient_checkpointing=use_gc_for_kbit
+                )
 
             logger.info("加载Tokenizer...")
             self.tokenizer = AutoTokenizer.from_pretrained(
