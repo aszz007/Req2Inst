@@ -50,7 +50,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 TRAINING_TASKS = {
     'lora_moe': {
-        'text': 'scripts/training/lora_moe/train_text_expert.py',
+        # 'text': 'scripts/training/lora_moe/train_text_expert.py',  # 已完成，跳过
         'image': 'scripts/training/lora_moe/train_image_expert.py',
         'uml': 'scripts/training/lora_moe/train_uml_expert.py',
         'general': 'scripts/training/lora_moe/train_general_expert.py',
@@ -249,14 +249,20 @@ def main():
             }[method]
 
             total_method_time = sum(
-                ESTIMATED_TIME[method][expert]
+                ESTIMATED_TIME[method].get(expert, 0)
                 for expert in experts_to_train
+                if expert in TRAINING_TASKS[method]
             )
 
             print_session_header(session_num, method_display, total_method_time)
             session_num += 1
 
             for expert in experts_to_train:
+                # 检查任务是否存在（支持手动注释跳过）
+                if expert not in TRAINING_TASKS[method]:
+                    print(f"\n跳过: {method}/{expert} (已注释)")
+                    continue
+
                 script_path = TRAINING_TASKS[method][expert]
                 success = run_training_task(method, expert, script_path)
 

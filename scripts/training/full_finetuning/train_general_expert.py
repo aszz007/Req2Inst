@@ -63,8 +63,6 @@ def main():
                         help='使用4bit量化训练（默认：True）')
     parser.add_argument('--no_4bit', dest='use_4bit', action='store_false',
                         help='不使用4bit量化')
-    parser.add_argument('--debug_samples', action='store_true', default=False,
-                        help='打印前3个训练样本（默认：False）')
     args = parser.parse_args()
 
     # 打印标题
@@ -96,7 +94,6 @@ def main():
         expert_type='general',
         use_4bit=args.use_4bit,
         use_rtx4090_optimization=True,
-        debug_samples=args.debug_samples
     )
 
     # 设置模型

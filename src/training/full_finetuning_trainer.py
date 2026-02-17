@@ -118,11 +118,9 @@ class FullFineTuningTrainer(BaseTrainer):
         """
         获取Full Fine-tuning专用的batch配置
 
-        根据实际显存使用情况优化：
-        - General (16GB使用): batch=2, grad_accum=64
-        - Text (类似General): batch=2, grad_accum=64
-        - UML (中等长度): batch=2, grad_accum=64
-        - Image (13GB使用，数据最短): batch=4, grad_accum=32
+        极保守配置以避免OOM（Full Fine-tuning显存占用最高）：
+        - Image (数据最短，但需保守): batch=2, grad_accum=64
+        - Text/UML/General (统一保守配置): batch=1, grad_accum=128
 
         保持有效batch=128以保证训练稳定性
 
@@ -132,13 +130,13 @@ class FullFineTuningTrainer(BaseTrainer):
         if self.use_rtx4090_optimization:
             # 根据专家类型优化batch配置
             if self.expert_type == 'image':
-                # Image数据最短（~500 tokens），显存占用最少，可用更大batch
-                return 4, 32
-            elif self.expert_type in ['text', 'uml', 'general']:
-                # Text/UML/General使用中等batch配置
+                # Image数据最短（~500 tokens），可用稍大batch
                 return 2, 64
+            elif self.expert_type in ['text', 'uml', 'general']:
+                # Text/UML/General使用最保守配置
+                return 1, 128
             else:
-                # 默认保守配置
+                # 默认最保守配置
                 return 1, 128
         else:
             # 非优化配置：使用保守设置

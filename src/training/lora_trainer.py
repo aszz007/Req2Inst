@@ -90,12 +90,11 @@ class LoRATrainer(BaseTrainer):
         """
         获取LoRA专用的batch配置，针对不同expert优化
 
-        LoRA显存占用适中，可以使用较大的batch_size
-        根据实际显存监控优化：
-        - Text (预计14-16GB): batch=4, grad_accum=32
-        - Image (最短，预计12-14GB): batch=8, grad_accum=16
-        - UML (中等长度，JSON输入较长，预计16-20GB): batch=2, grad_accum=64  ← 降低防OOM
-        - General (最长，混合text+image+uml，预计18-22GB): batch=2, grad_accum=64  ← 降低防OOM
+        保守配置以避免OOM（基于实际训练OOM分析优化）：
+        - Image (原batch=8出现OOM): batch=2, grad_accum=64
+        - Text (提供更多显存余量): batch=2, grad_accum=64
+        - UML (长序列JSON输入): batch=1, grad_accum=128
+        - General (最长序列): batch=1, grad_accum=128
 
         保持有效batch=128以保证训练稳定性
 
@@ -103,15 +102,14 @@ class LoRATrainer(BaseTrainer):
             (batch_size, gradient_accumulation_steps)
         """
         if self.use_rtx4090_optimization:
-            if self.expert_type == 'image':
-                return 8, 16
-            elif self.expert_type == 'text':
-                return 4, 32
+            if self.expert_type in ['image', 'text']:
+                # Image/Text使用保守配置，避免OOM
+                return 2, 64
             elif self.expert_type in ['uml', 'general']:
-                # UML/General序列较长（JSON输入），batch=4会OOM，降至2
-                return 2, 64
+                # UML/General使用最保守配置（序列长，JSON重复多）
+                return 1, 128
             else:
-                return 2, 64
+                return 1, 128
         else:
             return self.train_cfg.batch_size, self.train_cfg.gradient_accumulation_steps
 

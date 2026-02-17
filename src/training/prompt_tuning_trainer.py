@@ -110,12 +110,10 @@ class PromptTuningTrainer(BaseTrainer):
         """
         获取Prompt Tuning专用的batch配置
 
-        Prompt Tuning由于需要存储virtual tokens的梯度，显存占用较高
-        根据实际显存监控优化：
-        - Text (预计14-16GB): batch=2, grad_accum=64
-        - Image (预计12-14GB): batch=4, grad_accum=32
-        - UML (预计16-18GB): batch=2, grad_accum=64
-        - General (预计18-20GB): batch=1, grad_accum=128
+        保守配置以避免OOM（Prompt Tuning需要存储virtual tokens梯度）：
+        - Image/Text: batch=2, grad_accum=64
+        - UML: batch=1, grad_accum=128
+        - General: batch=1, grad_accum=128
 
         保持有效batch=128以保证训练稳定性
 
@@ -123,14 +121,12 @@ class PromptTuningTrainer(BaseTrainer):
             (batch_size, gradient_accumulation_steps)
         """
         if self.use_rtx4090_optimization:
-            if self.expert_type == 'image':
-                return 4, 32
-            elif self.expert_type in ['text', 'uml']:
+            if self.expert_type in ['image', 'text']:
                 return 2, 64
-            elif self.expert_type == 'general':
+            elif self.expert_type in ['uml', 'general']:
                 return 1, 128
             else:
-                return 2, 64
+                return 1, 128
         else:
             return self.train_cfg.batch_size, self.train_cfg.gradient_accumulation_steps
 
