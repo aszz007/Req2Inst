@@ -82,25 +82,21 @@ class PTuningTrainer(BaseTrainer):
         # ===== NaN防护配置 =====
         # P-Tuning v2容易产生NaN验证损失，需要更保守的配置
 
-        # 1. 降低学习率（从0.0002降到0.00002，降低90%）
-        #    原因：P-Tuning只训练~500万参数，对学习率极其敏感
-        #    grad_norm>1000表明学习率仍然过大，需要进一步降低
+        # Learning rate for P-Tuning v2 prefix encoder.
+        # The prefix encoder has ~9.6M parameters and requires a significantly
+        # higher LR than LoRA to update effectively. The previous 2e-5 value was
+        # a conservative workaround for NaN eval_loss; the actual root cause
+        # (gradient checkpointing discarding past_key_values) has been fixed, so
+        # a standard prefix-tuning LR of 1e-3 is used here.
         original_lr = self.train_cfg.learning_rate
-        self.train_cfg.learning_rate = 2e-5
-        logger.warning("=" * 80)
-        logger.warning("P-Tuning v2 NaN防护配置已启用（增强版）")
-        logger.warning("=" * 80)
-        logger.warning(f"学习率调整: {original_lr} → {self.train_cfg.learning_rate} (降低90%)")
-        logger.warning("原因: P-Tuning v2参数少，学习率过大会导致NaN验证损失")
-        logger.warning(f"Encoder Hidden Size: {self.encoder_hidden_size} (已从64增加到128)")
-        logger.warning("原因: 更大的encoder提升表达能力和训练稳定性")
-
-        logger.warning("其他NaN防护措施:")
-        logger.warning("  - 严格梯度裁剪: max_grad_norm=0.5 (已在base_trainer中启用)")
-        logger.warning("  - NaN-aware早停: 忽略NaN值，只基于有效loss判断")
-        logger.warning("  - 增加warmup: 20%步数用于模型稳定")
-        logger.warning("  - 数据质量检查: 过滤无效样本（有效labels<5）")
-        logger.warning("=" * 80)
+        self.train_cfg.learning_rate = 1e-3
+        logger.info("=" * 80)
+        logger.info("P-Tuning v2学习率配置")
+        logger.info("=" * 80)
+        logger.info(f"学习率: {original_lr} → {self.train_cfg.learning_rate}")
+        logger.info("原因: prefix encoder参数量少(~960万)，需要较高LR才能有效更新")
+        logger.info(f"Encoder Hidden Size: {self.encoder_hidden_size}")
+        logger.info("=" * 80)
 
         # P-Tuning v2不支持gradient checkpointing
         self.disable_gradient_checkpointing = True
@@ -122,10 +118,10 @@ class PTuningTrainer(BaseTrainer):
         logger.info(f"Max序列长度: {self.train_cfg.max_seq_length}")
         logger.info("显存优化策略:")
         logger.info("  1. encoder_hidden_size=128 (平衡性能和稳定性)")
-        logger.info("  2. 序列长度: UML/General=1024, Text/Image=512")
+        logger.info("  2. 序列长度: 统一2048 (由base_trainer管理)")
         logger.info("  3. 启用expandable_segments (减少碎片)")
         logger.info("  4. batch_size=1 + 梯度累积=128")
-        logger.info("  5. 学习率=2e-5 (防止梯度爆炸)")
+        logger.info("  5. 学习率=1e-3 (prefix encoder标准配置)")
         logger.info("注意: P-Tuning v2不支持gradient checkpointing，已禁用")
 
         self._print_training_config()
@@ -196,15 +192,24 @@ class PTuningTrainer(BaseTrainer):
                 self.model.prompt_encoder.to(model_dtype)
                 logger.info(f"Prefix encoder已转换为{model_dtype}，与基础模型dtype保持一致")
 
-            # NOTE: Gradient checkpointing is intentionally NOT enabled for PrefixTuning.
-            # Qwen3's gradient checkpointing implementation forces `past_key_values=None`
-            # in every decoder layer during the forward pass. PrefixTuning injects the
-            # learned prefix representations via `past_key_values`, so enabling gradient
-            # checkpointing silently discards all prefix key-values, making the prefix
-            # encoder unreachable by gradients (grad_norm stays 0.0) and producing a
-            # frozen eval_loss that never improves.
-            # disable_gradient_checkpointing=True is set so TrainingArguments also does
-            # not call gradient_checkpointing_enable() via the Trainer.
+            # Enable gradient checkpointing on the PEFT-wrapped model to save activation
+            # memory. This is safe to call AFTER get_peft_model() because the PEFT
+            # ValueError check only runs during prompt encoder initialisation inside
+            # get_peft_model(). Once that succeeds, enabling GC on the resulting
+            # PeftModelForCausalLM instance does not re-trigger the check and allows
+            # the underlying transformer to recompute activations during backward,
+            # significantly reducing the peak activation memory at the cost of an
+            # extra forward pass per gradient-checkpointed block.
+            # disable_gradient_checkpointing=True is still set so that TrainingArguments
+            # does NOT call gradient_checkpointing_enable() a second time via the Trainer.
+            try:
+                if hasattr(self.model, 'enable_input_require_grads'):
+                    self.model.enable_input_require_grads()
+                if hasattr(self.model, 'gradient_checkpointing_enable'):
+                    self.model.gradient_checkpointing_enable()
+                    logger.info("已在PEFT包装后启用gradient checkpointing（显著节省activation显存）")
+            except Exception as gc_exc:
+                logger.warning(f"在PEFT包装后启用gradient checkpointing失败，将在不使用GC的情况下训练: {gc_exc}")
 
             # ===== 诊断性日志：检查模型各部分dtype =====
             logger.info("=" * 80)
