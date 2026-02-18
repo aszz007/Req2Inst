@@ -79,26 +79,18 @@ class PTuningTrainer(BaseTrainer):
         self.encoder_hidden_size = 128  # 从64增加到128，提升稳定性
         self.prefix_projection = True
 
-        # ===== NaN防护配置 =====
-        # P-Tuning v2容易产生NaN验证损失，需要更保守的配置
-
-        # Learning rate for P-Tuning v2 prefix encoder.
-        # The prefix encoder has ~9.6M parameters and requires a significantly
-        # higher LR than LoRA to update effectively. The previous 2e-5 value was
-        # a conservative workaround for NaN eval_loss; the actual root cause
-        # (gradient checkpointing discarding past_key_values) has been fixed, so
-        # a standard prefix-tuning LR of 1e-3 is used here.
+        # 学习率：1e-3为prefix encoder的标准配置
+        # 根本原因修复（gradient checkpointing导致past_key_values被清空）后
+        # 恢复为有效学习率，原2e-5为临时workaround
         original_lr = self.train_cfg.learning_rate
         self.train_cfg.learning_rate = 1e-3
-        logger.info("=" * 80)
-        logger.info("P-Tuning v2学习率配置")
-        logger.info("=" * 80)
-        logger.info(f"学习率: {original_lr} → {self.train_cfg.learning_rate}")
-        logger.info("原因: prefix encoder参数量少(~960万)，需要较高LR才能有效更新")
-        logger.info(f"Encoder Hidden Size: {self.encoder_hidden_size}")
-        logger.info("=" * 80)
+        logger.info(f"学习率设置: {original_lr} -> {self.train_cfg.learning_rate} (prefix encoder标准配置)")
 
         # P-Tuning v2不支持gradient checkpointing
+        # 原因: Qwen3的gradient checkpointing实现会强制past_key_values=None，
+        # 导致prefix表示被丢弃，梯度无法回传至prefix encoder（grad_norm=0）
+        # disable_gradient_checkpointing=True确保TrainingArguments也不会
+        # 通过Trainer二次调用gradient_checkpointing_enable()
         self.disable_gradient_checkpointing = True
 
         # P-Tuning v2不支持load_best_model_at_end（会导致embedding shape mismatch）
@@ -118,7 +110,7 @@ class PTuningTrainer(BaseTrainer):
         logger.info(f"Max序列长度: {self.train_cfg.max_seq_length}")
         logger.info("显存优化策略:")
         logger.info("  1. encoder_hidden_size=128 (平衡性能和稳定性)")
-        logger.info("  2. 序列长度: 统一2048 (由base_trainer管理)")
+        logger.info("  2. 序列长度: UML/General=1024, Text/Image=512")
         logger.info("  3. 启用expandable_segments (减少碎片)")
         logger.info("  4. batch_size=1 + 梯度累积=128")
         logger.info("  5. 学习率=1e-3 (prefix encoder标准配置)")
@@ -192,24 +184,15 @@ class PTuningTrainer(BaseTrainer):
                 self.model.prompt_encoder.to(model_dtype)
                 logger.info(f"Prefix encoder已转换为{model_dtype}，与基础模型dtype保持一致")
 
-            # Enable gradient checkpointing on the PEFT-wrapped model to save activation
-            # memory. This is safe to call AFTER get_peft_model() because the PEFT
-            # ValueError check only runs during prompt encoder initialisation inside
-            # get_peft_model(). Once that succeeds, enabling GC on the resulting
-            # PeftModelForCausalLM instance does not re-trigger the check and allows
-            # the underlying transformer to recompute activations during backward,
-            # significantly reducing the peak activation memory at the cost of an
-            # extra forward pass per gradient-checkpointed block.
-            # disable_gradient_checkpointing=True is still set so that TrainingArguments
-            # does NOT call gradient_checkpointing_enable() a second time via the Trainer.
-            try:
-                if hasattr(self.model, 'enable_input_require_grads'):
-                    self.model.enable_input_require_grads()
-                if hasattr(self.model, 'gradient_checkpointing_enable'):
-                    self.model.gradient_checkpointing_enable()
-                    logger.info("已在PEFT包装后启用gradient checkpointing（显著节省activation显存）")
-            except Exception as gc_exc:
-                logger.warning(f"在PEFT包装后启用gradient checkpointing失败，将在不使用GC的情况下训练: {gc_exc}")
+            # NOTE: Gradient checkpointing is intentionally NOT enabled for PrefixTuning.
+            # Qwen3's gradient checkpointing implementation forces `past_key_values=None`
+            # in every decoder layer during the forward pass. PrefixTuning injects the
+            # learned prefix representations via `past_key_values`, so enabling gradient
+            # checkpointing silently discards all prefix key-values, making the prefix
+            # encoder unreachable by gradients (grad_norm stays 0.0) and producing a
+            # frozen eval_loss that never improves.
+            # disable_gradient_checkpointing=True is set so TrainingArguments also does
+            # not call gradient_checkpointing_enable() via the Trainer.
 
             # ===== 诊断性日志：检查模型各部分dtype =====
             logger.info("=" * 80)
