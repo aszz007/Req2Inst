@@ -19,6 +19,7 @@ P-Tuning v2训练器 - P-Tuning v2方法的训练实现（对比实验）
 """
 
 import torch
+import torch.utils.checkpoint
 from typing import Optional
 from peft import (
     PrefixTuningConfig,
@@ -89,6 +90,8 @@ class PTuningTrainer(BaseTrainer):
         # P-Tuning v2不支持gradient checkpointing
         # 原因: Qwen3的gradient checkpointing实现会强制past_key_values=None，
         # 导致prefix表示被丢弃，梯度无法回传至prefix encoder（grad_norm=0）
+        # 显存优化通过MLP-level activation checkpointing（setup_model中实现）解决，
+        # 该方法只触及FFN路径，不影响attention的past_key_values注入机制
         # disable_gradient_checkpointing=True确保TrainingArguments也不会
         # 通过Trainer二次调用gradient_checkpointing_enable()
         self.disable_gradient_checkpointing = True
@@ -110,11 +113,13 @@ class PTuningTrainer(BaseTrainer):
         logger.info(f"Max序列长度: {self.train_cfg.max_seq_length}")
         logger.info("显存优化策略:")
         logger.info("  1. encoder_hidden_size=128 (平衡性能和稳定性)")
-        logger.info("  2. 序列长度: UML/General=1024, Text/Image=512")
+        logger.info("  2. 序列长度: 统一2048 (base_trainer管理)")
         logger.info("  3. 启用expandable_segments (减少碎片)")
         logger.info("  4. batch_size=1 + 梯度累积=128")
         logger.info("  5. 学习率=1e-3 (prefix encoder标准配置)")
-        logger.info("注意: P-Tuning v2不支持gradient checkpointing，已禁用")
+        logger.info("  6. SDPA内存高效注意力 (base_trainer加载模型时启用)")
+        logger.info("  7. MLP-level activation checkpointing (setup_model中启用)")
+        logger.info("注意: P-Tuning v2不支持layer-level gradient checkpointing，已禁用")
 
         self._print_training_config()
 
@@ -131,6 +136,52 @@ class PTuningTrainer(BaseTrainer):
         """
         # 统一配置，避免text和image专家OOM
         return 1, 128
+
+    def _enable_mlp_activation_checkpointing(self):
+        """
+        对每个decoder层的MLP子模块启用activation checkpointing
+
+        原理：
+        - Layer-level gradient checkpointing无法用于PrefixTuning（Qwen3会强制
+          past_key_values=None，丢弃prefix注入，导致grad_norm=0）
+        - MLP-level checkpointing仅触及FFN路径，attention的past_key_values完全不受影响
+        - 效果：不保存gate/up/activated/down中间激活（约4GB @ 2048 tokens），
+          backward时重新计算，以训练时间换显存
+
+        对text/image专家（序列短）同样有效但收益较小；对uml/general专家（序列长）
+        是解决OOM的关键。
+        """
+        try:
+            base_model = self.model.get_base_model()
+            if not (hasattr(base_model, 'model') and hasattr(base_model.model, 'layers')):
+                logger.warning("无法访问decoder层列表，MLP activation checkpointing未启用")
+                return
+
+            num_layers = len(base_model.model.layers)
+            patched = 0
+            for layer in base_model.model.layers:
+                if not hasattr(layer, 'mlp'):
+                    continue
+
+                original_forward = layer.mlp.forward
+
+                def make_ckpt_forward(fwd):
+                    def checkpointed_mlp_forward(hidden_states):
+                        return torch.utils.checkpoint.checkpoint(
+                            fwd, hidden_states, use_reentrant=False
+                        )
+                    return checkpointed_mlp_forward
+
+                layer.mlp.forward = make_ckpt_forward(original_forward)
+                patched += 1
+
+            logger.info(f"MLP activation checkpointing已启用: {patched}/{num_layers}个decoder层")
+            logger.info("效果: 不保存MLP中间激活（约节省4GB显存），backward时重新计算")
+
+        except Exception as e:
+            logger.warning(f"MLP activation checkpointing启用失败，将在不使用的情况下继续: {e}")
+            import traceback
+            logger.warning(traceback.format_exc())
 
     def setup_model(self) -> bool:
         """
@@ -193,6 +244,10 @@ class PTuningTrainer(BaseTrainer):
             # frozen eval_loss that never improves.
             # disable_gradient_checkpointing=True is set so TrainingArguments also does
             # not call gradient_checkpointing_enable() via the Trainer.
+            #
+            # Instead, activation memory is reduced via MLP-level checkpointing below,
+            # which only touches the FFN path and leaves past_key_values untouched.
+            self._enable_mlp_activation_checkpointing()
 
             # ===== 诊断性日志：检查模型各部分dtype =====
             logger.info("=" * 80)
