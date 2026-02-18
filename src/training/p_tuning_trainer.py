@@ -196,24 +196,15 @@ class PTuningTrainer(BaseTrainer):
                 self.model.prompt_encoder.to(model_dtype)
                 logger.info(f"Prefix encoder已转换为{model_dtype}，与基础模型dtype保持一致")
 
-            # Enable gradient checkpointing on the PEFT-wrapped model to save activation
-            # memory. This is safe to call AFTER get_peft_model() because the PEFT
-            # ValueError check only runs during prompt encoder initialisation inside
-            # get_peft_model(). Once that succeeds, enabling GC on the resulting
-            # PeftModelForCausalLM instance does not re-trigger the check and allows
-            # the underlying transformer to recompute activations during backward,
-            # significantly reducing the peak activation memory at the cost of an
-            # extra forward pass per gradient-checkpointed block.
-            # disable_gradient_checkpointing=True is still set so that TrainingArguments
-            # does NOT call gradient_checkpointing_enable() a second time via the Trainer.
-            try:
-                if hasattr(self.model, 'enable_input_require_grads'):
-                    self.model.enable_input_require_grads()
-                if hasattr(self.model, 'gradient_checkpointing_enable'):
-                    self.model.gradient_checkpointing_enable()
-                    logger.info("已在PEFT包装后启用gradient checkpointing（显著节省activation显存）")
-            except Exception as gc_exc:
-                logger.warning(f"在PEFT包装后启用gradient checkpointing失败，将在不使用GC的情况下训练: {gc_exc}")
+            # NOTE: Gradient checkpointing is intentionally NOT enabled for PrefixTuning.
+            # Qwen3's gradient checkpointing implementation forces `past_key_values=None`
+            # in every decoder layer during the forward pass. PrefixTuning injects the
+            # learned prefix representations via `past_key_values`, so enabling gradient
+            # checkpointing silently discards all prefix key-values, making the prefix
+            # encoder unreachable by gradients (grad_norm stays 0.0) and producing a
+            # frozen eval_loss that never improves.
+            # disable_gradient_checkpointing=True is set so TrainingArguments also does
+            # not call gradient_checkpointing_enable() via the Trainer.
 
             # ===== 诊断性日志：检查模型各部分dtype =====
             logger.info("=" * 80)
