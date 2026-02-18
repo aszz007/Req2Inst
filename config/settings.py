@@ -197,25 +197,6 @@ class PathConfig:
         # General Expert（单一版本）
         self.GENERAL_EXPERT_WEIGHTS = self.EXPERTS_DIR / "general_expert"
 
-        # 专家LoRA权重映射（集中配置）
-        self.EXPERT_LORA_PATHS = {
-            # Text Expert（1个版本）
-            'text': self.TEXT_EXPERT_WEIGHTS,
-            'text_expert': self.TEXT_EXPERT_WEIGHTS,
-
-            # Image Expert（1个版本）
-            'image': self.IMAGE_EXPERT_WEIGHTS,
-            'image_expert': self.IMAGE_EXPERT_WEIGHTS,
-
-            # UML Expert（1个版本）
-            'uml': self.UML_EXPERT_WEIGHTS,
-            'uml_expert': self.UML_EXPERT_WEIGHTS,
-
-            # General Expert（1个版本）
-            'general': self.GENERAL_EXPERT_WEIGHTS,
-            'general_expert': self.GENERAL_EXPERT_WEIGHTS,
-        }
-
         # ==================== Checkpoint路径 ====================
         self.CHECKPOINTS_DIR = self.PROJECT_ROOT / "checkpoints"
 
@@ -252,6 +233,26 @@ class PathConfig:
             'image': self.CHECKPOINTS_DIR / "full_finetuning" / "image_expert",
             'uml': self.CHECKPOINTS_DIR / "full_finetuning" / "uml_expert",
             'general': self.CHECKPOINTS_DIR / "full_finetuning" / "general_expert",
+        }
+
+        # 专家LoRA权重映射（集中配置）
+        # 指向 checkpoints/lora_moe/ 作为默认加载路径，与 LORA_MOE_CKPTS 保持一致
+        self.EXPERT_LORA_PATHS = {
+            # Text Expert
+            'text': self.LORA_MOE_CKPTS['text'],
+            'text_expert': self.LORA_MOE_CKPTS['text'],
+
+            # Image Expert
+            'image': self.LORA_MOE_CKPTS['image'],
+            'image_expert': self.LORA_MOE_CKPTS['image'],
+
+            # UML Expert
+            'uml': self.LORA_MOE_CKPTS['uml'],
+            'uml_expert': self.LORA_MOE_CKPTS['uml'],
+
+            # General Expert
+            'general': self.LORA_MOE_CKPTS['general'],
+            'general_expert': self.LORA_MOE_CKPTS['general'],
         }
 
         # 兼容旧版路径
@@ -320,25 +321,39 @@ class PathConfig:
 
         return self.VISION_MODEL_PATHS[version]
 
-    def get_expert_weight_path(self, expert_name: str) -> Path:
+    def get_expert_weight_path(self, expert_name: str, method: str = 'lora_moe') -> Path:
         """
-        获取专家LoRA权重路径
+        获取专家权重路径
 
         Args:
             expert_name: 专家名称（'text', 'image', 'uml', 'general'）
+            method: 微调方法（'lora_moe', 'lora_single', 'p_tuning',
+                    'prompt_tuning', 'full_finetuning'），默认使用 lora_moe
 
         Returns:
-            Path: LoRA权重路径
+            Path: 权重路径
         """
         # 移除可能的_expert后缀，统一处理
         base_name = expert_name.replace('_expert', '')
-        expert_key = base_name
 
-        if expert_key in self.EXPERT_LORA_PATHS:
-            return self.EXPERT_LORA_PATHS[expert_key]
-        else:
-            # 如果未定义，使用约定的命名规则
-            return self.EXPERTS_DIR / expert_key
+        method_map = {
+            'lora_moe': self.LORA_MOE_CKPTS,
+            'p_tuning': self.PTUNING_CKPTS,
+            'prompt_tuning': self.PROMPT_TUNING_CKPTS,
+            'full_finetuning': self.FULL_FINETUNING_CKPTS,
+        }
+
+        if method == 'lora_single':
+            return self.LORA_SINGLE_CKPT
+
+        if method in method_map and base_name in method_map[method]:
+            return method_map[method][base_name]
+
+        # 兜底：使用 EXPERT_LORA_PATHS（指向 checkpoints/lora_moe/）
+        if base_name in self.EXPERT_LORA_PATHS:
+            return self.EXPERT_LORA_PATHS[base_name]
+
+        return self.CHECKPOINTS_DIR / 'lora_moe' / f'{base_name}_expert'
 
     def get_checkpoint_path(self, expert_name: str) -> Path:
         """获取专家训练检查点路径"""

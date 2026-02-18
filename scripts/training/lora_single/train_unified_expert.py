@@ -27,7 +27,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.training.expert_trainer import ExpertTrainer
+from src.training.lora_trainer import LoRATrainer
 from config.settings import (
     get_path_config,
     get_training_config,
@@ -149,16 +149,20 @@ def main():
     logger.info("创建LoRA-Single统一模型训练器...")
     try:
         # 使用general类型训练器（包含所有数据）
-        # 输出路径会自动设置为checkpoints/lora_single/
-        trainer = ExpertTrainer(
-            expert_type='general',  # 使用general获取混合数据集
+        # expert_type='general'确保加载text+image+uml混合数据集
+        path_cfg = get_path_config()
+        trainer = LoRATrainer(
+            expert_type='general',
             use_4bit=args.use_4bit,
             use_rtx4090_optimization=use_rtx4090_opt
         )
 
-        # 修改输出路径为lora_single
-        path_cfg = get_path_config()
+        # 将输出路径和中间checkpoint路径统一指向lora_single目录
+        # output_dir和checkpoint_dir必须同时更新，否则中间checkpoint会写入lora_moe路径
         trainer.output_dir = path_cfg.LORA_SINGLE_CKPT
+        trainer.checkpoint_dir = path_cfg.LORA_SINGLE_CKPT / 'training_checkpoints'
+        # 确保method_name正确，训练曲线文件名和日志标签会使用该值
+        trainer.method_name = 'lora_single'
 
     except Exception as e:
         logger.error(f"创建训练器失败: {e}")
