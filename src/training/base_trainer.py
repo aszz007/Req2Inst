@@ -366,6 +366,13 @@ class BaseTrainer(ABC):
                 'trust_remote_code': True,
                 'device_map': 'auto',
                 'dtype': torch.bfloat16 if self.use_rtx4090_optimization else torch.float16,
+                # Use PyTorch SDPA (memory-efficient attention) to reduce attention
+                # activation memory from O(n^2) to O(n). This is critical for
+                # p_tuning and prompt_tuning which disable gradient checkpointing,
+                # causing full attention activations to remain in GPU memory.
+                # SDPA is built into PyTorch >= 2.0, requires no extra packages,
+                # and is compatible with 4bit quantization and all PEFT methods.
+                'attn_implementation': 'sdpa',
             }
             if quantization_config:
                 model_kwargs['quantization_config'] = quantization_config
