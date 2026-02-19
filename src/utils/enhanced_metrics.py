@@ -90,6 +90,31 @@ class EnhancedMetrics:
         if use_bertscore:
             logger.info("BERTScore已启用（默认）- 用于评估生成指令的语义相似度")
 
+    def cleanup(self):
+        """
+        释放所有评估指标模型占用的GPU显存。
+
+        在完成评估后调用此方法，确保BERTScore等模型从显存中卸载，
+        避免与后续模型加载发生CUDA OOM冲突。
+        """
+        import gc
+        for attr in ('bertscore_metric', 'bleu_metric', 'rouge_metric', 'meteor_metric'):
+            obj = getattr(self, attr, None)
+            if obj is not None:
+                try:
+                    del obj
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+        gc.collect()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                logger.debug("评估指标显存已释放")
+        except ImportError:
+            pass
+
     def _lazy_load_metrics(self):
         """延迟加载评估指标(避免import错误)"""
         if self.bleu_metric is None:
@@ -554,18 +579,12 @@ class EnhancedMetrics:
         # 计算ROUGE-L分数（用于语义相似度）
         self._lazy_load_metrics()
         try:
-            rouge_result = self.rouge_metric.compute(
+            per_sample_rouge = self.rouge_metric.compute(
                 predictions=predictions,
-                references=references
+                references=references,
+                use_aggregator=False
             )
-            rouge_l_scores = []
-            # 获取每个样本的ROUGE-L分数
-            for pred, ref in zip(predictions, references):
-                sample_rouge = self.rouge_metric.compute(
-                    predictions=[pred],
-                    references=[ref]
-                )
-                rouge_l_scores.append(sample_rouge['rougeL'])
+            rouge_l_scores = per_sample_rouge['rougeL']
         except Exception as e:
             logger.error(f"ROUGE-L计算失败: {e}")
             rouge_l_scores = [0.0] * len(predictions)

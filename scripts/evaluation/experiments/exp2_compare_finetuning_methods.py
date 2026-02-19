@@ -43,6 +43,13 @@ EXP_DIR = path_cfg.OUTPUTS_DIR / 'evaluations' / 'experiments' / 'exp2_finetunin
 METHODS = ['lora_moe', 'lora_single', 'p_tuning', 'prompt_tuning', 'full_finetuning']
 EXPERT_TYPES = ['text', 'image', 'uml', 'general']
 
+BATCH_SIZE_MAP = {
+    'text': 16,
+    'image': 16,
+    'uml': 8,
+    'general': 12,
+}
+
 METHOD_CKPT_MAP = {
     'lora_moe': lambda et: str(path_cfg.LORA_MOE_CKPTS[et]),
     'lora_single': lambda et: str(path_cfg.LORA_SINGLE_CKPT),
@@ -125,7 +132,7 @@ def run_inference_for_method_expert(method, expert_type, test_data, args):
         inputs, references = inputs[:10], references[:10]
 
     try:
-        predictions = expert.batch_generate_instruction(inputs, batch_size=8)
+        predictions = expert.batch_generate_instruction(inputs, batch_size=BATCH_SIZE_MAP.get(expert_type, 8))
     except Exception as e:
         logger.error(f'{method}/{expert_type}: 生成失败: {e}')
         logger.error(traceback.format_exc())

@@ -165,6 +165,21 @@ def compute_all_metrics(
         f'指标计算完成 | ROUGE-L={quality.get("rougeL", 0):.4f} '
         f'F1={binary.get("f1_score", 0):.4f}'
     )
+
+    try:
+        metrics.cleanup()
+    except Exception:
+        pass
+    del metrics
+    import gc
+    gc.collect()
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except ImportError:
+        pass
+
     return result
 
 
