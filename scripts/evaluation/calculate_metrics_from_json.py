@@ -351,7 +351,7 @@ def scan_cache_files(cache_dir: Path) -> List[Path]:
     """
     cache_dir = Path(cache_dir)
     if not cache_dir.exists():
-        logger.warning(f"Cache directory does not exist: {cache_dir}")
+        logger.warning(f'缓存目录不存在: {cache_dir}')
         return []
     return sorted(cache_dir.rglob('*_predictions.json'))
 
@@ -368,7 +368,7 @@ def main_batch(args):
     if args.list_caches:
         files = scan_cache_files(cache_dir)
         if not files:
-            print(f"No cache files found under: {cache_dir}")
+            print(f"未找到缓存文件，目录: {cache_dir}")
         for f in files:
             try:
                 print(f.relative_to(cache_dir))
@@ -376,7 +376,7 @@ def main_batch(args):
                 print(f)
         return
 
-    # Determine which files to process
+    # 确定要处理的文件列表
     files = scan_cache_files(cache_dir)
 
     if args.exp:
@@ -390,26 +390,26 @@ def main_batch(args):
         }
         valid_dirs = EXP_CACHE_MAP.get(args.exp, [])
         if not valid_dirs:
-            logger.error(f"Unknown experiment: {args.exp}. Valid: {list(EXP_CACHE_MAP.keys())}")
+            logger.error(f"未知实验: {args.exp}。有效值: {list(EXP_CACHE_MAP.keys())}")
             return
         files = [f for f in files if any(d in str(f) for d in valid_dirs)]
-        logger.info(f"Filtered to {len(files)} files for {args.exp}")
+        logger.info(f"已过滤至 {len(files)} 个文件（实验: {args.exp}）")
 
     if args.method:
         files = [f for f in files if args.method in str(f)]
-        logger.info(f"Filtered to {len(files)} files for method='{args.method}'")
+        logger.info(f"已过滤至 {len(files)} 个文件（方法: '{args.method}'）")
 
     if not files:
-        logger.warning("No matching cache files found")
+        logger.warning("未找到匹配的缓存文件")
         return
 
-    logger.info(f"Processing {len(files)} cache file(s)...")
+    logger.info(f"正在处理 {len(files)} 个缓存文件...")
     save_dir = args.save_dir or 'outputs/evaluations/metrics'
     success_count = 0
     fail_count = 0
 
     for filepath in sorted(files):
-        logger.info(f"\n--- Processing: {filepath} ---")
+        logger.info(f"\n--- 处理: {filepath} ---")
         try:
             data = load_predictions_json(str(filepath))
             results = calculate_metrics(
@@ -423,10 +423,10 @@ def main_batch(args):
             save_results(results, data.get('expert_name', 'unknown'), save_dir)
             success_count += 1
         except Exception as e:
-            logger.error(f"Failed on {filepath}: {e}")
+            logger.error(f"处理失败 {filepath}: {e}")
             fail_count += 1
 
-    logger.info(f"\nBatch complete: {success_count} succeeded, {fail_count} failed")
+    logger.info(f"\n批量处理完成: {success_count} 成功, {fail_count} 失败")
 
 
 if __name__ == "__main__":

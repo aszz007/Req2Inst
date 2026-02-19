@@ -97,13 +97,13 @@ EXPERT_LABELS = {
 
 def _safe_load(path: Path) -> Optional[Dict]:
     if not path.exists():
-        logger.warning(f'Result file not found: {path}')
+        logger.warning(f'结果文件未找到: {path}')
         return None
     try:
         with open(path, encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
-        logger.error(f'Failed to load {path}: {e}')
+        logger.error(f'加载失败 {path}: {e}')
         return None
 
 
@@ -115,9 +115,9 @@ def load_all_results(experiments_dir: Path) -> Dict:
         data = _safe_load(results_path)
         if data is not None:
             all_results[exp_num] = data
-            logger.info(f'Loaded Exp{exp_num}: {exp_dir_name}')
+            logger.info(f'已加载 实验{exp_num}: {exp_dir_name}')
         else:
-            logger.warning(f'Exp{exp_num} results not found: {results_path}')
+            logger.warning(f'实验{exp_num} 结果文件未找到: {results_path}')
     return all_results
 
 
@@ -271,7 +271,7 @@ def plot_overall_performance(summary: Dict, plots_dir: Path):
     path = plots_dir / 'overall_performance.png'
     plt.savefig(path, dpi=150, bbox_inches='tight')
     plt.close()
-    logger.info(f'Saved: {path}')
+    logger.info(f'图表已保存: {path}')
 
 
 def plot_method_comparison_radar(summary: Dict, plots_dir: Path):
@@ -316,7 +316,7 @@ def plot_method_comparison_radar(summary: Dict, plots_dir: Path):
     path = plots_dir / 'method_comparison_radar.png'
     plt.savefig(path, dpi=150, bbox_inches='tight')
     plt.close()
-    logger.info(f'Saved: {path}')
+    logger.info(f'图表已保存: {path}')
 
 
 def plot_efficiency_analysis(summary: Dict, plots_dir: Path):
@@ -401,7 +401,7 @@ def plot_efficiency_analysis(summary: Dict, plots_dir: Path):
     path = plots_dir / 'efficiency_analysis.png'
     plt.savefig(path, dpi=150, bbox_inches='tight')
     plt.close()
-    logger.info(f'Saved: {path}')
+    logger.info(f'图表已保存: {path}')
 
 
 def plot_exp1_vs_exp2_combined(summary: Dict, plots_dir: Path):
@@ -459,7 +459,7 @@ def plot_exp1_vs_exp2_combined(summary: Dict, plots_dir: Path):
     path = plots_dir / 'all_methods_text_rougeL.png'
     plt.savefig(path, dpi=150, bbox_inches='tight')
     plt.close()
-    logger.info(f'Saved: {path}')
+    logger.info(f'图表已保存: {path}')
 
 
 def plot_hyperparameter_summary(summary: Dict, plots_dir: Path):
@@ -507,7 +507,7 @@ def plot_hyperparameter_summary(summary: Dict, plots_dir: Path):
     path = plots_dir / 'rank_optimization.png'
     plt.savefig(path, dpi=150, bbox_inches='tight')
     plt.close()
-    logger.info(f'Saved: {path}')
+    logger.info(f'图表已保存: {path}')
 
 
 # ---------------------------------------------------------------------------
@@ -554,7 +554,7 @@ def generate_pdf_report(summary: Dict, all_results: Dict, experiments_dir: Path)
     try:
         from matplotlib.backends.backend_pdf import PdfPages
     except ImportError:
-        logger.error('matplotlib PdfPages not available')
+        logger.error('matplotlib PdfPages 不可用')
         return
 
     pdf_path = experiments_dir / 'comprehensive_report.pdf'
@@ -817,7 +817,7 @@ def generate_pdf_report(summary: Dict, all_results: Dict, experiments_dir: Path)
         pdf.savefig(fig, bbox_inches='tight')
         plt.close(fig)
 
-    logger.info(f'PDF report saved: {pdf_path}')
+    logger.info(f'PDF报告已保存: {pdf_path}')
     return pdf_path
 
 
@@ -827,80 +827,80 @@ def generate_pdf_report(summary: Dict, all_results: Dict, experiments_dir: Path)
 
 def run(args):
     logger.info('=' * 80)
-    logger.info('Phase 3: Generate Comprehensive Experiment Report')
+    logger.info('阶段3: 生成综合实验报告')
     logger.info('=' * 80)
 
     exp_dir = Path(args.exp_dir) if args.exp_dir else EXPERIMENTS_DIR
     exp_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load all results
-    logger.info('Loading experiment results...')
+    # 加载所有实验结果
+    logger.info('加载实验结果...')
     all_results = load_all_results(exp_dir)
 
     if not all_results:
-        logger.error('No experiment results found. Run experiments first.')
+        logger.error('未找到任何实验结果，请先运行实验。')
         return
 
-    logger.info(f'Loaded {len(all_results)} experiment(s): {sorted(all_results.keys())}')
+    logger.info(f'已加载 {len(all_results)} 个实验: {sorted(all_results.keys())}')
 
-    # Build summary
-    logger.info('Assembling summary...')
+    # 构建汇总
+    logger.info('正在汇总数据...')
     summary = build_summary(all_results)
 
-    # Save summary JSON
+    # 保存汇总JSON
     summary_path = exp_dir / 'all_experiments_summary.json'
     with open(summary_path, 'w', encoding='utf-8') as f:
         json.dump(summary, f, indent=2, ensure_ascii=False, default=str)
-    logger.info(f'Summary saved: {summary_path}')
+    logger.info(f'汇总文件已保存: {summary_path}')
 
-    # Generate all plots
+    # 生成所有图表
     plots_dir = exp_dir / 'plots'
-    logger.info('Generating plots...')
+    logger.info('正在生成图表...')
     try:
         plot_overall_performance(summary, plots_dir)
     except Exception as e:
-        logger.warning(f'overall_performance plot failed: {e}')
+        logger.warning(f'总体性能图生成失败: {e}')
     try:
         plot_method_comparison_radar(summary, plots_dir)
     except Exception as e:
-        logger.warning(f'radar plot failed: {e}')
+        logger.warning(f'雷达图生成失败: {e}')
     try:
         plot_efficiency_analysis(summary, plots_dir)
     except Exception as e:
-        logger.warning(f'efficiency_analysis plot failed: {e}')
+        logger.warning(f'效率分析图生成失败: {e}')
     try:
         plot_exp1_vs_exp2_combined(summary, plots_dir)
     except Exception as e:
-        logger.warning(f'combined bar plot failed: {e}')
+        logger.warning(f'联合柱状图生成失败: {e}')
     try:
         plot_hyperparameter_summary(summary, plots_dir)
     except Exception as e:
-        logger.warning(f'hyperparameter plot failed: {e}')
+        logger.warning(f'超参数图生成失败: {e}')
 
-    # Generate PDF
+    # 生成PDF
     if not args.no_pdf:
-        logger.info('Generating PDF report...')
+        logger.info('正在生成PDF报告...')
         try:
             pdf_path = generate_pdf_report(summary, all_results, exp_dir)
         except Exception as e:
-            logger.error(f'PDF generation failed: {e}')
+            logger.error(f'PDF生成失败: {e}')
             logger.error(traceback.format_exc())
     else:
-        logger.info('Skipping PDF generation (--no-pdf)')
+        logger.info('已跳过PDF生成（--no-pdf）')
 
-    # Print summary to console
+    # 控制台汇总输出
     logger.info('\n' + '=' * 80)
-    logger.info('COMPREHENSIVE SUMMARY')
+    logger.info('综合汇总')
     logger.info('=' * 80)
 
     if summary.get('exp1_baseline'):
-        logger.info('\n[Exp1] Baseline comparison (text expert, ROUGE-L):')
+        logger.info('\n[实验1] 基线对比（文本专家，ROUGE-L）:')
         for m, vals in sorted(summary['exp1_baseline'].items(),
                                key=lambda x: x[1].get('rougeL', 0), reverse=True):
             logger.info(f'  {METHOD_LABELS.get(m, m):<22}: {vals.get("rougeL", 0):.4f}')
 
     if summary.get('exp2_method_comparison'):
-        logger.info('\n[Exp2] Method comparison, text expert (ROUGE-L):')
+        logger.info('\n[实验2] 微调方法对比，文本专家（ROUGE-L）:')
         text_keys = {k: v for k, v in summary['exp2_method_comparison'].items()
                      if k.endswith('_text')}
         for k, vals in sorted(text_keys.items(),
@@ -909,11 +909,11 @@ def run(args):
             logger.info(f'  {METHOD_LABELS.get(method, method):<22}: {vals.get("rougeL", 0):.4f}')
 
     if summary.get('overall_lora_moe'):
-        logger.info('\n[LoRA-MoE] Per-expert ROUGE-L:')
+        logger.info('\n[LoRA-MoE] 各专家ROUGE-L:')
         for et, vals in summary['overall_lora_moe'].items():
             logger.info(f'  {EXPERT_LABELS.get(et, et):<10}: {vals.get("rougeL", 0):.4f}')
 
-    logger.info(f'\nOutput directory: {exp_dir}')
+    logger.info(f'\n输出目录: {exp_dir}')
     logger.info('=' * 80)
 
 
