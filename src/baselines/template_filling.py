@@ -219,5 +219,5 @@ class TemplateFiller:
         for i, text in enumerate(inputs):
             results.append(self.fill(text))
             if (i + 1) % 100 == 0:
-                logger.info(f'Template filled {i + 1}/{len(inputs)}')
+                logger.info(f'模板填充已完成 {i + 1}/{len(inputs)}')
         return results

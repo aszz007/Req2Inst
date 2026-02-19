@@ -64,19 +64,18 @@ def _get_ckpt_path(rank, alpha, dropout):
 
 
 def train_config(rank, alpha, dropout, args):
-    """Train a LoRA configuration if checkpoint doesn't already exist."""
+    """如果检查点不存在则训练该LoRA配置。"""
     ckpt_path = _get_ckpt_path(rank, alpha, dropout)
 
-    # Baseline: never retrain
     if rank == 8 and alpha == 16 and dropout == 0.05:
-        logger.info(f'Baseline config (8,16,0.05): reusing {ckpt_path}')
+        logger.info(f'基线配置 (8,16,0.05): 复用已有检查点 {ckpt_path}')
         return
 
     if ckpt_path.exists() and not args.force_retrain:
-        logger.info(f'Checkpoint exists, skipping training: {ckpt_path}')
+        logger.info(f'检查点已存在，跳过训练: {ckpt_path}')
         return
 
-    logger.info(f'Training config r={rank} a={alpha} d={dropout} -> {ckpt_path}')
+    logger.info(f'训练配置 r={rank} a={alpha} d={dropout} -> {ckpt_path}')
     from src.training.lora_trainer import LoRATrainer
 
     trainer = LoRATrainer(
@@ -91,29 +90,29 @@ def train_config(rank, alpha, dropout, args):
     trainer.setup_model()
     trainer.prepare_data()
     trainer.train()
-    logger.info(f'Training complete: {ckpt_path}')
+    logger.info(f'训练完成: {ckpt_path}')
 
 
 def run_inference(rank, alpha, dropout, test_data, args):
-    """Run or load cached inference for one config."""
+    """运行或从缓存加载某配置的推理结果。"""
     cfg_name = _config_name(rank, alpha, dropout)
     filename = f'{cfg_name}_predictions.json'
     cached = load_predictions_cache(CACHE_DIR, filename)
     if cached and not args.force_regenerate:
-        logger.info(f'{cfg_name}: loaded from cache')
+        logger.info(f'{cfg_name}: 从缓存加载')
         return cached
 
     ckpt_path = _get_ckpt_path(rank, alpha, dropout)
     if not ckpt_path.exists():
-        logger.warning(f'{cfg_name}: checkpoint not found at {ckpt_path}')
+        logger.warning(f'{cfg_name}: 检查点不存在 {ckpt_path}')
         return None
 
-    logger.info(f'{cfg_name}: running inference from {ckpt_path}')
+    logger.info(f'{cfg_name}: 从 {ckpt_path} 执行推理')
     from src.experts import TextExpert
 
     expert = TextExpert(lora_path=str(ckpt_path), use_4bit=True)
     if not expert.load_model():
-        logger.error(f'{cfg_name}: model load failed')
+        logger.error(f'{cfg_name}: 模型加载失败')
         return None
 
     inputs = [d['input'] for d in test_data]
@@ -125,7 +124,7 @@ def run_inference(rank, alpha, dropout, test_data, args):
     try:
         predictions = expert.batch_generate_instruction(inputs, batch_size=4)
     except Exception as e:
-        logger.error(f'{cfg_name}: generation failed: {e}')
+        logger.error(f'{cfg_name}: 生成失败: {e}')
         expert.unload_model()
         return None
     finally:
@@ -160,14 +159,14 @@ def plot_rank_vs_rouge(config_results, exp_dir):
     y_std = [np.std(rank_rougeL[r]) for r in x]
     ax.errorbar(x, y, yerr=y_std, marker='o', capsize=4, linewidth=2)
     ax.set_xlabel('LoRA Rank')
-    ax.set_ylabel('ROUGE-L (mean across dropout settings)')
-    ax.set_title('Exp4: ROUGE-L vs LoRA Rank')
+    ax.set_ylabel('ROUGE-L（各dropout设置的均值）')
+    ax.set_title('实验4: ROUGE-L vs LoRA Rank')
     ax.grid(alpha=0.3)
     plt.tight_layout()
     path = plots_dir / 'rank_vs_rougeL.png'
     plt.savefig(path, dpi=150, bbox_inches='tight')
     plt.close()
-    logger.info(f'Plot saved: {path}')
+    logger.info(f'图表已保存: {path}')
 
 
 def plot_heatmap_dropout_alpha(config_results, exp_dir, fixed_rank=16):
@@ -199,7 +198,7 @@ def plot_heatmap_dropout_alpha(config_results, exp_dir, fixed_rank=16):
     ax.set_yticklabels([str(d) for d in unique_dropouts])
     ax.set_xlabel('Alpha')
     ax.set_ylabel('Dropout')
-    ax.set_title(f'Exp4: ROUGE-L Heatmap (rank={fixed_rank})')
+    ax.set_title(f'实验4: ROUGE-L热图（rank={fixed_rank}）')
     for i in range(len(unique_dropouts)):
         for j in range(len(unique_alphas)):
             ax.text(j, i, f'{matrix[i, j]:.3f}', ha='center', va='center', fontsize=9)
@@ -207,19 +206,19 @@ def plot_heatmap_dropout_alpha(config_results, exp_dir, fixed_rank=16):
     path = plots_dir / f'heatmap_rank{fixed_rank}.png'
     plt.savefig(path, dpi=150, bbox_inches='tight')
     plt.close()
-    logger.info(f'Heatmap saved: {path}')
+    logger.info(f'热图已保存: {path}')
 
 
 def run(args):
     logger.info('=' * 80)
-    logger.info('Experiment 4: LoRA Hyperparameter Optimization')
+    logger.info('实验4: LoRA超参数优化')
     logger.info('=' * 80)
 
-    # Load text test data
-    logger.info('Loading text dataset...')
+    # 加载文本测试数据
+    logger.info('加载文本数据集...')
     all_data = TextDatasetLoader().load_csv_files()
     train_data, _, test_data = split_dataset_for_expert(all_data, 'text')
-    logger.info(f'Test samples: {len(test_data)}')
+    logger.info(f'测试集样本数: {len(test_data)}')
 
     results = {
         'experiment': 'exp4_lora_hyperparameter_optimization',
@@ -232,20 +231,18 @@ def run(args):
 
     for rank, alpha, dropout in CONFIGS:
         cfg_name = _config_name(rank, alpha, dropout)
-        logger.info(f'\n--- Config: {cfg_name} ---')
+        logger.info(f'\n--- 配置: {cfg_name} ---')
 
-        # Train if needed
         try:
             train_config(rank, alpha, dropout, args)
         except Exception as e:
-            logger.error(f'{cfg_name}: training failed: {e}')
+            logger.error(f'{cfg_name}: 训练失败: {e}')
             logger.error(traceback.format_exc())
 
-        # Run inference
         try:
             cached = run_inference(rank, alpha, dropout, test_data, args)
             if cached is None:
-                logger.warning(f'{cfg_name}: skipped (inference failed)')
+                logger.warning(f'{cfg_name}: 已跳过（推理失败）')
                 continue
 
             preds = [s['prediction'] for s in cached['samples']]
@@ -272,14 +269,13 @@ def run(args):
                 f'F1={b.get("f1_score", 0):.4f}'
             )
         except Exception as e:
-            logger.error(f'{cfg_name}: evaluation failed: {e}')
+            logger.error(f'{cfg_name}: 评估失败: {e}')
             logger.error(traceback.format_exc())
 
-    # Find best config
     if results['configs']:
         best = max(results['configs'], key=lambda c: c['generation_quality'].get('rougeL', 0))
         results['best_config'] = best
-        logger.info(f'\nBest config: {best["name"]} (ROUGE-L={best["generation_quality"].get("rougeL", 0):.4f})')
+        logger.info(f'\n最优配置: {best["name"]} (ROUGE-L={best["generation_quality"].get("rougeL", 0):.4f})')
 
     EXP_DIR.mkdir(parents=True, exist_ok=True)
     save_experiment_results(results, EXP_DIR, 'results.json')
@@ -288,13 +284,13 @@ def run(args):
         plot_rank_vs_rouge(config_results, EXP_DIR)
         plot_heatmap_dropout_alpha(config_results, EXP_DIR, fixed_rank=16)
     except Exception as e:
-        logger.warning(f'Plotting failed: {e}')
+        logger.warning(f'绘图失败: {e}')
 
-    # Summary table
+    # 汇总表
     logger.info('\n' + '=' * 80)
-    logger.info('CONFIG COMPARISON SUMMARY')
+    logger.info('配置对比汇总')
     logger.info('=' * 80)
-    logger.info(f'{"Config":<32} {"ROUGE-L":>8} {"F1":>8}')
+    logger.info(f'{"配置名称":<32} {"ROUGE-L":>8} {"F1":>8}')
     logger.info('-' * 50)
     for c in results['configs']:
         q = c.get('generation_quality', {})
@@ -302,7 +298,7 @@ def run(args):
         logger.info(
             f'{c["name"]:<32} {q.get("rougeL", 0):>8.4f} {b.get("f1_score", 0):>8.4f}'
         )
-    logger.info(f'\nResults saved to: {EXP_DIR}')
+    logger.info(f'\n结果已保存至: {EXP_DIR}')
 
 
 def main():

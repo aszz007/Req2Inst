@@ -39,13 +39,16 @@ EXP_SCRIPTS = {
     6: 'exp6_fewshot_vs_finetuning.py',
 }
 
+# 注意：exp1 文件原名为 exp1_baseline_comarison.py（拼写有误），
+# 正确文件名应为 exp1_baseline_comparison.py，请确保服务器上文件名一致。
+
 EXP_NAMES = {
-    1: 'Baseline Comparison',
-    2: 'Fine-Tuning Method Comparison',
-    3: 'MoE Architecture Validation',
-    4: 'LoRA Hyperparameter Optimization',
-    5: 'Data Efficiency Analysis',
-    6: 'Few-Shot vs Fine-Tuning',
+    1: '基线方法对比',
+    2: '微调方法对比',
+    3: 'MoE架构验证',
+    4: 'LoRA超参数优化',
+    5: '数据效率分析',
+    6: 'Few-Shot vs 微调对比',
 }
 
 STATUS_PASS = 'PASS'
@@ -61,12 +64,12 @@ def run_experiment(exp_num, args, skip_failed, previously_failed):
         (status, elapsed_seconds)
     """
     if exp_num in previously_failed:
-        logger.info(f'Exp{exp_num}: skipping due to previous failure')
+        logger.info(f'实验{exp_num}: 因前序实验失败，跳过')
         return STATUS_SKIP, 0.0
 
     script = EXP_DIR / EXP_SCRIPTS[exp_num]
     if not script.exists():
-        logger.error(f'Exp{exp_num}: script not found: {script}')
+        logger.error(f'实验{exp_num}: 脚本未找到: {script}')
         return STATUS_FAIL, 0.0
 
     cmd = [sys.executable, str(script)]
@@ -78,8 +81,8 @@ def run_experiment(exp_num, args, skip_failed, previously_failed):
     if args.no_bertscore:
         cmd.append('--no-bertscore')
 
-    logger.info(f'Exp{exp_num} ({EXP_NAMES[exp_num]}): starting...')
-    logger.info(f'Command: {" ".join(cmd)}')
+    logger.info(f'实验{exp_num} ({EXP_NAMES[exp_num]}): 开始执行...')
+    logger.info(f'执行命令: {" ".join(cmd)}')
 
     start = time.time()
     try:
@@ -88,19 +91,19 @@ def run_experiment(exp_num, args, skip_failed, previously_failed):
 
         if result.returncode == 0:
             logger.info(
-                f'Exp{exp_num}: PASS ({timedelta(seconds=int(elapsed))})'
+                f'实验{exp_num}: 通过 ({timedelta(seconds=int(elapsed))})'
             )
             return STATUS_PASS, elapsed
         else:
             logger.error(
-                f'Exp{exp_num}: FAIL (returncode={result.returncode}, '
-                f'elapsed={timedelta(seconds=int(elapsed))})'
+                f'实验{exp_num}: 失败 (返回码={result.returncode}, '
+                f'耗时={timedelta(seconds=int(elapsed))})'
             )
             return STATUS_FAIL, elapsed
 
     except Exception as e:
         elapsed = time.time() - start
-        logger.error(f'Exp{exp_num}: exception: {e}')
+        logger.error(f'实验{exp_num}: 发生异常: {e}')
         return STATUS_FAIL, elapsed
 
 
@@ -158,7 +161,7 @@ Examples:
         selected = parse_int_list(args.experiments)
         invalid = [n for n in selected if n not in EXP_SCRIPTS]
         if invalid:
-            logger.error(f'Invalid experiment numbers: {invalid}')
+            logger.error(f'无效的实验编号: {invalid}')
             sys.exit(1)
     else:
         selected = all_exp_nums
@@ -167,19 +170,19 @@ Examples:
     to_run = [n for n in selected if n not in skip_set]
 
     if not to_run:
-        logger.warning('No experiments selected to run')
+        logger.warning('未选择任何实验，退出')
         sys.exit(0)
 
     logger.info('=' * 80)
-    logger.info('Phase 2 Experiment Runner')
+    logger.info('阶段2实验执行器')
     logger.info('=' * 80)
-    logger.info(f'Experiments to run: {to_run}')
+    logger.info(f'待执行实验: {to_run}')
     if skip_set:
-        logger.info(f'Skipped: {sorted(skip_set)}')
-    logger.info(f'Test mode: {args.test_mode}')
-    logger.info(f'From cache: {args.from_cache}')
-    logger.info(f'Skip-failed: {args.skip_failed}')
-    logger.info(f'Start time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+        logger.info(f'已跳过: {sorted(skip_set)}')
+    logger.info(f'测试模式: {args.test_mode}')
+    logger.info(f'从缓存加载: {args.from_cache}')
+    logger.info(f'失败继续: {args.skip_failed}')
+    logger.info(f'开始时间: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
     logger.info('=' * 80)
 
     summary = {}
@@ -203,34 +206,33 @@ Examples:
             previously_failed.add(exp_num)
             if not args.skip_failed:
                 logger.error(
-                    f'Exp{exp_num} failed. Use --skip-failed to continue past failures.'
+                    f'实验{exp_num}失败。使用 --skip-failed 参数可跳过失败继续执行。'
                 )
                 break
 
     total_elapsed = time.time() - total_start
 
-    # Print final summary table
     logger.info('\n' + '=' * 80)
-    logger.info('EXPERIMENT RUN SUMMARY')
+    logger.info('实验执行汇总')
     logger.info('=' * 80)
-    logger.info(f'{"Exp":<6} {"Name":<40} {"Status":<10} {"Time":>10}')
+    logger.info(f'{"编号":<6} {"实验名称":<40} {"状态":<10} {"耗时":>10}')
     logger.info('-' * 70)
     for exp_num in to_run:
         if exp_num not in summary:
-            logger.info(f'{exp_num:<6} {EXP_NAMES[exp_num]:<40} {"NOT RUN":<10}')
+            logger.info(f'{exp_num:<6} {EXP_NAMES[exp_num]:<40} {"未执行":<10}')
             continue
         s = summary[exp_num]
         elapsed_str = str(timedelta(seconds=int(s['elapsed'])))
         logger.info(f'{exp_num:<6} {s["name"]:<40} {s["status"]:<10} {elapsed_str:>10}')
 
     logger.info('-' * 70)
-    logger.info(f'Total elapsed: {timedelta(seconds=int(total_elapsed))}')
+    logger.info(f'总耗时: {timedelta(seconds=int(total_elapsed))}')
 
     pass_count = sum(1 for s in summary.values() if s['status'] == STATUS_PASS)
     fail_count = sum(1 for s in summary.values() if s['status'] == STATUS_FAIL)
     skip_count = sum(1 for s in summary.values() if s['status'] == STATUS_SKIP)
 
-    logger.info(f'Results: {pass_count} PASS, {fail_count} FAIL, {skip_count} SKIPPED')
+    logger.info(f'结果: {pass_count} 通过, {fail_count} 失败, {skip_count} 跳过')
     logger.info('=' * 80)
 
     sys.exit(0 if fail_count == 0 else 1)

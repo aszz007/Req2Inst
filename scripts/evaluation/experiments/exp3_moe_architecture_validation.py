@@ -69,16 +69,16 @@ def _load_test_data(expert_type):
 
 
 def _run_or_load(cache_subdir, filename, run_fn, args):
-    """Load from cache or run inference."""
+    """从缓存加载或执行推理。"""
     cached = load_predictions_cache(cache_subdir, filename)
     if cached and not args.force_regenerate:
-        logger.info(f'Cache hit: {cache_subdir.name}/{filename}')
+        logger.info(f'缓存命中: {cache_subdir.name}/{filename}')
         return cached
     return run_fn()
 
 
 def run_matched_expert(expert_type, test_data, args):
-    """Run the expert matched to its own domain (MoE-4 diagonal)."""
+    """运行与其领域匹配的专家（MoE-4对角线）。"""
     cache_subdir = CACHE_DIR / 'lora_moe'
     filename = f'{expert_type}_predictions.json'
 
@@ -103,7 +103,7 @@ def run_matched_expert(expert_type, test_data, args):
 
 
 def run_cross_domain(expert_type, eval_domain, test_data, args):
-    """Evaluate expert trained on expert_type on test data from eval_domain."""
+    """使用expert_type训练的专家评估eval_domain领域的测试数据。"""
     cache_subdir = CACHE_DIR / 'exp3_cross_domain'
     filename = f'{expert_type}_expert_on_{eval_domain}_predictions.json'
 
@@ -116,7 +116,7 @@ def run_cross_domain(expert_type, eval_domain, test_data, args):
         try:
             preds = expert.batch_generate_instruction(inputs, batch_size=4)
         except Exception as e:
-            logger.error(f'Cross-domain {expert_type}->>{eval_domain}: {e}')
+            logger.error(f'跨域评估 {expert_type}->>{eval_domain}: {e}')
             preds = [''] * len(inputs)
         finally:
             expert.unload_model()
@@ -135,7 +135,7 @@ def run_cross_domain(expert_type, eval_domain, test_data, args):
 
 
 def run_single_model(expert_type, test_data, args):
-    """Run lora_single unified model on given expert type's test data."""
+    """在给定专家类型的测试数据上运行lora_single统一模型。"""
     cache_subdir = CACHE_DIR / 'lora_single'
     filename = f'{expert_type}_predictions.json'
 
@@ -185,9 +185,9 @@ def plot_cross_domain_heatmap(cross_domain_rougeL, exp_dir):
     ax.set_yticks(range(len(domains)))
     ax.set_xticklabels([d.capitalize() for d in domains])
     ax.set_yticklabels([d.capitalize() for d in domains])
-    ax.set_xlabel('Evaluation Domain')
-    ax.set_ylabel('Expert Used')
-    ax.set_title('Exp3: Cross-Domain ROUGE-L (Expert x Eval Domain)')
+    ax.set_xlabel('评估领域')
+    ax.set_ylabel('专家类型')
+    ax.set_title('实验3: 跨域ROUGE-L热图（专家 x 评估领域）')
     for i in range(len(domains)):
         for j in range(len(domains)):
             ax.text(j, i, f'{matrix[i, j]:.3f}', ha='center', va='center', fontsize=10)
@@ -195,7 +195,7 @@ def plot_cross_domain_heatmap(cross_domain_rougeL, exp_dir):
     path = plots_dir / 'cross_domain_heatmap.png'
     plt.savefig(path, dpi=150, bbox_inches='tight')
     plt.close()
-    logger.info(f'Heatmap saved: {path}')
+    logger.info(f'热图已保存: {path}')
 
 
 def plot_architecture_comparison(arch_scores, exp_dir):
@@ -214,7 +214,7 @@ def plot_architecture_comparison(arch_scores, exp_dir):
     ax.set_xticks(x)
     ax.set_xticklabels(configs)
     ax.set_ylabel('Score')
-    ax.set_title('Exp3: MoE-4 vs MoE-3 vs Single-Model')
+    ax.set_title('实验3: MoE-4 vs MoE-3 vs 单模型')
     ax.legend()
     ax.set_ylim(0, 1.0)
     ax.grid(axis='y', alpha=0.3)
@@ -222,12 +222,12 @@ def plot_architecture_comparison(arch_scores, exp_dir):
     path = plots_dir / 'architecture_comparison.png'
     plt.savefig(path, dpi=150, bbox_inches='tight')
     plt.close()
-    logger.info(f'Architecture comparison plot saved: {path}')
+    logger.info(f'架构对比图已保存: {path}')
 
 
 def run(args):
     logger.info('=' * 80)
-    logger.info('Experiment 3: MoE Architecture Validation')
+    logger.info('实验3: MoE架构验证')
     logger.info('=' * 80)
 
     results = {
@@ -240,17 +240,17 @@ def run(args):
         'architecture_comparison': {},
     }
 
-    # Load test data for all specialized types
+    # 加载所有专项领域的测试数据
     test_datasets = {}
     for et in SPECIALIZED_TYPES:
         try:
             test_datasets[et] = _load_test_data(et)
-            logger.info(f'{et} test: {len(test_datasets[et])} samples')
+            logger.info(f'{et} 测试集: {len(test_datasets[et])} 个样本')
         except Exception as e:
-            logger.error(f'Failed to load {et} data: {e}')
+            logger.error(f'加载 {et} 数据失败: {e}')
 
-    # 1. Matched expert (MoE-4 diagonal)
-    logger.info('\n--- MoE-4: Matched experts ---')
+    # 1. 匹配专家（MoE-4对角线）
+    logger.info('\n--- MoE-4: 匹配专家 ---')
     matched_rougeL = {}
     matched_f1 = {}
     for et in SPECIALIZED_TYPES:
@@ -268,17 +268,16 @@ def run(args):
             }
             matched_rougeL[et] = q.get('rougeL', 0)
             matched_f1[et] = b.get('f1_score', 0)
-            logger.info(f'Matched {et}: ROUGE-L={q.get("rougeL", 0):.4f}')
+            logger.info(f'匹配 {et}: ROUGE-L={q.get("rougeL", 0):.4f}')
         except Exception as e:
-            logger.error(f'Matched {et} failed: {e}')
+            logger.error(f'匹配 {et} 失败: {e}')
 
-    # 2. Cross-domain: expert_i on domain_j (3x3 matrix, skip diagonal)
-    logger.info('\n--- Cross-domain analysis ---')
+    # 2. 跨域评估: expert_i在domain_j上（3x3矩阵，跳过对角线）
+    logger.info('\n--- 跨域分析 ---')
     cross_domain_rougeL = {}
     for expert_type in SPECIALIZED_TYPES:
         for eval_domain in SPECIALIZED_TYPES:
             if expert_type == eval_domain:
-                # Diagonal: reuse matched results
                 key = f'{expert_type}_on_{eval_domain}'
                 cross_domain_rougeL[key] = matched_rougeL.get(expert_type, 0)
                 continue
@@ -294,12 +293,12 @@ def run(args):
                     'n_samples': len(cached['samples']) if cached else 0,
                     'generation_quality': q,
                 }
-                logger.info(f'Cross {expert_type}->>{eval_domain}: ROUGE-L={q.get("rougeL", 0):.4f}')
+                logger.info(f'跨域 {expert_type}->>{eval_domain}: ROUGE-L={q.get("rougeL", 0):.4f}')
             except Exception as e:
-                logger.error(f'Cross {expert_type}->>{eval_domain} failed: {e}')
+                logger.error(f'跨域 {expert_type}->>{eval_domain} 失败: {e}')
 
-    # 3. Single model (lora_single) on all domains
-    logger.info('\n--- Single-model (lora_single) ---')
+    # 3. 单模型（lora_single）在所有领域上的评估
+    logger.info('\n--- 单模型（lora_single）---')
     single_rougeL_list = []
     single_f1_list = []
     for et in SPECIALIZED_TYPES:
@@ -317,18 +316,15 @@ def run(args):
             }
             single_rougeL_list.append(q.get('rougeL', 0))
             single_f1_list.append(b.get('f1_score', 0))
-            logger.info(f'Single {et}: ROUGE-L={q.get("rougeL", 0):.4f}')
+            logger.info(f'单模型 {et}: ROUGE-L={q.get("rougeL", 0):.4f}')
         except Exception as e:
-            logger.error(f'Single {et} failed: {e}')
+            logger.error(f'单模型 {et} 失败: {e}')
 
-    # Architecture comparison aggregated scores
     moe4_rougeL = np.mean(list(matched_rougeL.values())) if matched_rougeL else 0
     moe4_f1 = np.mean(list(matched_f1.values())) if matched_f1 else 0
     single_rougeL = np.mean(single_rougeL_list) if single_rougeL_list else 0
     single_f1 = np.mean(single_f1_list) if single_f1_list else 0
 
-    # MoE-3: same as MoE-4 but without general expert; re-route general to best matched
-    # For text/image/uml test sets MoE-3 == MoE-4 (same experts used)
     moe3_rougeL = moe4_rougeL
     moe3_f1 = moe4_f1
 
@@ -339,7 +335,6 @@ def run(args):
     }
     results['architecture_comparison'] = arch_scores
 
-    # Routing statistics
     routing_stats = {et: len(test_datasets.get(et, [])) for et in SPECIALIZED_TYPES}
     routing_stats['total'] = sum(routing_stats.values())
     results['routing_statistics'] = routing_stats
@@ -351,17 +346,17 @@ def run(args):
         plot_cross_domain_heatmap(cross_domain_rougeL, EXP_DIR)
         plot_architecture_comparison(arch_scores, EXP_DIR)
     except Exception as e:
-        logger.warning(f'Plotting failed: {e}')
+        logger.warning(f'绘图失败: {e}')
 
-    # Summary
+    # 汇总
     logger.info('\n' + '=' * 80)
-    logger.info('ARCHITECTURE COMPARISON SUMMARY')
+    logger.info('架构对比汇总')
     logger.info('=' * 80)
-    logger.info(f'{"Config":<12} {"ROUGE-L":>10} {"F1":>10}')
+    logger.info(f'{"配置":<12} {"ROUGE-L":>10} {"F1":>10}')
     logger.info('-' * 34)
     for config, scores in arch_scores.items():
         logger.info(f'{config:<12} {scores["rougeL"]:>10.4f} {scores["f1"]:>10.4f}')
-    logger.info(f'\nResults saved to: {EXP_DIR}')
+    logger.info(f'\n结果已保存至: {EXP_DIR}')
 
 
 def main():

@@ -107,34 +107,34 @@ class ZeroShotGenerator:
 
     def load_model(self) -> bool:
         """
-        Load the base LanguageModel without any LoRA adapter.
+        加载不带LoRA适配器的基础语言模型。
 
         Returns:
-            True if loading succeeded, False otherwise
+            加载成功返回True，否则返回False
         """
         try:
             from models.language_model import LanguageModel
 
-            logger.info(f'Loading base model from: {self.base_model_path}')
+            logger.info(f'正在加载基础模型: {self.base_model_path}')
             self._lm = LanguageModel(
                 model_path=self.base_model_path,
                 use_4bit=self.use_4bit
             )
             self.is_model_loaded = True
-            logger.info('Base model loaded successfully')
+            logger.info('基础模型加载成功')
             return True
         except Exception as e:
-            logger.error(f'Failed to load base model: {e}')
+            logger.error(f'基础模型加载失败: {e}')
             import traceback
             logger.error(traceback.format_exc())
             return False
 
     def unload_model(self) -> bool:
         """
-        Release the model from GPU memory.
+        从GPU显存中释放模型。
 
         Returns:
-            True if unload succeeded
+            卸载成功返回True
         """
         try:
             if self._lm is not None:
@@ -146,10 +146,10 @@ class ZeroShotGenerator:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             self.is_model_loaded = False
-            logger.info('Base model unloaded')
+            logger.info('基础模型已卸载')
             return True
         except Exception as e:
-            logger.error(f'Failed to unload model: {e}')
+            logger.error(f'模型卸载失败: {e}')
             return False
 
     def generate(
@@ -173,12 +173,12 @@ class ZeroShotGenerator:
             Generated instruction string (empty string on failure)
         """
         if not self.is_model_loaded:
-            logger.warning('Model not loaded, attempting to load...')
+            logger.warning('模型未加载，尝试加载...')
             if not self.load_model():
                 return ''
 
         if n_shots > 0 and not examples:
-            logger.warning('n_shots > 0 but no examples provided, falling back to zero-shot')
+            logger.warning('n_shots > 0 但未提供示例，退回到零样本模式')
             n_shots = 0
 
         prompt = _build_few_shot_prompt(input_text, input_type, n_shots, examples or [])
@@ -195,7 +195,7 @@ class ZeroShotGenerator:
             )
             return result
         except Exception as e:
-            logger.error(f'Generation failed: {e}')
+            logger.error(f'生成失败: {e}')
             return ''
 
     def batch_generate(
@@ -225,7 +225,7 @@ class ZeroShotGenerator:
             List of generated instruction strings
         """
         if not self.is_model_loaded:
-            logger.warning('Model not loaded, attempting to load...')
+            logger.warning('模型未加载，尝试加载...')
             if not self.load_model():
                 return [''] * len(inputs)
 
@@ -234,7 +234,7 @@ class ZeroShotGenerator:
             out = self.generate(inp, input_type=input_type, n_shots=n_shots, examples=examples)
             results.append(out)
             if (i + 1) % 20 == 0:
-                logger.info(f'ZeroShot generated {i + 1}/{len(inputs)}')
+                logger.info(f'零样本已生成 {i + 1}/{len(inputs)}')
 
-        logger.info(f'Batch generation complete: {len(results)} samples')
+        logger.info(f'批量生成完成: {len(results)}个样本')
         return results

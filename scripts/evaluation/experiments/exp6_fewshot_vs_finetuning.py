@@ -95,16 +95,16 @@ def _sample_examples(train_data, n, seed):
 
 
 def run_few_shot(n_shots, run_id, train_data, test_data, generator, args):
-    """Run or load cached few-shot inference for one (n_shots, run_id) combo."""
+    """运行或从缓存加载某(n_shots, run_id)组合的少样本推理结果。"""
     filename = _cache_filename(n_shots, run_id)
     cached = load_predictions_cache(CACHE_DIR, filename)
     if cached and not args.force_regenerate:
-        logger.info(f'{n_shots}-shot run{run_id}: loaded from cache')
+        logger.info(f'{n_shots}样本 run{run_id}: 从缓存加载')
         return cached
 
     seed = SEED_MAP[run_id]
     examples = _sample_examples(train_data, n_shots, seed) if n_shots > 0 else []
-    logger.info(f'{n_shots}-shot run{run_id}: generating (seed={seed}, {len(examples)} examples)...')
+    logger.info(f'{n_shots}样本 run{run_id}: 生成中（seed={seed}, {len(examples)}个示例）...')
 
     inputs = [d['input'] for d in test_data]
     references = [d['output'] for d in test_data]
@@ -129,15 +129,15 @@ def run_few_shot(n_shots, run_id, train_data, test_data, generator, args):
 
 
 def run_lora_moe(test_data, args):
-    """Run or load LoRA-MoE text expert inference (reuse exp1/exp2 cache)."""
+    """运行或加载LoRA-MoE文本专家推理结果（复用exp1/exp2缓存）。"""
     cache_subdir = path_cfg.OUTPUTS_DIR / 'inference_cache' / 'lora_moe'
     filename = 'text_predictions.json'
     cached = load_predictions_cache(cache_subdir, filename)
     if cached and not args.force_regenerate:
-        logger.info('LoRA-MoE: loaded from cache')
+        logger.info('LoRA-MoE: 从缓存加载')
         return cached
 
-    logger.info('LoRA-MoE: running text expert inference...')
+    logger.info('LoRA-MoE: 执行文本专家推理...')
     from src.experts import TextExpert
     expert = TextExpert(lora_path=None, use_4bit=True)
     if not expert.load_model():
@@ -200,9 +200,9 @@ def plot_bar_with_errorbars(shot_summary, lora_rougeL, exp_dir, test_mode=False)
     ax.set_xticks(x)
     ax.set_xticklabels(n_shot_labels)
     ax.set_ylabel('ROUGE-L')
-    title = 'Exp6: Few-Shot vs Fine-Tuned (ROUGE-L)'
+    title = '实验6: Few-Shot vs 微调（ROUGE-L）'
     if test_mode:
-        title += ' [TEST MODE]'
+        title += ' [测试模式]'
     ax.set_title(title)
     ax.set_ylim(0, 1.0)
     ax.grid(axis='y', alpha=0.3)
@@ -222,13 +222,13 @@ def plot_bar_with_errorbars(shot_summary, lora_rougeL, exp_dir, test_mode=False)
 
 def run(args):
     logger.info('=' * 80)
-    logger.info('Experiment 6: Few-Shot vs Fine-Tuning')
+    logger.info('实验6: Few-Shot vs 微调对比')
     logger.info('=' * 80)
 
-    logger.info('Loading text dataset...')
+    logger.info('加载文本数据集...')
     all_data = TextDatasetLoader().load_csv_files()
     train_data, _, test_data = split_dataset_for_expert(all_data, 'text')
-    logger.info(f'Train={len(train_data)}, Test={len(test_data)}')
+    logger.info(f'训练集={len(train_data)}, 测试集={len(test_data)}')
 
     results = {
         'experiment': 'exp6_fewshot_vs_finetuning',
@@ -238,10 +238,10 @@ def run(args):
         'lora_moe': {},
     }
 
-    # Load zero-shot generator once for all few-shot runs
+    # 加载基础模型（用于所有few-shot推理）
     generator = ZeroShotGenerator(use_4bit=True)
     if not generator.load_model():
-        logger.error('Failed to load base model for few-shot generation')
+        logger.error('基础模型加载失败，无法进行少样本生成')
         return
 
     try:
@@ -249,7 +249,7 @@ def run(args):
         all_run_metrics = {}
 
         for n_shots, run_ids in SHOT_CONFIGS:
-            logger.info(f'\n=== {n_shots}-shot ({len(run_ids)} runs) ===')
+            logger.info(f'\n=== {n_shots}样本（{len(run_ids)}次运行）===')
             run_metrics = []
 
             for run_id in run_ids:
@@ -265,10 +265,10 @@ def run(args):
 
                     q = m.get('generation_quality', {})
                     logger.info(
-                        f'{n_shots}-shot run{run_id}: ROUGE-L={q.get("rougeL", 0):.4f}'
+                        f'{n_shots}样本 run{run_id}: ROUGE-L={q.get("rougeL", 0):.4f}'
                     )
                 except Exception as e:
-                    logger.error(f'{n_shots}-shot run{run_id} failed: {e}')
+                    logger.error(f'{n_shots}样本 run{run_id} 失败: {e}')
                     logger.error(traceback.format_exc())
 
             mean_rougeL, std_rougeL = compute_runs_stats(run_metrics)
@@ -289,13 +289,13 @@ def run(args):
                 'mean_rougeL': mean_rougeL,
                 'std_rougeL': std_rougeL,
             }
-            logger.info(f'{n_shots}-shot: mean ROUGE-L={mean_rougeL:.4f} (std={std_rougeL:.4f})')
+            logger.info(f'{n_shots}样本: 均值ROUGE-L={mean_rougeL:.4f}（标准差={std_rougeL:.4f}）')
 
     finally:
         generator.unload_model()
 
-    # LoRA-MoE baseline
-    logger.info('\n=== LoRA-MoE (fine-tuned) ===')
+    # LoRA-MoE基线
+    logger.info('\n=== LoRA-MoE（微调） ===')
     try:
         cached = run_lora_moe(test_data, args)
         if cached:
@@ -314,7 +314,7 @@ def run(args):
         else:
             lora_rougeL = 0.0
     except Exception as e:
-        logger.error(f'LoRA-MoE evaluation failed: {e}')
+        logger.error(f'LoRA-MoE评估失败: {e}')
         lora_rougeL = 0.0
 
     EXP_DIR.mkdir(parents=True, exist_ok=True)
@@ -323,18 +323,18 @@ def run(args):
     try:
         plot_bar_with_errorbars(shot_summary, lora_rougeL, EXP_DIR, test_mode=args.test_mode)
     except Exception as e:
-        logger.warning(f'Plotting failed: {e}')
+        logger.warning(f'绘图失败: {e}')
 
-    # Summary
+    # 汇总
     logger.info('\n' + '=' * 80)
-    logger.info('FEW-SHOT CONSISTENCY SUMMARY')
+    logger.info('少样本一致性汇总')
     logger.info('=' * 80)
-    logger.info(f'{"Config":<16} {"Mean ROUGE-L":>14} {"Std":>8}')
+    logger.info(f'{"配置":<16} {"均值ROUGE-L":>14} {"标准差":>8}')
     logger.info('-' * 40)
     for n_shots, (mean, std) in sorted(shot_summary.items()):
-        logger.info(f'{n_shots}-shot{" ":>10} {mean:>14.4f} {std:>8.4f}')
+        logger.info(f'{n_shots}样本{" ":>10} {mean:>14.4f} {std:>8.4f}')
     logger.info(f'LoRA-MoE{" ":>10} {lora_rougeL:>14.4f} {"0.0000":>8}')
-    logger.info(f'\nResults saved to: {EXP_DIR}')
+    logger.info(f'\n结果已保存至: {EXP_DIR}')
 
 
 def main():

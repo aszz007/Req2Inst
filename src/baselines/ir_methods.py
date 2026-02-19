@@ -51,7 +51,7 @@ class BM25Retriever:
         self._outputs = [item['output'] for item in train_data]
         self._bm25 = BM25Okapi(tokenized_corpus)
         self._indexed = True
-        logger.info(f'BM25 index built with {len(train_data)} documents')
+        logger.info(f'BM25索引构建完成，共{len(train_data)}条文档')
 
     def retrieve(self, query: str) -> str:
         """
@@ -85,7 +85,7 @@ class BM25Retriever:
         for i, q in enumerate(queries):
             results.append(self.retrieve(q))
             if (i + 1) % 50 == 0:
-                logger.info(f'BM25 retrieved {i + 1}/{len(queries)}')
+                logger.info(f'BM25已检索 {i + 1}/{len(queries)}')
         return results
 
 
@@ -134,9 +134,9 @@ class LSARetriever:
 
         self._indexed = True
         logger.info(
-            f'LSA index built: {len(train_data)} docs, '
-            f'{n_components} components, '
-            f'explained variance={self._svd.explained_variance_ratio_.sum():.3f}'
+            f'LSA索引构建完成: {len(train_data)}条文档, '
+            f'{n_components}个主成分, '
+            f'解释方差={self._svd.explained_variance_ratio_.sum():.3f}'
         )
 
     def retrieve(self, query: str) -> str:
@@ -176,5 +176,5 @@ class LSARetriever:
         for i, q in enumerate(queries):
             results.append(self.retrieve(q))
             if (i + 1) % 50 == 0:
-                logger.info(f'LSA retrieved {i + 1}/{len(queries)}')
+                logger.info(f'LSA已检索 {i + 1}/{len(queries)}')
         return results

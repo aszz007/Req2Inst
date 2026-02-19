@@ -77,20 +77,20 @@ def save_predictions_cache(
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
 
-    logger.info(f'Cache saved: {filepath} ({len(samples)} samples)')
+    logger.info(f'缓存已保存: {filepath}（{len(samples)}个样本）')
     return filepath
 
 
 def load_predictions_cache(cache_dir: Path, filename: str) -> Optional[Dict]:
     """
-    Load a predictions cache JSON file.
+    加载预测缓存JSON文件。
 
     Args:
-        cache_dir: Directory containing the cache file
-        filename: Cache filename
+        cache_dir: 缓存文件所在目录
+        filename: 缓存文件名
 
     Returns:
-        Parsed dict, or None if the file does not exist
+        解析后的字典，若文件不存在则返回None
     """
     filepath = Path(cache_dir) / filename
     if not filepath.exists():
@@ -99,7 +99,7 @@ def load_predictions_cache(cache_dir: Path, filename: str) -> Optional[Dict]:
     with open(filepath, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
-    logger.info(f'Cache loaded: {filepath} ({data.get("total_samples", "?")} samples)')
+    logger.info(f'缓存已加载: {filepath}（{data.get("total_samples", "?")}个样本）')
     return data
 
 
@@ -129,10 +129,10 @@ def compute_all_metrics(
 
     skipped = len(predictions) - len(valid_pairs)
     if skipped:
-        logger.warning(f'Skipped {skipped} empty predictions out of {len(predictions)}')
+        logger.warning(f'已跳过 {skipped} 条空预测（共{len(predictions)}条）')
 
     if not valid_pairs:
-        logger.error('No valid predictions to evaluate')
+        logger.error('没有有效预测，无法评估')
         return {}
 
     valid_preds = [pair[0] for pair in valid_pairs]
@@ -162,7 +162,7 @@ def compute_all_metrics(
     }
 
     logger.info(
-        f'Metrics computed | ROUGE-L={quality.get("rougeL", 0):.4f} '
+        f'指标计算完成 | ROUGE-L={quality.get("rougeL", 0):.4f} '
         f'F1={binary.get("f1_score", 0):.4f}'
     )
     return result
@@ -192,5 +192,5 @@ def save_experiment_results(
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2, ensure_ascii=False, default=str)
 
-    logger.info(f'Experiment results saved: {filepath}')
+    logger.info(f'实验结果已保存: {filepath}')
     return filepath

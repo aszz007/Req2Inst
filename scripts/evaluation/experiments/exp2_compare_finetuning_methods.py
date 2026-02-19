@@ -105,17 +105,17 @@ def run_inference_for_method_expert(method, expert_type, test_data, args):
 
     cached = load_predictions_cache(cache_subdir, cache_filename)
     if cached and not args.force_regenerate:
-        logger.info(f'{method}/{expert_type}: loaded from cache')
+        logger.info(f'{method}/{expert_type}: 从缓存加载')
         return cached
 
-    logger.info(f'{method}/{expert_type}: running inference...')
+    logger.info(f'{method}/{expert_type}: 执行推理...')
     ckpt_path = METHOD_CKPT_MAP[method](expert_type)
 
     ExpertClass = _get_expert_class(expert_type)
     expert = ExpertClass(lora_path=ckpt_path, use_4bit=True)
 
     if not expert.load_model():
-        logger.error(f'{method}/{expert_type}: model load failed')
+        logger.error(f'{method}/{expert_type}: 模型加载失败')
         return None
 
     inputs = [d['input'] for d in test_data]
@@ -127,7 +127,7 @@ def run_inference_for_method_expert(method, expert_type, test_data, args):
     try:
         predictions = expert.batch_generate_instruction(inputs, batch_size=4)
     except Exception as e:
-        logger.error(f'{method}/{expert_type}: generation failed: {e}')
+        logger.error(f'{method}/{expert_type}: 生成失败: {e}')
         logger.error(traceback.format_exc())
         expert.unload_model()
         return None
@@ -167,7 +167,7 @@ def plot_grouped_bar(results_table, exp_dir):
             offset = (i - len(METHODS) / 2) * width + width / 2
             ax.bar(x + offset, values, width, label=method, color=method_colors[i % 5])
 
-        ax.set_title(f'Exp2: Fine-Tuning Methods - {expert_type.capitalize()} Expert')
+        ax.set_title(f'实验2: 微调方法对比 - {expert_type.capitalize()} 专家')
         ax.set_xticks(x)
         ax.set_xticklabels(metric_labels)
         ax.set_ylabel('Score')
@@ -178,12 +178,12 @@ def plot_grouped_bar(results_table, exp_dir):
         plot_path = plots_dir / f'{expert_type}_comparison.png'
         plt.savefig(plot_path, dpi=150, bbox_inches='tight')
         plt.close()
-        logger.info(f'Plot saved: {plot_path}')
+        logger.info(f'图表已保存: {plot_path}')
 
 
 def run(args):
     logger.info('=' * 80)
-    logger.info('Experiment 2: Fine-Tuning Method Comparison')
+    logger.info('实验2: 微调方法对比')
     logger.info('=' * 80)
 
     results = {
@@ -197,12 +197,12 @@ def run(args):
     results_table = {}
 
     for expert_type in EXPERT_TYPES:
-        logger.info(f'\n=== Expert type: {expert_type} ===')
+        logger.info(f'\n=== 专家类型: {expert_type} ===')
         try:
             test_data = _load_test_data(expert_type)
-            logger.info(f'Test samples: {len(test_data)}')
+            logger.info(f'测试集样本数: {len(test_data)}')
         except Exception as e:
-            logger.error(f'Failed to load data for {expert_type}: {e}')
+            logger.error(f'加载 {expert_type} 数据失败: {e}')
             continue
 
         for method in METHODS:
@@ -211,7 +211,7 @@ def run(args):
             try:
                 cached = run_inference_for_method_expert(method, expert_type, test_data, args)
                 if cached is None:
-                    logger.warning(f'{label}: skipped')
+                    logger.warning(f'{label}: 已跳过')
                     continue
 
                 preds = [s['prediction'] for s in cached['samples']]
@@ -240,10 +240,10 @@ def run(args):
                     f'{label}: BLEU={q.get("bleu", 0):.4f} '
                     f'ROUGE-L={q.get("rougeL", 0):.4f} '
                     f'F1={b.get("f1_score", 0):.4f} '
-                    f'Adapter={adapter_mb:.1f}MB'
+                    f'适配器大小={adapter_mb:.1f}MB'
                 )
             except Exception as e:
-                logger.error(f'{label} failed: {e}')
+                logger.error(f'{label} 执行失败: {e}')
                 logger.error(traceback.format_exc())
 
     EXP_DIR.mkdir(parents=True, exist_ok=True)
@@ -252,13 +252,13 @@ def run(args):
     try:
         plot_grouped_bar(results_table, EXP_DIR)
     except Exception as e:
-        logger.warning(f'Plotting failed: {e}')
+        logger.warning(f'绘图失败: {e}')
 
-    # Summary table
+    # 汇总表
     logger.info('\n' + '=' * 80)
-    logger.info('RESULTS SUMMARY')
+    logger.info('结果汇总')
     logger.info('=' * 80)
-    logger.info(f'{"Method+Expert":<28} {"ROUGE-L":>8} {"BLEU":>8} {"F1":>8}')
+    logger.info(f'{"方法+专家":<28} {"ROUGE-L":>8} {"BLEU":>8} {"F1":>8}')
     logger.info('-' * 56)
     for key, m in results['results'].items():
         q = m.get('generation_quality', {})
@@ -267,7 +267,7 @@ def run(args):
             f'{key:<28} {q.get("rougeL", 0):>8.4f} '
             f'{q.get("bleu", 0):>8.4f} {b.get("f1_score", 0):>8.4f}'
         )
-    logger.info(f'\nResults saved to: {EXP_DIR}')
+    logger.info(f'\n结果已保存至: {EXP_DIR}')
 
 
 def main():
