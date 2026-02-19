@@ -13,7 +13,9 @@ import torch
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    BitsAndBytesConfig
+    BitsAndBytesConfig,
+    LogitsProcessor,
+    LogitsProcessorList,
 )
 from tqdm import tqdm
 
@@ -40,6 +42,25 @@ from config.settings import get_path_config, get_device_config, get_model_config
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class SanitizeLogitsProcessor(LogitsProcessor):
+    """
+    拦截 NaN / +inf 的 logits，替换为 -inf，防止采样时触发 CUDA device-side assert。
+    常见于 p_tuning / prompt_tuning 的 soft prompt embeddings 与量化基座模型交互时产生
+    数值不稳定的情况。
+    """
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # Replace NaN and +inf with -inf so these tokens are never sampled
+        bad_mask = torch.isnan(scores) | (scores == float('inf'))
+        if bad_mask.any():
+            scores = scores.masked_fill(bad_mask, float('-inf'))
+        # If all logits in a row are -inf, multinomial sampling will fail.
+        # Fall back to uniform distribution over the full vocabulary for that row.
+        all_invalid = (scores == float('-inf')).all(dim=-1, keepdim=True)
+        if all_invalid.any():
+            scores = scores.masked_fill(all_invalid.expand_as(scores), 0.0)
+        return scores
 
 
 class LanguageModel:
@@ -383,7 +404,8 @@ class LanguageModel:
                 "do_sample": True if temperature > 0 else False,
                 "pad_token_id": self.tokenizer.pad_token_id,
                 "eos_token_id": stop_tokens,
-                "use_cache": True  # 启用KV cache加速
+                "use_cache": True,  # 启用KV cache加速
+                "logits_processor": LogitsProcessorList([SanitizeLogitsProcessor()]),
             }
 
             # GPU性能优化：高端GPU使用混合精度推理
@@ -481,6 +503,7 @@ class LanguageModel:
                 stop_tokens = list(set(stop_tokens))
 
                 # 生成配置
+                _sanitize_lp = LogitsProcessorList([SanitizeLogitsProcessor()])
                 generation_config = {
                     "max_new_tokens": max_new_tokens,
                     "temperature": temperature,
@@ -490,7 +513,8 @@ class LanguageModel:
                     "do_sample": True if temperature > 0 else False,
                     "pad_token_id": self.tokenizer.pad_token_id,
                     "eos_token_id": stop_tokens,
-                    "use_cache": True
+                    "use_cache": True,
+                    "logits_processor": _sanitize_lp,
                 }
 
                 # 批量生成
@@ -557,7 +581,8 @@ class LanguageModel:
                                 "do_sample": True if temperature > 0 else False,
                                 "pad_token_id": self.tokenizer.pad_token_id,
                                 "eos_token_id": stop_tokens,
-                                "use_cache": True
+                                "use_cache": True,
+                                "logits_processor": LogitsProcessorList([SanitizeLogitsProcessor()]),
                             }
 
                             with torch.no_grad():
