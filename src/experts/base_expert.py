@@ -119,6 +119,10 @@ class BaseExpert(ABC):
                 del self.model
                 self.model = None
 
+                # 强制Python垃圾回收，确保下一次模型加载前显存已完全释放
+                import gc
+                gc.collect()
+
                 # 清理GPU缓存
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()

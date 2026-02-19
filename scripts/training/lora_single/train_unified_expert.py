@@ -23,9 +23,13 @@ import sys
 import argparse
 from pathlib import Path
 
-# 添加项目根目录到路径
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+# 获取当前脚本的绝对路径并回溯到项目根目录
+# 路径层级：scripts(1) / training(2) / lora_single(3) / 脚本(4)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+
+# 确保路径被正确插入
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.training.lora_trainer import LoRATrainer
 from config.settings import (

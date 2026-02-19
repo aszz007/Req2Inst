@@ -126,11 +126,14 @@ class LanguageModel:
             if self.tokenizer.eos_token is None:
                 self.tokenizer.eos_token = '<|im_end|>'
 
+            # 使用固定GPU设备避免accelerate将层offload到CPU
+            device_map = {"": 0} if self.device == "cuda" else "auto"
+
             # 加载模型
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_path,
                 quantization_config=quantization_config,
-                device_map="auto",
+                device_map=device_map,
                 trust_remote_code=True,
                 torch_dtype=torch.float16 if not self.use_4bit else None,
                 low_cpu_mem_usage=True
@@ -303,8 +306,13 @@ class LanguageModel:
 
             logger.info("卸载LoRA权重...")
 
-            # 获取基础模型
-            self.model = self.model.unload()
+            # 兼容 LoRA / P-tuning / Prompt Tuning 等不同PEFT类型
+            if hasattr(self.model, 'unload'):
+                self.model = self.model.unload()
+            elif hasattr(self.model, 'get_base_model'):
+                self.model = self.model.get_base_model()
+            else:
+                logger.warning("模型不支持unload()，仅重置状态标志")
 
             self.current_lora_path = None
             self.is_lora_loaded = False
@@ -314,6 +322,9 @@ class LanguageModel:
 
         except Exception as e:
             logger.error(f"LoRA卸载失败: {e}")
+            # 无论是否异常，强制重置状态，避免影响下一次加载
+            self.current_lora_path = None
+            self.is_lora_loaded = False
             return False
 
     def generate(self, prompt: str, max_new_tokens: int = 2048,
@@ -419,7 +430,7 @@ class LanguageModel:
         # 自动选择batch_size
         if batch_size is None:
             if self.gpu_tier == 'high':
-                batch_size = 4
+                batch_size = 8
             elif self.gpu_tier == 'mid':
                 batch_size = 2
             else:

@@ -125,7 +125,7 @@ def run_inference_for_method_expert(method, expert_type, test_data, args):
         inputs, references = inputs[:10], references[:10]
 
     try:
-        predictions = expert.batch_generate_instruction(inputs, batch_size=4)
+        predictions = expert.batch_generate_instruction(inputs, batch_size=8)
     except Exception as e:
         logger.error(f'{method}/{expert_type}: 生成失败: {e}')
         logger.error(traceback.format_exc())
