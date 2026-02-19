@@ -43,6 +43,11 @@ EXP_DIR = path_cfg.OUTPUTS_DIR / 'evaluations' / 'experiments' / 'exp2_finetunin
 METHODS = ['lora_moe', 'lora_single', 'p_tuning', 'prompt_tuning', 'full_finetuning']
 EXPERT_TYPES = ['text', 'image', 'uml', 'general']
 
+# P-Tuning v2 and Prompt Tuning use soft prompt embeddings trained in FP16/BF16.
+# Loading them onto a 4bit quantized base causes attention distribution collapse
+# (outputs random vocabulary tokens). These methods must run in FP16 during inference.
+METHODS_REQUIRE_FP16 = {'p_tuning', 'prompt_tuning'}
+
 BATCH_SIZE_MAP = {
     'text': 16,
     'image': 16,
@@ -119,7 +124,8 @@ def run_inference_for_method_expert(method, expert_type, test_data, args):
     ckpt_path = METHOD_CKPT_MAP[method](expert_type)
 
     ExpertClass = _get_expert_class(expert_type)
-    expert = ExpertClass(lora_path=ckpt_path, use_4bit=True)
+    use_4bit = method not in METHODS_REQUIRE_FP16
+    expert = ExpertClass(lora_path=ckpt_path, use_4bit=use_4bit)
 
     if not expert.load_model():
         logger.error(f'{method}/{expert_type}: 模型加载失败')
