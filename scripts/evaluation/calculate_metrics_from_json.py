@@ -242,55 +242,12 @@ def save_results(results: Dict, expert_name: str, save_dir: str):
     logger.info(f"评估结果已保存至: {filepath}")
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description='从预测JSON快速重新计算评估指标',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-示例:
-  # 使用默认阈值
-  python calculate_metrics_from_json.py --input predictions.json
-
-  # 调整ROUGE阈值
-  python calculate_metrics_from_json.py --input predictions.json --rouge-threshold 0.6
-
-  # 使用OR逻辑
-  python calculate_metrics_from_json.py --input predictions.json --use-or
-
-  # 禁用BERTScore加快速度
-  python calculate_metrics_from_json.py --input predictions.json --no-bertscore
-        """
-    )
-
-    parser.add_argument('--input', '-i', type=str, required=True,
-                        help='预测数据JSON文件路径')
-    parser.add_argument('--save-dir', '-o', type=str, default='outputs/evaluations/metrics',
-                        help='结果保存目录')
-
-    # 阈值参数
-    parser.add_argument('--rouge-threshold', type=float, default=None,
-                        help=f'ROUGE-L阈值（默认: {EvaluationThresholds.ROUGE_L_THRESHOLD}）')
-    parser.add_argument('--bertscore-threshold', type=float, default=None,
-                        help=f'BERTScore F1阈值（默认: {EvaluationThresholds.BERTSCORE_F1_THRESHOLD}）')
-    parser.add_argument('--format-threshold', type=float, default=None,
-                        help=f'格式分数阈值（默认: {EvaluationThresholds.FORMAT_SCORE_THRESHOLD}）')
-
-    # 逻辑选择
-    logic_group = parser.add_mutually_exclusive_group()
-    logic_group.add_argument('--use-and', dest='use_and_logic', action='store_true',
-                             help='使用AND逻辑组合ROUGE和BERTScore（默认）')
-    logic_group.add_argument('--use-or', dest='use_and_logic', action='store_false',
-                             help='使用OR逻辑组合ROUGE和BERTScore')
-    parser.set_defaults(use_and_logic=None)
-
-    # BERTScore开关
-    parser.add_argument('--use-bertscore', action='store_true', default=True,
-                        help='使用BERTScore（默认启用）')
-    parser.add_argument('--no-bertscore', dest='use_bertscore', action='store_false',
-                        help='禁用BERTScore（加快计算速度）')
-
-    args = parser.parse_args()
-
+def main_single(args):
+    """
+    Original single-file metric computation logic.
+    Accepts a pre-parsed args namespace so it can be called from the unified
+    __main__ entry point without re-parsing sys.argv.
+    """
     # 加载预测数据
     try:
         data = load_predictions_json(args.input)
@@ -329,5 +286,216 @@ def main():
     logger.info("完成!")
 
 
+def main():
+    """
+    Original entry point — kept for backward compatibility.
+    Parses its own args and delegates to main_single().
+    """
+    import argparse as _argparse
+    parser = _argparse.ArgumentParser(
+        description='从预测JSON快速重新计算评估指标',
+        formatter_class=_argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  # 使用默认阈值
+  python calculate_metrics_from_json.py --input predictions.json
+
+  # 调整ROUGE阈值
+  python calculate_metrics_from_json.py --input predictions.json --rouge-threshold 0.6
+
+  # 使用OR逻辑
+  python calculate_metrics_from_json.py --input predictions.json --use-or
+
+  # 禁用BERTScore加快速度
+  python calculate_metrics_from_json.py --input predictions.json --no-bertscore
+        """
+    )
+    parser.add_argument('--input', '-i', type=str, required=True,
+                        help='预测数据JSON文件路径')
+    parser.add_argument('--save-dir', '-o', type=str, default='outputs/evaluations/metrics',
+                        help='结果保存目录')
+    parser.add_argument('--rouge-threshold', type=float, default=None,
+                        help=f'ROUGE-L阈值（默认: {EvaluationThresholds.ROUGE_L_THRESHOLD}）')
+    parser.add_argument('--bertscore-threshold', type=float, default=None,
+                        help=f'BERTScore F1阈值（默认: {EvaluationThresholds.BERTSCORE_F1_THRESHOLD}）')
+    parser.add_argument('--format-threshold', type=float, default=None,
+                        help=f'格式分数阈值（默认: {EvaluationThresholds.FORMAT_SCORE_THRESHOLD}）')
+    logic_group = parser.add_mutually_exclusive_group()
+    logic_group.add_argument('--use-and', dest='use_and_logic', action='store_true',
+                             help='使用AND逻辑组合ROUGE和BERTScore（默认）')
+    logic_group.add_argument('--use-or', dest='use_and_logic', action='store_false',
+                             help='使用OR逻辑组合ROUGE和BERTScore')
+    parser.set_defaults(use_and_logic=None)
+    parser.add_argument('--use-bertscore', action='store_true', default=True,
+                        help='使用BERTScore（默认启用）')
+    parser.add_argument('--no-bertscore', dest='use_bertscore', action='store_false',
+                        help='禁用BERTScore（加快计算速度）')
+    args = parser.parse_args()
+    main_single(args)
+
+
+# ---------------------------------------------------------------------------
+# Batch mode extensions (Phase 2 addition)
+# Do NOT modify anything above this line.
+# ---------------------------------------------------------------------------
+
+def scan_cache_files(cache_dir: Path) -> List[Path]:
+    """
+    Recursively find all *_predictions.json files under cache_dir.
+
+    Args:
+        cache_dir: Root directory to search
+
+    Returns:
+        List of matching Path objects
+    """
+    cache_dir = Path(cache_dir)
+    if not cache_dir.exists():
+        logger.warning(f"Cache directory does not exist: {cache_dir}")
+        return []
+    return sorted(cache_dir.rglob('*_predictions.json'))
+
+
+def main_batch(args):
+    """
+    Handle --list, --exp, --all batch metric recomputation modes.
+
+    Args:
+        args: Parsed argparse namespace containing batch-mode flags
+    """
+    cache_dir = project_root / 'outputs' / 'inference_cache'
+
+    if args.list_caches:
+        files = scan_cache_files(cache_dir)
+        if not files:
+            print(f"No cache files found under: {cache_dir}")
+        for f in files:
+            try:
+                print(f.relative_to(cache_dir))
+            except ValueError:
+                print(f)
+        return
+
+    # Determine which files to process
+    files = scan_cache_files(cache_dir)
+
+    if args.exp:
+        EXP_CACHE_MAP = {
+            'exp1': ['baselines', 'lora_moe'],
+            'exp2': ['lora_moe', 'lora_single', 'p_tuning', 'prompt_tuning', 'full_finetuning'],
+            'exp3': ['lora_moe', 'lora_single', 'exp3_cross_domain'],
+            'exp4': ['lora_moe_exp4'],
+            'exp5': ['lora_moe_exp5', 'lora_single_exp5', 'full_finetuning_exp5'],
+            'exp6': ['few_shot', 'lora_moe'],
+        }
+        valid_dirs = EXP_CACHE_MAP.get(args.exp, [])
+        if not valid_dirs:
+            logger.error(f"Unknown experiment: {args.exp}. Valid: {list(EXP_CACHE_MAP.keys())}")
+            return
+        files = [f for f in files if any(d in str(f) for d in valid_dirs)]
+        logger.info(f"Filtered to {len(files)} files for {args.exp}")
+
+    if args.method:
+        files = [f for f in files if args.method in str(f)]
+        logger.info(f"Filtered to {len(files)} files for method='{args.method}'")
+
+    if not files:
+        logger.warning("No matching cache files found")
+        return
+
+    logger.info(f"Processing {len(files)} cache file(s)...")
+    save_dir = args.save_dir or 'outputs/evaluations/metrics'
+    success_count = 0
+    fail_count = 0
+
+    for filepath in sorted(files):
+        logger.info(f"\n--- Processing: {filepath} ---")
+        try:
+            data = load_predictions_json(str(filepath))
+            results = calculate_metrics(
+                data['predictions'],
+                data['references'],
+                use_bertscore=not args.no_bertscore
+            )
+            results['expert_name'] = data.get('expert_name', 'unknown')
+            results['input_file'] = str(filepath)
+            print_metrics_summary(results, data.get('expert_name', 'unknown'))
+            save_results(results, data.get('expert_name', 'unknown'), save_dir)
+            success_count += 1
+        except Exception as e:
+            logger.error(f"Failed on {filepath}: {e}")
+            fail_count += 1
+
+    logger.info(f"\nBatch complete: {success_count} succeeded, {fail_count} failed")
+
+
 if __name__ == "__main__":
-    main()
+    import argparse as _argparse
+
+    parser = _argparse.ArgumentParser(
+        description='从预测JSON快速重新计算评估指标 (支持批量模式)',
+        formatter_class=_argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  # Single file mode (original behavior):
+  python calculate_metrics_from_json.py --input predictions.json
+
+  # List all available cache files:
+  python calculate_metrics_from_json.py --list
+
+  # Recompute metrics for all exp1 caches:
+  python calculate_metrics_from_json.py --exp exp1
+
+  # Recompute all caches, filter by method:
+  python calculate_metrics_from_json.py --all --method lora_moe
+
+  # Disable BERTScore for faster computation:
+  python calculate_metrics_from_json.py --all --no-bertscore
+        """
+    )
+
+    # Single-file flags (--input now optional when batch flags are used)
+    parser.add_argument('--input', '-i', type=str, required=False,
+                        help='预测数据JSON文件路径 (single-file mode)')
+    parser.add_argument('--save-dir', '-o', type=str, default='outputs/evaluations/metrics',
+                        help='结果保存目录')
+
+    # Threshold flags (used by single-file mode)
+    parser.add_argument('--rouge-threshold', type=float, default=None,
+                        help=f'ROUGE-L阈值（默认: {EvaluationThresholds.ROUGE_L_THRESHOLD}）')
+    parser.add_argument('--bertscore-threshold', type=float, default=None,
+                        help=f'BERTScore F1阈值（默认: {EvaluationThresholds.BERTSCORE_F1_THRESHOLD}）')
+    parser.add_argument('--format-threshold', type=float, default=None,
+                        help=f'格式分数阈值（默认: {EvaluationThresholds.FORMAT_SCORE_THRESHOLD}）')
+
+    logic_group = parser.add_mutually_exclusive_group()
+    logic_group.add_argument('--use-and', dest='use_and_logic', action='store_true',
+                             help='使用AND逻辑组合ROUGE和BERTScore（默认）')
+    logic_group.add_argument('--use-or', dest='use_and_logic', action='store_false',
+                             help='使用OR逻辑组合ROUGE和BERTScore')
+    parser.set_defaults(use_and_logic=None)
+
+    parser.add_argument('--use-bertscore', action='store_true', default=True,
+                        help='使用BERTScore（默认启用）')
+    parser.add_argument('--no-bertscore', dest='use_bertscore', action='store_false',
+                        help='禁用BERTScore（加快计算速度）')
+
+    # Batch mode flags
+    parser.add_argument('--list', dest='list_caches', action='store_true',
+                        help='List all available inference cache files')
+    parser.add_argument('--exp', type=str, default=None,
+                        help='Compute metrics for all caches of a given experiment '
+                             '(exp1, exp2, exp3, exp4, exp5, exp6)')
+    parser.add_argument('--all', dest='compute_all', action='store_true',
+                        help='Compute metrics for all available cache files')
+    parser.add_argument('--method', type=str, default=None,
+                        help='Filter cache files by method name (used with --exp or --all)')
+
+    args = parser.parse_args()
+
+    if args.list_caches or args.exp or args.compute_all:
+        main_batch(args)
+    elif args.input:
+        main_single(args)
+    else:
+        parser.error('--input is required unless --list, --exp, or --all is specified')

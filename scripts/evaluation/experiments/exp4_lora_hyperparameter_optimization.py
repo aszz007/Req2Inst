@@ -1,0 +1,325 @@
+#!/usr/bin/env python3
+"""
+Experiment 4: LoRA Hyperparameter Optimization
+
+Find optimal LoRA rank/alpha/dropout configuration by training and evaluating
+10 configurations on the text expert.
+
+Baseline (8, 16, 0.05) reuses LORA_MOE_CKPTS['text'] without retraining.
+
+Output: outputs/evaluations/experiments/exp4_lora_hyperparameters/
+"""
+
+import sys
+import traceback
+import argparse
+from datetime import datetime
+from pathlib import Path
+
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import numpy as np
+
+from config.settings import get_path_config
+from src.training.data_loader import TextDatasetLoader, split_dataset_for_expert
+from src.baselines.inference_utils import (
+    save_predictions_cache, load_predictions_cache,
+    compute_all_metrics, save_experiment_results,
+)
+from src.utils.logger import get_logger
+
+logger = get_logger('experiments.exp4')
+
+path_cfg = get_path_config()
+CACHE_DIR = path_cfg.OUTPUTS_DIR / 'inference_cache' / 'lora_moe_exp4'
+EXP_DIR = path_cfg.OUTPUTS_DIR / 'evaluations' / 'experiments' / 'exp4_lora_hyperparameters'
+
+# Exactly these 10 configs: (rank, alpha, dropout)
+CONFIGS = [
+    (8,  16,  0.05),   # baseline - reuse LORA_MOE_CKPTS['text']
+    (8,  16,  0.0),
+    (8,  16,  0.1),
+    (16, 32,  0.05),
+    (16, 32,  0.0),
+    (16, 32,  0.1),
+    (32, 64,  0.05),
+    (32, 64,  0.0),
+    (32, 64,  0.1),
+    (64, 128, 0.05),
+]
+
+
+def _config_name(rank, alpha, dropout):
+    return f'text_r{rank}_a{alpha}_d{dropout}'
+
+
+def _get_ckpt_path(rank, alpha, dropout):
+    if rank == 8 and alpha == 16 and dropout == 0.05:
+        return path_cfg.LORA_MOE_CKPTS['text']
+    return path_cfg.CHECKPOINTS_DIR / 'lora_moe_exp4' / _config_name(rank, alpha, dropout)
+
+
+def train_config(rank, alpha, dropout, args):
+    """Train a LoRA configuration if checkpoint doesn't already exist."""
+    ckpt_path = _get_ckpt_path(rank, alpha, dropout)
+
+    # Baseline: never retrain
+    if rank == 8 and alpha == 16 and dropout == 0.05:
+        logger.info(f'Baseline config (8,16,0.05): reusing {ckpt_path}')
+        return
+
+    if ckpt_path.exists() and not args.force_retrain:
+        logger.info(f'Checkpoint exists, skipping training: {ckpt_path}')
+        return
+
+    logger.info(f'Training config r={rank} a={alpha} d={dropout} -> {ckpt_path}')
+    from src.training.lora_trainer import LoRATrainer
+
+    trainer = LoRATrainer(
+        expert_type='text',
+        output_dir=str(ckpt_path),
+        debug_samples=False
+    )
+    trainer.lora_rank = rank
+    trainer.lora_alpha = alpha
+    trainer.lora_dropout = dropout
+
+    trainer.setup_model()
+    trainer.prepare_data()
+    trainer.train()
+    logger.info(f'Training complete: {ckpt_path}')
+
+
+def run_inference(rank, alpha, dropout, test_data, args):
+    """Run or load cached inference for one config."""
+    cfg_name = _config_name(rank, alpha, dropout)
+    filename = f'{cfg_name}_predictions.json'
+    cached = load_predictions_cache(CACHE_DIR, filename)
+    if cached and not args.force_regenerate:
+        logger.info(f'{cfg_name}: loaded from cache')
+        return cached
+
+    ckpt_path = _get_ckpt_path(rank, alpha, dropout)
+    if not ckpt_path.exists():
+        logger.warning(f'{cfg_name}: checkpoint not found at {ckpt_path}')
+        return None
+
+    logger.info(f'{cfg_name}: running inference from {ckpt_path}')
+    from src.experts import TextExpert
+
+    expert = TextExpert(lora_path=str(ckpt_path), use_4bit=True)
+    if not expert.load_model():
+        logger.error(f'{cfg_name}: model load failed')
+        return None
+
+    inputs = [d['input'] for d in test_data]
+    references = [d['output'] for d in test_data]
+
+    if args.test_mode:
+        inputs, references = inputs[:10], references[:10]
+
+    try:
+        predictions = expert.batch_generate_instruction(inputs, batch_size=4)
+    except Exception as e:
+        logger.error(f'{cfg_name}: generation failed: {e}')
+        expert.unload_model()
+        return None
+    finally:
+        expert.unload_model()
+
+    samples = [
+        {'index': i, 'input': inp, 'prediction': pred, 'reference': ref}
+        for i, (inp, pred, ref) in enumerate(zip(inputs, predictions, references))
+    ]
+    save_predictions_cache(
+        samples, 'lora_moe_exp4', 'text',
+        {'rank': rank, 'alpha': alpha, 'dropout': dropout},
+        CACHE_DIR, filename
+    )
+    return load_predictions_cache(CACHE_DIR, filename)
+
+
+def plot_rank_vs_rouge(config_results, exp_dir):
+    plots_dir = exp_dir / 'plots'
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    # Group by rank
+    ranks = sorted(set(r for r, _, _ in CONFIGS))
+    rank_rougeL = {r: [] for r in ranks}
+    for (rank, alpha, dropout), m in config_results.items():
+        q = m.get('generation_quality', {})
+        rank_rougeL[rank].append(q.get('rougeL', 0))
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    x = list(ranks)
+    y = [np.mean(rank_rougeL[r]) for r in x]
+    y_std = [np.std(rank_rougeL[r]) for r in x]
+    ax.errorbar(x, y, yerr=y_std, marker='o', capsize=4, linewidth=2)
+    ax.set_xlabel('LoRA Rank')
+    ax.set_ylabel('ROUGE-L (mean across dropout settings)')
+    ax.set_title('Exp4: ROUGE-L vs LoRA Rank')
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    path = plots_dir / 'rank_vs_rougeL.png'
+    plt.savefig(path, dpi=150, bbox_inches='tight')
+    plt.close()
+    logger.info(f'Plot saved: {path}')
+
+
+def plot_heatmap_dropout_alpha(config_results, exp_dir, fixed_rank=16):
+    plots_dir = exp_dir / 'plots'
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    alphas = sorted(set(a for _, a, _ in CONFIGS if _ == 0.05 or True))
+    dropouts = sorted(set(d for _, _, d in CONFIGS))
+    # Filter to rank=fixed_rank configs
+    rank_configs = {(a, d): m for (r, a, d), m in config_results.items() if r == fixed_rank}
+    if not rank_configs:
+        return
+
+    unique_alphas = sorted(set(a for a, _ in rank_configs.keys()))
+    unique_dropouts = sorted(set(d for _, d in rank_configs.keys()))
+
+    matrix = np.zeros((len(unique_dropouts), len(unique_alphas)))
+    for i, d in enumerate(unique_dropouts):
+        for j, a in enumerate(unique_alphas):
+            m = rank_configs.get((a, d), {})
+            matrix[i, j] = m.get('generation_quality', {}).get('rougeL', 0)
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    im = ax.imshow(matrix, cmap='YlOrRd', vmin=0, vmax=1)
+    plt.colorbar(im, ax=ax, label='ROUGE-L')
+    ax.set_xticks(range(len(unique_alphas)))
+    ax.set_yticks(range(len(unique_dropouts)))
+    ax.set_xticklabels([str(a) for a in unique_alphas])
+    ax.set_yticklabels([str(d) for d in unique_dropouts])
+    ax.set_xlabel('Alpha')
+    ax.set_ylabel('Dropout')
+    ax.set_title(f'Exp4: ROUGE-L Heatmap (rank={fixed_rank})')
+    for i in range(len(unique_dropouts)):
+        for j in range(len(unique_alphas)):
+            ax.text(j, i, f'{matrix[i, j]:.3f}', ha='center', va='center', fontsize=9)
+    plt.tight_layout()
+    path = plots_dir / f'heatmap_rank{fixed_rank}.png'
+    plt.savefig(path, dpi=150, bbox_inches='tight')
+    plt.close()
+    logger.info(f'Heatmap saved: {path}')
+
+
+def run(args):
+    logger.info('=' * 80)
+    logger.info('Experiment 4: LoRA Hyperparameter Optimization')
+    logger.info('=' * 80)
+
+    # Load text test data
+    logger.info('Loading text dataset...')
+    all_data = TextDatasetLoader().load_csv_files()
+    train_data, _, test_data = split_dataset_for_expert(all_data, 'text')
+    logger.info(f'Test samples: {len(test_data)}')
+
+    results = {
+        'experiment': 'exp4_lora_hyperparameter_optimization',
+        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'test_mode': args.test_mode,
+        'configs': [],
+    }
+
+    config_results = {}
+
+    for rank, alpha, dropout in CONFIGS:
+        cfg_name = _config_name(rank, alpha, dropout)
+        logger.info(f'\n--- Config: {cfg_name} ---')
+
+        # Train if needed
+        try:
+            train_config(rank, alpha, dropout, args)
+        except Exception as e:
+            logger.error(f'{cfg_name}: training failed: {e}')
+            logger.error(traceback.format_exc())
+
+        # Run inference
+        try:
+            cached = run_inference(rank, alpha, dropout, test_data, args)
+            if cached is None:
+                logger.warning(f'{cfg_name}: skipped (inference failed)')
+                continue
+
+            preds = [s['prediction'] for s in cached['samples']]
+            refs = [s['reference'] for s in cached['samples']]
+            m = compute_all_metrics(preds, refs, use_bertscore=not args.no_bertscore)
+
+            q = m.get('generation_quality', {})
+            b = m.get('binary_classification', {})
+
+            config_entry = {
+                'name': cfg_name,
+                'rank': rank,
+                'alpha': alpha,
+                'dropout': dropout,
+                'n_samples': len(preds),
+                'generation_quality': q,
+                'binary_classification': b,
+            }
+            results['configs'].append(config_entry)
+            config_results[(rank, alpha, dropout)] = m
+
+            logger.info(
+                f'{cfg_name}: ROUGE-L={q.get("rougeL", 0):.4f} '
+                f'F1={b.get("f1_score", 0):.4f}'
+            )
+        except Exception as e:
+            logger.error(f'{cfg_name}: evaluation failed: {e}')
+            logger.error(traceback.format_exc())
+
+    # Find best config
+    if results['configs']:
+        best = max(results['configs'], key=lambda c: c['generation_quality'].get('rougeL', 0))
+        results['best_config'] = best
+        logger.info(f'\nBest config: {best["name"]} (ROUGE-L={best["generation_quality"].get("rougeL", 0):.4f})')
+
+    EXP_DIR.mkdir(parents=True, exist_ok=True)
+    save_experiment_results(results, EXP_DIR, 'results.json')
+
+    try:
+        plot_rank_vs_rouge(config_results, EXP_DIR)
+        plot_heatmap_dropout_alpha(config_results, EXP_DIR, fixed_rank=16)
+    except Exception as e:
+        logger.warning(f'Plotting failed: {e}')
+
+    # Summary table
+    logger.info('\n' + '=' * 80)
+    logger.info('CONFIG COMPARISON SUMMARY')
+    logger.info('=' * 80)
+    logger.info(f'{"Config":<32} {"ROUGE-L":>8} {"F1":>8}')
+    logger.info('-' * 50)
+    for c in results['configs']:
+        q = c.get('generation_quality', {})
+        b = c.get('binary_classification', {})
+        logger.info(
+            f'{c["name"]:<32} {q.get("rougeL", 0):>8.4f} {b.get("f1_score", 0):>8.4f}'
+        )
+    logger.info(f'\nResults saved to: {EXP_DIR}')
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Exp4: LoRA hyperparameter optimization')
+    parser.add_argument('--force-regenerate', action='store_true',
+                        help='Re-run inference even if cache exists')
+    parser.add_argument('--force-retrain', action='store_true',
+                        help='Re-train even if checkpoint exists')
+    parser.add_argument('--from-cache', action='store_true')
+    parser.add_argument('--no-bertscore', action='store_true')
+    parser.add_argument('--test-mode', action='store_true')
+    args = parser.parse_args()
+    if args.from_cache:
+        args.force_regenerate = False
+        args.force_retrain = False
+    run(args)
+
+
+if __name__ == '__main__':
+    main()
