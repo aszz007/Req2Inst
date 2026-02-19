@@ -278,12 +278,15 @@ class EnhancedMetrics:
                 results['bertscore_precision'] = sum(bertscore_result['precision']) / len(predictions)
                 results['bertscore_recall'] = sum(bertscore_result['recall']) / len(predictions)
                 results['bertscore_f1'] = sum(bertscore_result['f1']) / len(predictions)
+                # 保留 per-sample 列表，供 calculate_binary_classification_metrics 复用，避免重复计算
+                results['bertscore_f1_scores'] = list(bertscore_result['f1'])
                 logger.info(f"BERTScore计算完成 - F1: {results['bertscore_f1']:.4f}")
             except Exception as e:
                 logger.error(f"BERTScore计算失败: {e}")
                 results['bertscore_precision'] = 0.0
                 results['bertscore_recall'] = 0.0
                 results['bertscore_f1'] = 0.0
+                results['bertscore_f1_scores'] = []
 
         logger.info("所有生成质量指标计算完成")
         return results
@@ -524,7 +527,8 @@ class EnhancedMetrics:
         format_threshold: float = None,
         rouge_threshold: float = None,
         bertscore_threshold: float = None,
-        use_and_logic: bool = None
+        use_and_logic: bool = None,
+        precomputed_bertscore_f1: Optional[List[float]] = None
     ) -> Dict[str, Any]:
         """
         计算二分类指标：TP, TN, FP, FN
@@ -547,6 +551,9 @@ class EnhancedMetrics:
             rouge_threshold: ROUGE-L阈值（默认使用配置值）
             bertscore_threshold: BERTScore F1阈值（默认使用配置值）
             use_and_logic: 是否使用AND逻辑组合ROUGE和BERTScore（默认使用配置值）
+            precomputed_bertscore_f1: 预先计算好的per-sample BERTScore F1列表（由
+                calculate_generation_quality 返回的 bertscore_f1_scores 字段）。
+                若提供则直接使用，跳过重复的 BERTScore 推理，显著节省时间。
 
         Returns:
             dict: 包含TP, FP, FN, TN, Precision, Recall, F1, Accuracy的字典
@@ -591,7 +598,11 @@ class EnhancedMetrics:
 
         # 可选：使用BERTScore作为额外的语义相似度指标
         bertscore_f1_scores = []
-        if self.use_bertscore and self.bertscore_metric is not None:
+        if precomputed_bertscore_f1 is not None and len(precomputed_bertscore_f1) == len(predictions):
+            # 直接复用外部传入的per-sample BERTScore，避免重复推理
+            bertscore_f1_scores = precomputed_bertscore_f1
+            logger.info(f"复用预计算BERTScore - 平均F1: {sum(bertscore_f1_scores)/len(bertscore_f1_scores):.4f}")
+        elif self.use_bertscore and self.bertscore_metric is not None:
             try:
                 logger.info("使用BERTScore计算语义相似度...")
                 bertscore_result = self.bertscore_metric.compute(
@@ -802,8 +813,11 @@ class EnhancedMetrics:
         # 3. 二分类指标（TP/TN/FP/FN）
         if include_binary_metrics:
             logger.info("\n[3/4] 计算二分类指标（TP/TN/FP/FN）...")
+            # 复用 generate_quality 已计算好的 per-sample BERTScore，避免重复推理
+            precomputed_bs = report['generation_quality'].get('bertscore_f1_scores', None)
             report['binary_classification'] = self.calculate_binary_classification_metrics(
-                predictions, references
+                predictions, references,
+                precomputed_bertscore_f1=precomputed_bs
             )
         else:
             logger.info("\n[3/4] 跳过二分类指标计算")

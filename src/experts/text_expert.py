@@ -101,6 +101,9 @@ class TextExpert(BaseExpert):
                 verbose=(sample_index is None or sample_index < 3)
             )
 
+            # 规范化输出（补全 Definition: 标签、去除行尾分隔符等）
+            instruction = self._normalize_instruction(instruction)
+
             # 只在前3个样本输出模型原始输出
             if sample_index is None or sample_index < 3:
                 logger.info("=" * 80)
@@ -176,9 +179,10 @@ class TextExpert(BaseExpert):
                 logger.info(instructions[i])
                 logger.info("=" * 80)
 
-            # 验证每个输出
+            # 验证每个输出（先规范化再验证）
             validated_instructions = []
             for i, instruction in enumerate(instructions):
+                instruction = self._normalize_instruction(instruction)
                 if self.validate_output(instruction):
                     validated_instructions.append(instruction)
                 else:

@@ -300,6 +300,40 @@ class BaseExpert(ABC):
             logger.error(f"批量生成失败: {e}")
             return [""] * len(prompts)
 
+    def _normalize_instruction(self, instruction: str) -> str:
+        """
+        对模型输出做格式规范化，增强鲁棒性。
+        在 validate_output 之前调用，避免合法内容因格式问题触发 fallback。
+
+        规则：
+        1. 若以 "In this task" 开头但缺少 "Definition:" 标签，自动补全
+        2. 去除行尾的分隔符残留（如 "- - -"、"---"，p_tuning 常见）
+
+        Args:
+            instruction: 模型原始输出
+
+        Returns:
+            str: 规范化后的指令（有修改时才变动，不破坏原有正常输出）
+        """
+        import re
+
+        if not instruction:
+            return instruction
+
+        text = instruction.strip()
+
+        # ── 规则1：补全缺失的 Definition: 标签 ──────────────────────
+        # 首行以 "In this task" 开头（大小写不敏感）但没有 "Definition:" 前缀
+        if re.match(r'^in this task\b', text, re.IGNORECASE) and not text.startswith('Definition:'):
+            text = 'Definition: ' + text
+            logger.debug("自动补全 'Definition:' 标签（原始以 'In this task' 开头）")
+
+        # ── 规则2：去除行尾分隔符 ────────────────────────────────────
+        # p_tuning 等方法生成的指令末尾有时带 "- - -" 或 "---"
+        text = re.sub(r'\s*[-\s]{3,}\s*$', '', text).strip()
+
+        return text
+
     def _extract_three_part_instruction(self, text: str) -> str:
         """
         提取三段式指令，移除多余内容

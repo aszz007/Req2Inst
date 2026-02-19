@@ -78,7 +78,13 @@ class LanguageModel:
         self.device_cfg = device_cfg
 
         # GPU性能检测和量化策略
-        self.use_4bit = device_cfg.should_use_quantization() if self.device == "cuda" else False
+        # 调用方显式传入 use_4bit=True 时无条件启用4bit，避免 FP16 下 soft prompt 产生 NaN/inf
+        if self.device != "cuda":
+            self.use_4bit = False
+        elif use_4bit:
+            self.use_4bit = True
+        else:
+            self.use_4bit = device_cfg.should_use_quantization()
         self.gpu_tier = device_cfg.get_gpu_tier()
         self.is_high_end_gpu = device_cfg.is_high_end_gpu
 
@@ -430,7 +436,7 @@ class LanguageModel:
         # 自动选择batch_size
         if batch_size is None:
             if self.gpu_tier == 'high':
-                batch_size = 8
+                batch_size = 16
             elif self.gpu_tier == 'mid':
                 batch_size = 2
             else:
@@ -647,12 +653,12 @@ class LanguageModel:
 
     def _truncate_after_three_parts(self, text: str) -> str:
         """
-        检测三段式格式并截断后续多余内容
+        检测三段式格式并截断后续多余内容，同时限制 Things to Avoid 段落长度。
 
         策略：
-        1. 找到Definition、Emphasis & Caution、Things to Avoid三个标签
-        2. 在Things to Avoid行结束后截断所有内容
-        3. 特别处理换行符和空行
+        1. 支持多行格式（每段占独立行）和单行格式（三段拼在同一行）
+        2. 提取 Things to Avoid 内容，最多保留 MAX_DO_NOT 条 "Do not" 语句
+        3. 找不到完整三段式时原样返回
 
         Args:
             text: 原始生成文本
@@ -662,32 +668,86 @@ class LanguageModel:
         """
         import re
 
+        MAX_DO_NOT = 6  # Things to Avoid 最多保留的 "Do not" 条数
+
+        SECTION_PAT = (
+            r'(?P<def>Definition:.*?)'
+            r'(?P<emph>Emphasis\s*(?:&|and)\s*Caution:.*?)'
+            r'(?P<avoid>Things to Avoid:\s*(?P<avoid_body>.*))'
+            r'$'
+        )
+
+        def _limit_do_not(content: str) -> str:
+            """将 Things to Avoid 内容截断到最多 MAX_DO_NOT 条 Do not 语句"""
+            sentences = re.split(r'(?<=[.!?])\s+', content.strip())
+            do_not_count = 0
+            kept = []
+            for s in sentences:
+                if re.match(r'Do not\b', s.strip(), re.IGNORECASE):
+                    do_not_count += 1
+                    if do_not_count > MAX_DO_NOT:
+                        break
+                kept.append(s)
+            return ' '.join(kept).strip()
+
         lines = text.split('\n')
 
-        # 查找三段式的位置
-        definition_idx = None
-        emphasis_idx = None
-        avoid_idx = None
-
+        # ── 路径 A：多行格式 ─────────────────────────────────────────
+        # 每个段头各占独立行时，按行号定位
+        definition_idx = emphasis_idx = avoid_idx = None
         for i, line in enumerate(lines):
-            line_stripped = line.strip()
-            if line_stripped.startswith('Definition:'):
+            ls = line.strip()
+            if ls.startswith('Definition:') and definition_idx is None:
                 definition_idx = i
-            elif line_stripped.startswith('Emphasis & Caution:') or line_stripped.startswith('Emphasis and Caution:'):
+            elif (ls.startswith('Emphasis & Caution:') or ls.startswith('Emphasis and Caution:')) \
+                    and emphasis_idx is None:
                 emphasis_idx = i
-            elif line_stripped.startswith('Things to Avoid:'):
+            elif ls.startswith('Things to Avoid:') and avoid_idx is None:
                 avoid_idx = i
 
-        # 如果找到完整的三段式，截断到Things to Avoid行结束
         if definition_idx is not None and emphasis_idx is not None and avoid_idx is not None:
-            # 只保留到Things to Avoid行
-            truncated_lines = lines[:avoid_idx + 1]
+            # 多行格式：收集 Things to Avoid 段内容（含跨行内容）
+            avoid_header_line = lines[avoid_idx]
+            inline = avoid_header_line[avoid_header_line.index('Things to Avoid:') + len('Things to Avoid:'):].strip()
 
-            # 检查是否还有空行紧跟着，如果有也保留一个
-            # 但不保留后续的任何内容
-            return '\n'.join(truncated_lines)
+            extra = []
+            for line in lines[avoid_idx + 1:]:
+                s = line.strip()
+                if s == '' or re.match(
+                    r'^(Definition:|Emphasis\s*(?:&|and)\s*Caution:|Things to Avoid:)',
+                    s, re.IGNORECASE
+                ):
+                    break
+                extra.append(s)
 
-        # 如果没有找到完整的三段式，返回原文本
+            full_avoid = (inline + ' ' + ' '.join(extra)).strip()
+            limited_avoid = _limit_do_not(full_avoid)
+
+            result_lines = lines[definition_idx:avoid_idx]
+            result_lines.append(
+                f"Things to Avoid: {limited_avoid}" if limited_avoid else avoid_header_line.rstrip()
+            )
+            return '\n'.join(result_lines)
+
+        # ── 路径 B：单行格式 ─────────────────────────────────────────
+        # 三个段头都嵌在同一行（或文本中不含换行），用正则提取
+        flat = ' '.join(lines)  # 展平为单行便于匹配
+        m = re.search(
+            r'(Definition:.*?)'
+            r'(Emphasis\s*(?:&|and)\s*Caution:.*?)'
+            r'(Things to Avoid:\s*)(.*)',
+            flat,
+            re.DOTALL | re.IGNORECASE
+        )
+        if m:
+            def_part    = m.group(1).strip()
+            emph_part   = m.group(2).strip()
+            avoid_body  = m.group(4).strip()
+            limited_avoid = _limit_do_not(avoid_body)
+            parts = [def_part, emph_part, f"Things to Avoid: {limited_avoid}"]
+            return '\n'.join(parts)
+
+        # ── 路径 C：未找到完整三段式，原样返回 ─────────────────────
         return text
 
     def get_lora_status(self) -> dict:

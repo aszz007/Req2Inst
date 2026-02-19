@@ -145,9 +145,12 @@ def compute_all_metrics(
         references=valid_refs
     )
     format_m = metrics.calculate_format_metrics(instructions=valid_preds)
+    # 复用 generate_quality 已计算的 per-sample BERTScore F1，避免 calculate_binary 重复推理
+    precomputed_bs = quality.get('bertscore_f1_scores', None)
     binary = metrics.calculate_binary_classification_metrics(
         predictions=valid_preds,
-        references=valid_refs
+        references=valid_refs,
+        precomputed_bertscore_f1=precomputed_bs
     )
     stats = metrics.calculate_statistical_metrics(instructions=valid_preds)
 
@@ -177,7 +180,7 @@ def compute_all_metrics(
         import torch
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-    except ImportError:
+    except Exception:
         pass
 
     return result
