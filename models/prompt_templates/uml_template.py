@@ -319,9 +319,12 @@ CRITICAL RULES:
                 if content:
                     result['has_definition'] = True
                     # 检查是否包含业务逻辑关键词（UML任务的核心）
+                    # 注意：使用子串匹配，需包含模型实际生成的动词变体
+                    # interact/interacts/interacting 均不含 interaction，需单独列出
                     business_keywords = [
                         'implement', 'functionality', 'workflow', 'process',
-                        'interaction', 'trigger', 'system'
+                        'interaction', 'interact', 'trigger', 'system',
+                        'analyze', 'manage', 'execute', 'perform'
                     ]
                     if any(keyword in line_lower for keyword in business_keywords):
                         result['has_business_logic'] = True

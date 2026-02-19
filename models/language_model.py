@@ -507,9 +507,85 @@ class LanguageModel:
                 pbar.update(len(batch_prompts))
 
             except Exception as e:
-                logger.error(f"批量生成失败 (batch {i//batch_size + 1}/{num_batches}): {e}")
-                # 失败时返回空字符串
-                results.extend([""] * len(batch_prompts))
+                error_str = str(e)
+                if 'out of memory' in error_str.lower() and len(batch_prompts) > 1:
+                    # CUDA OOM：对该batch逐步降低batch_size重试
+                    logger.warning(
+                        f"批量生成OOM (batch {i//batch_size + 1}/{num_batches})，"
+                        f"当前batch_size={len(batch_prompts)}，尝试降级重试..."
+                    )
+                    torch.cuda.empty_cache()
+                    retry_size = max(1, len(batch_prompts) // 2)
+                    retry_results = []
+                    retry_failed = False
+                    for r in range(0, len(batch_prompts), retry_size):
+                        retry_batch = batch_prompts[r:r + retry_size]
+                        try:
+                            retry_inputs = self.tokenizer(
+                                retry_batch,
+                                return_tensors="pt",
+                                padding=True,
+                                truncation=True,
+                                max_length=8192
+                            )
+                            retry_input_lengths = retry_inputs['input_ids'].shape[1]
+                            retry_inputs = {k: v.to(self.model.device) for k, v in retry_inputs.items()}
+
+                            stop_tokens = []
+                            if self.tokenizer.eos_token_id is not None:
+                                stop_tokens.append(self.tokenizer.eos_token_id)
+                            im_end_id = self.tokenizer.convert_tokens_to_ids('<|im_end|>')
+                            if im_end_id is not None and im_end_id != self.tokenizer.unk_token_id:
+                                stop_tokens.append(im_end_id)
+                            endoftext_id = self.tokenizer.convert_tokens_to_ids('<|endoftext|>')
+                            if endoftext_id is not None and endoftext_id != self.tokenizer.unk_token_id:
+                                stop_tokens.append(endoftext_id)
+                            stop_tokens = list(set(stop_tokens))
+
+                            retry_gen_config = {
+                                "max_new_tokens": max_new_tokens,
+                                "temperature": temperature,
+                                "top_p": top_p,
+                                "top_k": top_k,
+                                "repetition_penalty": repetition_penalty,
+                                "do_sample": True if temperature > 0 else False,
+                                "pad_token_id": self.tokenizer.pad_token_id,
+                                "eos_token_id": stop_tokens,
+                                "use_cache": True
+                            }
+
+                            with torch.no_grad():
+                                if self.use_4bit:
+                                    retry_outputs = self.model.generate(**retry_inputs, **retry_gen_config)
+                                else:
+                                    with torch.cuda.amp.autocast():
+                                        retry_outputs = self.model.generate(**retry_inputs, **retry_gen_config)
+
+                            for retry_out in retry_outputs:
+                                gen_ids = retry_out[retry_input_lengths:]
+                                gen_text = self.tokenizer.decode(gen_ids, skip_special_tokens=True)
+                                gen_text = self._clean_generated_text(gen_text)
+                                gen_text = self._truncate_after_three_parts(gen_text)
+                                retry_results.append(gen_text)
+
+                            torch.cuda.empty_cache()
+
+                        except Exception as retry_e:
+                            logger.error(
+                                f"降级重试失败 (retry_size={retry_size}): {retry_e}"
+                            )
+                            retry_results.extend([""] * len(retry_batch))
+                            retry_failed = True
+
+                    results.extend(retry_results)
+                    if not retry_failed:
+                        logger.info(
+                            f"batch {i//batch_size + 1}/{num_batches} 降级重试成功，"
+                            f"retry_size={retry_size}"
+                        )
+                else:
+                    logger.error(f"批量生成失败 (batch {i//batch_size + 1}/{num_batches}): {e}")
+                    results.extend([""] * len(batch_prompts))
                 pbar.update(len(batch_prompts))
 
         pbar.close()
