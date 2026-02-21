@@ -191,10 +191,22 @@ def main():
         logger.info(f'  {label}: avg_score={r["avg_score"]:.1f}/4  [{verdict}]')
 
     fp16_ok = report.get('FP16', {}).get('avg_score', 0) >= 2.5
-    bit4_ok = report.get('4bit', {}).get('avg_score', 0) >= 2.5
+    bit4_result = report.get('4bit')
+    bit4_tested = bit4_result is not None
+    bit4_ok = bit4_tested and bit4_result.get('avg_score', 0) >= 2.5
 
     logger.info('')
-    if not bit4_ok and fp16_ok:
+    if not bit4_tested:
+        # 4bit was skipped via --skip-4bit
+        if fp16_ok:
+            logger.info('CONCLUSION: FP16 inference produces valid output (4bit skipped).')
+            logger.info('ACTION: Checkpoint is healthy under FP16.')
+            logger.info('        exp2_compare_finetuning_methods.py uses METHODS_REQUIRE_FP16')
+            logger.info('        to enforce FP16 for this method. Re-run exp2 with --force-regenerate.')
+        else:
+            logger.info('CONCLUSION: FP16 inference fails (4bit skipped). Checkpoint may be corrupt or undertrained.')
+            logger.info('ACTION: Check training logs for this method/expert. Consider retraining.')
+    elif not bit4_ok and fp16_ok:
         logger.info('CONCLUSION: Soft prompt + 4bit quantization incompatible.')
         logger.info('ACTION: Use FP16 inference for this method.')
         logger.info('        exp2_compare_finetuning_methods.py already contains this fix via')

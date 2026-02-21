@@ -126,6 +126,9 @@ def run_inference_for_method_expert(method, expert_type, test_data, args):
     ExpertClass = _get_expert_class(expert_type)
     use_4bit = method not in METHODS_REQUIRE_FP16
     expert = ExpertClass(lora_path=ckpt_path, use_4bit=use_4bit)
+    # Soft prompt methods (p_tuning/prompt_tuning) require batch_size=1.
+    # Their virtual tokens are position-sensitive; padding in larger batches
+    # causes embedding misalignment and produces garbage output.
 
     if not expert.load_model():
         logger.error(f'{method}/{expert_type}: 模型加载失败')
@@ -137,8 +140,9 @@ def run_inference_for_method_expert(method, expert_type, test_data, args):
     if args.test_mode:
         inputs, references = inputs[:10], references[:10]
 
+    effective_batch_size = 1 if method in METHODS_REQUIRE_FP16 else BATCH_SIZE_MAP.get(expert_type, 8)
     try:
-        predictions = expert.batch_generate_instruction(inputs, batch_size=BATCH_SIZE_MAP.get(expert_type, 8))
+        predictions = expert.batch_generate_instruction(inputs, batch_size=effective_batch_size)
     except Exception as e:
         logger.error(f'{method}/{expert_type}: 生成失败: {e}')
         logger.error(traceback.format_exc())
