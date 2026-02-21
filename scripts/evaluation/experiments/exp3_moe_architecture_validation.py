@@ -134,6 +134,48 @@ def run_cross_domain(expert_type, eval_domain, test_data, args):
     return _run_or_load(cache_subdir, filename, _run, args)
 
 
+def run_general_via_text_expert(test_data, args):
+    """
+    MoE-3 degraded routing: run General test set through TextExpert.
+
+    MoE-3 removes GeneralExpert. When a general-type input arrives, the
+    router must fall back to the most semantically similar specialized expert.
+    TextExpert is the correct fallback because text samples constitute the
+    largest share (~39%) of the General training set. This function provides
+    the MoE-3 general-domain score by running General test data through the
+    TextExpert checkpoint, making the MoE-3 vs MoE-4 architecture comparison
+    a genuine empirical measurement rather than a placeholder.
+    """
+    cache_subdir = CACHE_DIR / 'exp3_moe3_general_via_text'
+    filename = 'general_via_text_predictions.json'
+
+    def _run():
+        expert = _get_expert('text')
+        if not expert.load_model():
+            return None
+        inputs = [d['input'] for d in (test_data[:10] if args.test_mode else test_data)]
+        refs = [d['output'] for d in (test_data[:10] if args.test_mode else test_data)]
+        try:
+            preds = expert.batch_generate_instruction(inputs, batch_size=4)
+        except Exception as e:
+            logger.error(f'MoE-3 general-via-text inference failed: {e}')
+            preds = [''] * len(inputs)
+        finally:
+            expert.unload_model()
+        samples = [
+            {'index': i, 'input': inp, 'prediction': p, 'reference': r}
+            for i, (inp, p, r) in enumerate(zip(inputs, preds, refs))
+        ]
+        save_predictions_cache(
+            samples, 'moe3_general_via_text', 'general',
+            {'expert': 'text', 'reason': 'MoE-3 degraded routing fallback'},
+            cache_subdir, filename
+        )
+        return load_predictions_cache(cache_subdir, filename)
+
+    return _run_or_load(cache_subdir, filename, _run, args)
+
+
 def run_single_model(expert_type, test_data, args):
     """在给定专家类型的测试数据上运行lora_single统一模型。"""
     cache_subdir = CACHE_DIR / 'lora_single'
@@ -236,13 +278,14 @@ def run(args):
         'test_mode': args.test_mode,
         'matched_expert': {},
         'cross_domain': {},
+        'moe3_general_fallback': {},
         'single_model': {},
         'architecture_comparison': {},
     }
 
-    # 加载所有专项领域的测试数据
+    # 加载所有专项领域的测试数据，以及General测试数据（用于MoE-3对比）
     test_datasets = {}
-    for et in SPECIALIZED_TYPES:
+    for et in SPECIALIZED_TYPES + ['general']:
         try:
             test_datasets[et] = _load_test_data(et)
             logger.info(f'{et} 测试集: {len(test_datasets[et])} 个样本')
@@ -297,7 +340,30 @@ def run(args):
             except Exception as e:
                 logger.error(f'跨域 {expert_type}->>{eval_domain} 失败: {e}')
 
-    # 3. 单模型（lora_single）在所有领域上的评估
+    # 3. MoE-3: General测试集通过TextExpert（退化路由）
+    logger.info('\n--- MoE-3: General域退化路由（TextExpert）---')
+    moe3_general_rougeL = 0.0
+    moe3_general_f1 = 0.0
+    if 'general' in test_datasets:
+        try:
+            cached = run_general_via_text_expert(test_datasets['general'], args)
+            m = _metrics_from_cache(cached)
+            q = m.get('generation_quality', {})
+            b = m.get('binary_classification', {})
+            moe3_general_rougeL = q.get('rougeL', 0)
+            moe3_general_f1 = b.get('f1_score', 0)
+            results['moe3_general_fallback'] = {
+                'expert_used': 'text',
+                'reason': 'MoE-3 degraded routing: text expert has largest share in general training set',
+                'n_samples': len(cached['samples']) if cached else 0,
+                'generation_quality': q,
+                'binary_classification': b,
+            }
+            logger.info(f'MoE-3 general(via text): ROUGE-L={moe3_general_rougeL:.4f}')
+        except Exception as e:
+            logger.error(f'MoE-3 general退化路由失败: {e}')
+
+    # 4. 单模型（lora_single）在所有领域上的评估
     logger.info('\n--- 单模型（lora_single）---')
     single_rougeL_list = []
     single_f1_list = []
@@ -320,22 +386,50 @@ def run(args):
         except Exception as e:
             logger.error(f'单模型 {et} 失败: {e}')
 
-    moe4_rougeL = np.mean(list(matched_rougeL.values())) if matched_rougeL else 0
-    moe4_f1 = np.mean(list(matched_f1.values())) if matched_f1 else 0
+    # MoE-4: text/image/uml匹配 + general匹配，四域平均
+    # general匹配分复用exp2的lora_moe/general缓存
+    moe4_general_rougeL = 0.0
+    moe4_general_f1 = 0.0
+    if 'general' in test_datasets:
+        try:
+            cached_general = load_predictions_cache(CACHE_DIR / 'lora_moe', 'general_predictions.json')
+            if cached_general:
+                m = _metrics_from_cache(cached_general)
+                moe4_general_rougeL = m.get('generation_quality', {}).get('rougeL', 0)
+                moe4_general_f1 = m.get('binary_classification', {}).get('f1_score', 0)
+                logger.info(f'MoE-4 general(matched): ROUGE-L={moe4_general_rougeL:.4f}')
+            else:
+                logger.warning('lora_moe/general缓存未找到，MoE-4 general分设为0')
+        except Exception as e:
+            logger.error(f'加载lora_moe general缓存失败: {e}')
+
+    moe4_all_rougeL = list(matched_rougeL.values()) + [moe4_general_rougeL]
+    moe4_all_f1 = list(matched_f1.values()) + [moe4_general_f1]
+    moe4_rougeL = np.mean(moe4_all_rougeL) if moe4_all_rougeL else 0
+    moe4_f1 = np.mean(moe4_all_f1) if moe4_all_f1 else 0
+
+    # MoE-3: text/image/uml匹配 + general通过TextExpert退化路由，四域平均
+    moe3_all_rougeL = list(matched_rougeL.values()) + [moe3_general_rougeL]
+    moe3_all_f1 = list(matched_f1.values()) + [moe3_general_f1]
+    moe3_rougeL = np.mean(moe3_all_rougeL) if moe3_all_rougeL else 0
+    moe3_f1 = np.mean(moe3_all_f1) if moe3_all_f1 else 0
+
     single_rougeL = np.mean(single_rougeL_list) if single_rougeL_list else 0
     single_f1 = np.mean(single_f1_list) if single_f1_list else 0
 
-    moe3_rougeL = moe4_rougeL
-    moe3_f1 = moe4_f1
-
     arch_scores = {
         'MoE-4': {'rougeL': moe4_rougeL, 'f1': moe4_f1},
-        'MoE-3': {'rougeL': moe3_rougeL, 'f1': moe3_f1},
+        'MoE-3': {
+            'rougeL': moe3_rougeL,
+            'f1': moe3_f1,
+            'note': 'General domain routed to TextExpert (largest share in general training set). '
+                    'Scores are four-domain averages: text/image/uml matched + general-via-text.'
+        },
         'Single': {'rougeL': single_rougeL, 'f1': single_f1},
     }
     results['architecture_comparison'] = arch_scores
 
-    routing_stats = {et: len(test_datasets.get(et, [])) for et in SPECIALIZED_TYPES}
+    routing_stats = {et: len(test_datasets.get(et, [])) for et in SPECIALIZED_TYPES + ['general']}
     routing_stats['total'] = sum(routing_stats.values())
     results['routing_statistics'] = routing_stats
 
