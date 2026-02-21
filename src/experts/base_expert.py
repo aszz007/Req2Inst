@@ -322,15 +322,51 @@ class BaseExpert(ABC):
 
         text = instruction.strip()
 
-        # ── 规则1：补全缺失的 Definition: 标签 ──────────────────────
+        # ── 规则1：规范化段落标签大小写 ──────────────────────────────
+        # p_tuning 等方法训练时格式不稳定，可能输出 DEFINITION:/EMphasis 等变体。
+        # 统一替换为标准大小写，避免后续 startswith 严格匹配失败触发 fallback。
+        header_normalizations = [
+            # Definition: 的各种大小写变体
+            (r'^DEFINITION:', 'Definition:'),
+            (r'^definition:', 'Definition:'),
+            # Emphasis & Caution: 的各种变体（含大小写混乱和拼写变体）
+            (r'^EMphasis\s*&\s*Caution:', 'Emphasis & Caution:'),
+            (r'^EMPHASIS\s*&\s*CAUTION:', 'Emphasis & Caution:'),
+            (r'^emphasis\s*&\s*caution:', 'Emphasis & Caution:'),
+            (r'^Emphasis\s*and\s*Caution:', 'Emphasis & Caution:'),
+            (r'^EMPHASIS\s*AND\s*CAUTION:', 'Emphasis & Caution:'),
+            (r'^EMphasis\s*and\s*Caution:', 'Emphasis & Caution:'),
+            # Things to Avoid: 的各种大小写变体
+            (r'^THINGS\s*TO\s*AVOID:', 'Things to Avoid:'),
+            (r'^things\s*to\s*avoid:', 'Things to Avoid:'),
+        ]
+        normalized_lines = []
+        for line in text.split('\n'):
+            line_stripped = line.strip()
+            matched = False
+            for pattern, replacement in header_normalizations:
+                if re.match(pattern, line_stripped):
+                    line_stripped = re.sub(pattern, replacement, line_stripped, count=1)
+                    matched = True
+                    break
+            normalized_lines.append(line_stripped if matched else line)
+        text = '\n'.join(normalized_lines)
+
+        # ── 规则2：补全缺失的 Definition: 标签 ──────────────────────
         # 首行以 "In this task" 开头（大小写不敏感）但没有 "Definition:" 前缀
         if re.match(r'^in this task\b', text, re.IGNORECASE) and not text.startswith('Definition:'):
             text = 'Definition: ' + text
             logger.debug("自动补全 'Definition:' 标签（原始以 'In this task' 开头）")
 
-        # ── 规则2：去除行尾分隔符 ────────────────────────────────────
-        # p_tuning 等方法生成的指令末尾有时带 "- - -" 或 "---"
-        text = re.sub(r'\s*[-\s]{3,}\s*$', '', text).strip()
+        # ── 规则3：去除行尾分隔符 ────────────────────────────────────
+        # p_tuning 等方法生成的指令末尾有时带 "- - -"、"---" 或 "_ _" 等分隔符
+        text = re.sub(r'(\s*[-_]\s*){2,}\s*$', '', text).strip()
+        # 同时清理每行行尾的 "_ _" 或 "_ _ _" 类型分隔符（p_tuning 段落间常见）
+        lines_clean = []
+        for line in text.split('\n'):
+            line = re.sub(r'(\s*_\s*){2,}\s*$', '', line).rstrip()
+            lines_clean.append(line)
+        text = '\n'.join(lines_clean).strip()
 
         return text
 
