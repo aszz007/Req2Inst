@@ -21,6 +21,101 @@ from src.utils.logger import get_logger
 logger = get_logger('baselines.inference_utils')
 
 
+_INPUT_TRUNCATE = 300
+_PRED_TRUNCATE = 500
+_REF_TRUNCATE = 500
+_DIAGNOSTICS_SAMPLE_COUNT = 5
+
+
+def _build_diagnostics(samples: List[Dict]) -> Dict:
+    """
+    Build a compact diagnostics section for LLM-assisted debugging.
+
+    Scans raw prediction strings and returns format compliance counts,
+    empty/degenerate prediction counts, length statistics, and a short
+    list of representative samples so that an LLM can identify quality
+    problems without reading every sample.
+
+    Args:
+        samples: Full sample list with 'prediction' and 'reference' keys.
+
+    Returns:
+        Diagnostics dict embedded in the cache payload under 'diagnostics'.
+    """
+    total = len(samples)
+    empty_count = 0
+    format_counts = {'has_definition': 0, 'has_emphasis': 0, 'has_avoid': 0, 'all_three': 0}
+    pred_lengths = []
+    ref_lengths = []
+    starts: Dict[str, int] = {}
+
+    for s in samples:
+        pred = s.get('prediction', '') or ''
+        ref = s.get('reference', '') or ''
+
+        if not pred.strip():
+            empty_count += 1
+            continue
+
+        pred_lengths.append(len(pred))
+        ref_lengths.append(len(ref))
+
+        has_def = 'Definition:' in pred
+        has_emph = 'Emphasis' in pred
+        has_avoid = 'Things to Avoid' in pred
+        if has_def:
+            format_counts['has_definition'] += 1
+        if has_emph:
+            format_counts['has_emphasis'] += 1
+        if has_avoid:
+            format_counts['has_avoid'] += 1
+        if has_def and has_emph and has_avoid:
+            format_counts['all_three'] += 1
+
+        start = pred.strip()[:60]
+        starts[start] = starts.get(start, 0) + 1
+
+    top_starts = sorted(starts.items(), key=lambda x: -x[1])[:5]
+
+    def _avg(lst):
+        return round(sum(lst) / len(lst), 1) if lst else 0.0
+
+    valid_count = total - empty_count
+    representative = []
+    step = max(1, total // _DIAGNOSTICS_SAMPLE_COUNT)
+    for i in range(0, total, step):
+        if len(representative) >= _DIAGNOSTICS_SAMPLE_COUNT:
+            break
+        s = samples[i]
+        pred = (s.get('prediction') or '')[:200]
+        ref = (s.get('reference') or '')[:200]
+        representative.append({'index': s.get('index', i), 'pred_preview': pred, 'ref_preview': ref})
+
+    return {
+        'total': total,
+        'empty_predictions': empty_count,
+        'valid_predictions': valid_count,
+        'format_compliance': {
+            k: {'count': v, 'rate': round(v / valid_count, 4) if valid_count else 0.0}
+            for k, v in format_counts.items()
+        },
+        'pred_length': {
+            'min': min(pred_lengths) if pred_lengths else 0,
+            'max': max(pred_lengths) if pred_lengths else 0,
+            'avg': _avg(pred_lengths),
+        },
+        'ref_length': {
+            'min': min(ref_lengths) if ref_lengths else 0,
+            'max': max(ref_lengths) if ref_lengths else 0,
+            'avg': _avg(ref_lengths),
+        },
+        'top_repeated_starts': [
+            {'start': s, 'count': c} for s, c in top_starts
+        ],
+        'representative_samples': representative,
+    }
+
+
 def save_predictions_cache(
     samples: List[Dict],
     method: str,
@@ -40,8 +135,15 @@ def save_predictions_cache(
         "config": {...},
         "timestamp": ...,
         "total_samples": N,
-        "samples": [{"index": 0, "input": ..., "prediction": ..., "reference": ...}]
+        "diagnostics": { ...compact stats for LLM debugging... },
+        "samples": [{"index": 0, "input": ..., "prediction": ..., "reference": ...,
+                      "_truncated": true}]
       }
+
+    Long fields in each sample are truncated before saving to keep the file
+    compact for LLM-assisted analysis. A 'diagnostics' section is prepended
+    with format compliance stats, length distribution, top repeated starts,
+    and representative sample previews.
 
     Args:
         samples: List of dicts with keys: index, input, prediction, reference
@@ -64,6 +166,28 @@ def save_predictions_cache(
 
     expert_name = f'{expert_type}_expert'
 
+    diagnostics = _build_diagnostics(samples)
+
+    truncated_samples = []
+    for s in samples:
+        inp = s.get('input', '') or ''
+        pred = s.get('prediction', '') or ''
+        ref = s.get('reference', '') or ''
+        needs_truncation = (
+            len(inp) > _INPUT_TRUNCATE
+            or len(pred) > _PRED_TRUNCATE
+            or len(ref) > _REF_TRUNCATE
+        )
+        entry = {
+            'index': s.get('index', 0),
+            'input': inp[:_INPUT_TRUNCATE],
+            'prediction': pred[:_PRED_TRUNCATE],
+            'reference': ref[:_REF_TRUNCATE],
+        }
+        if needs_truncation:
+            entry['_truncated'] = True
+        truncated_samples.append(entry)
+
     payload = {
         'method': method,
         'expert_type': expert_type,
@@ -71,7 +195,8 @@ def save_predictions_cache(
         'config': config,
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'total_samples': len(samples),
-        'samples': samples,
+        'diagnostics': diagnostics,
+        'samples': truncated_samples,
     }
 
     with open(filepath, 'w', encoding='utf-8') as f:
