@@ -23,10 +23,51 @@ from typing import Optional, Union
 
 from src.experts.base_expert import BaseExpert
 from models.prompt_templates.image_template import ImageInstructionTemplate
+from models.prompt_templates.text_template import TextInstructionTemplate
+from models.prompt_templates.uml_template import UMLInstructionTemplate
 from config.settings import get_path_config, get_inference_config
 from src.utils.logger import get_logger
 
 logger = get_logger('experts.image')
+
+
+
+def _build_prompt_for_domain(input_data):
+    """
+    根据输入数据的实际领域类型构建对应的prompt（跨域评估场景使用）。
+
+    检测规则（按优先级）：
+      - json解析失败的字符串 → text → TextInstructionTemplate
+      - JSON含 actors + use_cases → uml → UMLInstructionTemplate
+      - JSON含 description + details(objects或scene) → image → ImageInstructionTemplate
+      - 其他JSON → text → TextInstructionTemplate
+
+    正常领域推理场景（image专家收到图像JSON）同样会路由到ImageInstructionTemplate，
+    与原有逻辑行为一致。
+
+    Returns:
+        tuple(str, str): (构建的prompt, 检测到的领域类型 'text'/'image'/'uml')
+    """
+    if isinstance(input_data, dict):
+        data = input_data
+        text_fallback = str(input_data)
+    elif isinstance(input_data, str):
+        try:
+            data = json.loads(input_data)
+            text_fallback = input_data
+        except json.JSONDecodeError:
+            return TextInstructionTemplate.build_prompt(input_data), 'text'
+    else:
+        return TextInstructionTemplate.build_prompt(str(input_data)), 'text'
+
+    if isinstance(data, dict):
+        if 'actors' in data and 'use_cases' in data:
+            return UMLInstructionTemplate.build_prompt(input_data), 'uml'
+        details = data.get('details', {})
+        if 'description' in data and ('objects' in details or 'scene' in details):
+            return ImageInstructionTemplate.build_prompt(input_data), 'image'
+
+    return TextInstructionTemplate.build_prompt(text_fallback), 'text'
 
 
 class ImageExpert(BaseExpert):
@@ -119,8 +160,12 @@ class ImageExpert(BaseExpert):
                     logger.info(f"未知数据类型: {input_data}")
                 logger.info("=" * 80)
 
-            # 直接使用完整的input_data构建prompt
-            prompt = ImageInstructionTemplate.build_prompt(input_data)
+            # 构建prompt（跨域评估时自动检测输入类型并使用对应模板）
+            prompt, detected_domain = _build_prompt_for_domain(input_data)
+            if detected_domain != 'image' and show_debug:
+                logger.warning(
+                    f"输入数据检测为{detected_domain}类型，使用对应模板（跨域评估场景）"
+                )
 
             if show_debug:
                 logger.debug(f"生成指令 - 输入数据类型: {type(input_data).__name__}")
@@ -183,8 +228,15 @@ class ImageExpert(BaseExpert):
         try:
             logger.info(f"批量生成指令 - 共{len(input_data_list)}个样本，batch_size={batch_size}")
 
-            # 构建所有prompts
-            prompts = [ImageInstructionTemplate.build_prompt(data) for data in input_data_list]
+            # 构建所有prompts（跨域评估时自动检测输入类型并使用对应模板）
+            prompts = []
+            for _idx, _data in enumerate(input_data_list):
+                _prompt, _domain = _build_prompt_for_domain(_data)
+                if _domain != 'image' and _idx < 3:
+                    logger.warning(
+                        f"样本{_idx}输入检测为{_domain}类型，使用对应模板（跨域评估场景）"
+                    )
+                prompts.append(_prompt)
 
             # 批量生成
             infer_cfg = get_inference_config()

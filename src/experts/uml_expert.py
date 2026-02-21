@@ -22,10 +22,51 @@ from typing import Optional, Union
 
 from src.experts.base_expert import BaseExpert
 from models.prompt_templates.uml_template import UMLInstructionTemplate
+from models.prompt_templates.text_template import TextInstructionTemplate
+from models.prompt_templates.image_template import ImageInstructionTemplate
 from config.settings import get_path_config, get_inference_config
 from src.utils.logger import get_logger
 
 logger = get_logger('experts.uml')
+
+
+
+def _build_prompt_for_domain(input_data):
+    """
+    根据输入数据的实际领域类型构建对应的prompt（跨域评估场景使用）。
+
+    检测规则（按优先级）：
+      - json解析失败的字符串 → text → TextInstructionTemplate
+      - JSON含 actors + use_cases → uml → UMLInstructionTemplate
+      - JSON含 description + details(objects或scene) → image → ImageInstructionTemplate
+      - 其他JSON → text → TextInstructionTemplate
+
+    正常领域推理场景（uml专家收到UML JSON）同样会路由到UMLInstructionTemplate，
+    与原有逻辑行为一致。
+
+    Returns:
+        tuple(str, str): (构建的prompt, 检测到的领域类型 'text'/'image'/'uml')
+    """
+    if isinstance(input_data, dict):
+        data = input_data
+        text_fallback = str(input_data)
+    elif isinstance(input_data, str):
+        try:
+            data = json.loads(input_data)
+            text_fallback = input_data
+        except json.JSONDecodeError:
+            return TextInstructionTemplate.build_prompt(input_data), 'text'
+    else:
+        return TextInstructionTemplate.build_prompt(str(input_data)), 'text'
+
+    if isinstance(data, dict):
+        if 'actors' in data and 'use_cases' in data:
+            return UMLInstructionTemplate.build_prompt(input_data), 'uml'
+        details = data.get('details', {})
+        if 'description' in data and ('objects' in details or 'scene' in details):
+            return ImageInstructionTemplate.build_prompt(input_data), 'image'
+
+    return TextInstructionTemplate.build_prompt(text_fallback), 'text'
 
 
 class UMLExpert(BaseExpert):
@@ -118,34 +159,21 @@ class UMLExpert(BaseExpert):
                     logger.info(f"未知数据类型: {input_data}")
                 logger.info("=" * 80)
 
-            # 解析输入数据并构建prompt
-            if isinstance(input_data, str):
-                try:
-                    uml_data = json.loads(input_data)
-                    # 提取关键元素（用于日志）
-                    if show_debug:
-                        elements = UMLInstructionTemplate.extract_key_elements(uml_data)
-                        logger.debug(f"生成指令 - Actors: {elements['actors']}, Use Cases: {len(elements['use_cases'])}个")
-                    prompt = UMLInstructionTemplate.build_prompt(uml_data)
-                except json.JSONDecodeError:
-                    # 跨域评估场景：输入为纯文本而非UML JSON，仍尝试生成
-                    logger.warning("输入非JSON格式，以纯文本方式处理（跨域评估场景）")
-                    uml_data = {}
-                    prompt = (
-                        "Based on the following requirement, generate a crowdsourcing task instruction "
-                        "with three sections: Definition, Emphasis & Caution, and Things to Avoid.\n\n"
-                        f"Requirement: {input_data}\n\nInstruction:"
-                    )
-            elif isinstance(input_data, dict):
-                uml_data = input_data
-                # 提取关键元素（用于日志）
+            # 构建prompt（跨域评估时自动检测输入类型并使用对应模板）
+            prompt, detected_domain = _build_prompt_for_domain(input_data)
+            if detected_domain == 'uml':
+                uml_data = json.loads(input_data) if isinstance(input_data, str) else input_data
                 if show_debug:
                     elements = UMLInstructionTemplate.extract_key_elements(uml_data)
-                    logger.debug(f"生成指令 - Actors: {elements['actors']}, Use Cases: {len(elements['use_cases'])}个")
-                prompt = UMLInstructionTemplate.build_prompt(uml_data)
+                    logger.debug(
+                        f"生成指令 - Actors: {elements['actors']}, Use Cases: {len(elements['use_cases'])}个"
+                    )
             else:
-                logger.error(f"不支持的输入类型: {type(input_data)}")
-                return ""
+                # 跨域评估场景：输入非UML数据，使用与输入类型匹配的模板
+                logger.warning(
+                    f"输入数据检测为{detected_domain}类型，使用对应模板（跨域评估场景）"
+                )
+                uml_data = {}
 
             # 调用模型生成
             infer_cfg = get_inference_config()
@@ -212,32 +240,20 @@ class UMLExpert(BaseExpert):
             valid_prompts = []   # 对应有效prompt
 
             for idx, data in enumerate(input_data_list):
-                if isinstance(data, str):
-                    try:
-                        uml_data = json.loads(data)
-                        parsed_data_list[idx] = uml_data
-                        valid_indices.append(idx)
-                        valid_prompts.append(UMLInstructionTemplate.build_prompt(uml_data))
-                    except json.JSONDecodeError:
-                        # 跨域评估场景：输入为纯文本而非UML JSON，仍尝试生成
-                        logger.warning(f"样本{idx}输入非JSON格式，以纯文本方式处理（跨域评估场景）")
-                        plain_prompt = (
-                            "Based on the following requirement, generate a crowdsourcing task "
-                            "instruction with three sections: Definition, Emphasis & Caution, "
-                            "and Things to Avoid.\n\n"
-                            "Requirement: " + str(data) + "\n\nInstruction:"
-                        )
-                        parsed_data_list[idx] = {}
-                        valid_indices.append(idx)
-                        valid_prompts.append(plain_prompt)
-                elif isinstance(data, dict):
-                    uml_data = data
-                    parsed_data_list[idx] = uml_data
-                    valid_indices.append(idx)
-                    valid_prompts.append(UMLInstructionTemplate.build_prompt(uml_data))
+                _prompt, _domain = _build_prompt_for_domain(data)
+                if _domain == 'uml':
+                    parsed_data_list[idx] = (
+                        json.loads(data) if isinstance(data, str) else data
+                    )
                 else:
-                    logger.error(f"不支持的输入类型: {type(data)}，跳过")
-                    continue
+                    # 跨域评估场景：输入非UML数据，使用与输入类型匹配的模板
+                    if idx < 3:
+                        logger.warning(
+                            f"样本{idx}输入检测为{_domain}类型，使用对应模板（跨域评估场景）"
+                        )
+                    parsed_data_list[idx] = {}
+                valid_indices.append(idx)
+                valid_prompts.append(_prompt)
 
             # 批量生成（仅对有效prompt）
             raw_instructions = [""] * len(input_data_list)
