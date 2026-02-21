@@ -31,8 +31,12 @@ class EvaluationThresholds:
     """评估阈值配置类"""
 
     # 语义相似度阈值
-    ROUGE_L_THRESHOLD = 0.5  # ROUGE-L阈值
-    BERTSCORE_F1_THRESHOLD = 0.85  # BERTScore F1阈值
+    # ROUGE_L: 0.4 fits the actual result distribution (avg range 0.34-0.57 across methods);
+    # 0.5 cuts too aggressively through mid-range methods causing extreme F1 values.
+    # BERTSCORE_F1: 0.82 sits below the typical distribution center (0.83-0.88) so that
+    # strong methods still pass while weak ones are filtered, without threshold masking.
+    ROUGE_L_THRESHOLD = 0.4   # ROUGE-L threshold (lowered from 0.5)
+    BERTSCORE_F1_THRESHOLD = 0.82  # BERTScore F1 threshold (lowered from 0.85)
 
     # 组合逻辑
     USE_AND_LOGIC = True  # True=AND逻辑(两个都需满足), False=OR逻辑(满足一个即可)
@@ -697,10 +701,9 @@ class EnhancedMetrics:
             'use_bertscore': self.use_bertscore and len(bertscore_f1_scores) > 0
         }
 
-        logger.info(f"二分类指标计算完成:")
+        logger.info(f"Binary classification metrics computed:")
         logger.info(f"  TP: {tp}, FP: {fp}, FN: {fn}, TN: {tn}")
         logger.info(f"  Precision: {precision:.4f}, Recall: {recall:.4f}")
-        logger.info(f"  F1 Score: {f1_score:.4f}, Accuracy: {accuracy:.4f}")
         logger.info(f"  F1 Score: {f1_score:.4f}, Accuracy: {accuracy:.4f}")
 
         return results
