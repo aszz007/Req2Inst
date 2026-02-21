@@ -198,49 +198,60 @@ class UMLExpert(BaseExpert):
             logger.info(f"批量生成指令 - 共{len(input_data_list)}个样本，batch_size={batch_size}")
 
             # 解析所有输入数据并构建prompts
-            prompts = []
-            parsed_data_list = []
-            for data in input_data_list:
+            # 只收集有效prompt及其原始索引，避免空字符串送入模型导致张量越界
+            parsed_data_list = [{}] * len(input_data_list)
+            valid_indices = []   # 原始索引
+            valid_prompts = []   # 对应有效prompt
+
+            for idx, data in enumerate(input_data_list):
                 if isinstance(data, str):
                     try:
                         uml_data = json.loads(data)
                     except json.JSONDecodeError:
                         logger.error("输入不是有效的JSON格式，跳过")
-                        prompts.append("")
-                        parsed_data_list.append({})
                         continue
                 elif isinstance(data, dict):
                     uml_data = data
                 else:
                     logger.error(f"不支持的输入类型: {type(data)}，跳过")
-                    prompts.append("")
-                    parsed_data_list.append({})
                     continue
 
-                parsed_data_list.append(uml_data)
-                prompts.append(UMLInstructionTemplate.build_prompt(uml_data))
+                parsed_data_list[idx] = uml_data
+                valid_indices.append(idx)
+                valid_prompts.append(UMLInstructionTemplate.build_prompt(uml_data))
 
-            # 批量生成
-            infer_cfg = get_inference_config()
-            instructions = self._generate_batch_with_model(
-                prompts=prompts,
-                max_new_tokens=infer_cfg.max_new_tokens,
-                temperature=infer_cfg.temperature,
-                top_p=infer_cfg.top_p,
-                top_k=infer_cfg.top_k,
-                repetition_penalty=infer_cfg.repetition_penalty,
-                batch_size=batch_size,
-                start_index=0,
-                verbose=True
-            )
+            # 批量生成（仅对有效prompt）
+            raw_instructions = [""] * len(input_data_list)
+            if valid_prompts:
+                infer_cfg = get_inference_config()
+                generated = self._generate_batch_with_model(
+                    prompts=valid_prompts,
+                    max_new_tokens=infer_cfg.max_new_tokens,
+                    temperature=infer_cfg.temperature,
+                    top_p=infer_cfg.top_p,
+                    top_k=infer_cfg.top_k,
+                    repetition_penalty=infer_cfg.repetition_penalty,
+                    batch_size=batch_size,
+                    start_index=0,
+                    verbose=True
+                )
+                for orig_idx, instruction in zip(valid_indices, generated):
+                    raw_instructions[orig_idx] = instruction
 
-            # 输出前3个样本的生成结果
-            for i in range(min(3, len(instructions))):
-                logger.info("=" * 80)
-                logger.info(f"[样本 {i+1}/{len(input_data_list)}] 生成的指令:")
-                logger.info("-" * 80)
-                logger.info(instructions[i])
-                logger.info("=" * 80)
+            instructions = raw_instructions
+
+            # 输出前3个有效样本的生成结果
+            shown = 0
+            for i in range(len(instructions)):
+                if shown >= 3:
+                    break
+                if i in valid_indices:
+                    logger.info("=" * 80)
+                    logger.info(f"[样本 {i+1}/{len(input_data_list)}] 生成的指令:")
+                    logger.info("-" * 80)
+                    logger.info(instructions[i])
+                    logger.info("=" * 80)
+                    shown += 1
 
             # 验证每个输出（先规范化再验证）
             validated_instructions = []
