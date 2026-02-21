@@ -53,6 +53,22 @@ CONFIGS = [
 ]
 
 
+def _is_full_run_cache(cache_dir, filename):
+    """Return True if a non-test-mode cache file exists for this combination."""
+    import json as _json
+    filepath = Path(cache_dir) / filename
+    if not filepath.exists():
+        return False
+    try:
+        raw = _json.loads(filepath.read_text(encoding='utf-8'))
+        return not (
+            raw.get('test_mode', False)
+            or raw.get('metadata', {}).get('test_mode', False)
+        )
+    except Exception:
+        return False
+
+
 def _config_name(rank, alpha, dropout):
     return f'text_r{rank}_a{alpha}_d{dropout}'
 
@@ -233,6 +249,11 @@ def run(args):
         cfg_name = _config_name(rank, alpha, dropout)
         logger.info(f'\n--- 配置: {cfg_name} ---')
 
+        if getattr(args, 'only_missing', False) and _is_full_run_cache(
+                CACHE_DIR, f'{cfg_name}_predictions.json'):
+            logger.info(f'{cfg_name}: cache exists, skipping (--only-missing)')
+            continue
+
         try:
             train_config(rank, alpha, dropout, args)
         except Exception as e:
@@ -310,6 +331,9 @@ def main():
     parser.add_argument('--from-cache', action='store_true')
     parser.add_argument('--no-bertscore', action='store_true')
     parser.add_argument('--test-mode', action='store_true')
+    parser.add_argument('--only-missing', action='store_true',
+                        help='Skip configs that already have a full-run cache. '
+                             'Test-mode caches are treated as missing and re-run automatically.')
     args = parser.parse_args()
     if args.from_cache:
         args.force_regenerate = False

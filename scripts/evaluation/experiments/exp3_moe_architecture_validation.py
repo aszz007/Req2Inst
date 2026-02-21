@@ -209,6 +209,22 @@ def _metrics_from_cache(cached):
     return compute_all_metrics(preds, refs, use_bertscore=False)
 
 
+def _is_full_run_cache(cache_subdir, filename):
+    """Return True if a non-test-mode cache file exists for this combination."""
+    import json as _json
+    filepath = Path(cache_subdir) / filename
+    if not filepath.exists():
+        return False
+    try:
+        raw = _json.loads(filepath.read_text(encoding='utf-8'))
+        return not (
+            raw.get('test_mode', False)
+            or raw.get('metadata', {}).get('test_mode', False)
+        )
+    except Exception:
+        return False
+
+
 def plot_cross_domain_heatmap(cross_domain_rougeL, exp_dir):
     plots_dir = exp_dir / 'plots'
     plots_dir.mkdir(parents=True, exist_ok=True)
@@ -299,6 +315,10 @@ def run(args):
     for et in SPECIALIZED_TYPES:
         if et not in test_datasets:
             continue
+        if getattr(args, 'only_missing', False) and _is_full_run_cache(
+                CACHE_DIR / 'lora_moe', f'{et}_predictions.json'):
+            logger.info(f'--only-missing: 跳过 {et} 匹配专家（缓存已存在）')
+            continue
         try:
             cached = run_matched_expert(et, test_datasets[et], args)
             m = _metrics_from_cache(cached)
@@ -326,6 +346,11 @@ def run(args):
                 continue
             if eval_domain not in test_datasets:
                 continue
+            cd_filename = f'{expert_type}_expert_on_{eval_domain}_predictions.json'
+            if getattr(args, 'only_missing', False) and _is_full_run_cache(
+                    CACHE_DIR / 'exp3_cross_domain', cd_filename):
+                logger.info(f'--only-missing: 跳过跨域 {expert_type}->>{eval_domain}（缓存已存在）')
+                continue
             try:
                 cached = run_cross_domain(expert_type, eval_domain, test_datasets[eval_domain], args)
                 m = _metrics_from_cache(cached)
@@ -345,30 +370,38 @@ def run(args):
     moe3_general_rougeL = 0.0
     moe3_general_f1 = 0.0
     if 'general' in test_datasets:
-        try:
-            cached = run_general_via_text_expert(test_datasets['general'], args)
-            m = _metrics_from_cache(cached)
-            q = m.get('generation_quality', {})
-            b = m.get('binary_classification', {})
-            moe3_general_rougeL = q.get('rougeL', 0)
-            moe3_general_f1 = b.get('f1_score', 0)
-            results['moe3_general_fallback'] = {
-                'expert_used': 'text',
-                'reason': 'MoE-3 degraded routing: text expert has largest share in general training set',
-                'n_samples': len(cached['samples']) if cached else 0,
-                'generation_quality': q,
-                'binary_classification': b,
-            }
-            logger.info(f'MoE-3 general(via text): ROUGE-L={moe3_general_rougeL:.4f}')
-        except Exception as e:
-            logger.error(f'MoE-3 general退化路由失败: {e}')
+        if getattr(args, 'only_missing', False) and _is_full_run_cache(
+                CACHE_DIR / 'exp3_moe3_general_via_text', 'general_via_text_predictions.json'):
+            logger.info('--only-missing: 跳过 MoE-3 general退化路由（缓存已存在）')
+        else:
+            try:
+                cached = run_general_via_text_expert(test_datasets['general'], args)
+                m = _metrics_from_cache(cached)
+                q = m.get('generation_quality', {})
+                b = m.get('binary_classification', {})
+                moe3_general_rougeL = q.get('rougeL', 0)
+                moe3_general_f1 = b.get('f1_score', 0)
+                results['moe3_general_fallback'] = {
+                    'expert_used': 'text',
+                    'reason': 'MoE-3 degraded routing: text expert has largest share in general training set',
+                    'n_samples': len(cached['samples']) if cached else 0,
+                    'generation_quality': q,
+                    'binary_classification': b,
+                }
+                logger.info(f'MoE-3 general(via text): ROUGE-L={moe3_general_rougeL:.4f}')
+            except Exception as e:
+                logger.error(f'MoE-3 general退化路由失败: {e}')
 
-    # 4. 单模型（lora_single）在所有领域上的评估
+    # 4. 单模型（lora_single）在所有领域上的评估（含general，与MoE-4/MoE-3四域平均保持一致）
     logger.info('\n--- 单模型（lora_single）---')
     single_rougeL_list = []
     single_f1_list = []
-    for et in SPECIALIZED_TYPES:
+    for et in SPECIALIZED_TYPES + ['general']:
         if et not in test_datasets:
+            continue
+        if getattr(args, 'only_missing', False) and _is_full_run_cache(
+                CACHE_DIR / 'lora_single', f'{et}_predictions.json'):
+            logger.info(f'--only-missing: 跳过单模型 {et}（缓存已存在）')
             continue
         try:
             cached = run_single_model(et, test_datasets[et], args)
@@ -459,6 +492,9 @@ def main():
     parser.add_argument('--from-cache', action='store_true')
     parser.add_argument('--no-bertscore', action='store_true')
     parser.add_argument('--test-mode', action='store_true')
+    parser.add_argument('--only-missing', action='store_true',
+                        help='Skip combinations that already have a full-run cache. '
+                             'Test-mode caches are treated as missing and re-run automatically.')
     args = parser.parse_args()
     if args.from_cache:
         args.force_regenerate = False

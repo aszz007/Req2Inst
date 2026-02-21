@@ -56,6 +56,22 @@ SHOT_CONFIGS = [
 SEED_MAP = {1: 42, 2: 43, 3: 44}
 
 
+def _is_full_run_cache(cache_dir, filename):
+    """Return True if a non-test-mode cache file exists for this combination."""
+    import json as _json
+    filepath = Path(cache_dir) / filename
+    if not filepath.exists():
+        return False
+    try:
+        raw = _json.loads(filepath.read_text(encoding='utf-8'))
+        return not (
+            raw.get('test_mode', False)
+            or raw.get('metadata', {}).get('test_mode', False)
+        )
+    except Exception:
+        return False
+
+
 def _cache_filename(n_shots, run_id):
     return f'{n_shots}shot_text_run{run_id}_predictions.json'
 
@@ -253,6 +269,10 @@ def run(args):
             run_metrics = []
 
             for run_id in run_ids:
+                if getattr(args, 'only_missing', False) and _is_full_run_cache(
+                        CACHE_DIR, _cache_filename(n_shots, run_id)):
+                    logger.info(f'{n_shots}样本 run{run_id}: cache exists, skipping (--only-missing)')
+                    continue
                 try:
                     cached = run_few_shot(n_shots, run_id, train_data, test_data, generator, args)
                     if cached is None:
@@ -296,26 +316,32 @@ def run(args):
 
     # LoRA-MoE基线
     logger.info('\n=== LoRA-MoE（微调） ===')
-    try:
-        cached = run_lora_moe(test_data, args)
-        if cached:
-            preds = [s['prediction'] for s in cached['samples']]
-            refs = [s['reference'] for s in cached['samples']]
-            m = compute_all_metrics(preds, refs, use_bertscore=not args.no_bertscore)
-            q = m.get('generation_quality', {})
-            b = m.get('binary_classification', {})
-            results['lora_moe'] = {
-                'n_samples': len(preds),
-                'generation_quality': q,
-                'binary_classification': b,
-            }
-            lora_rougeL = q.get('rougeL', 0)
-            logger.info(f'LoRA-MoE: ROUGE-L={lora_rougeL:.4f} F1={b.get("f1_score", 0):.4f}')
-        else:
-            lora_rougeL = 0.0
-    except Exception as e:
-        logger.error(f'LoRA-MoE评估失败: {e}')
+    lora_moe_cache_subdir = path_cfg.OUTPUTS_DIR / 'inference_cache' / 'lora_moe'
+    if getattr(args, 'only_missing', False) and _is_full_run_cache(
+            lora_moe_cache_subdir, 'text_predictions.json'):
+        logger.info('LoRA-MoE: cache exists, skipping (--only-missing)')
         lora_rougeL = 0.0
+    else:
+        try:
+            cached = run_lora_moe(test_data, args)
+            if cached:
+                preds = [s['prediction'] for s in cached['samples']]
+                refs = [s['reference'] for s in cached['samples']]
+                m = compute_all_metrics(preds, refs, use_bertscore=not args.no_bertscore)
+                q = m.get('generation_quality', {})
+                b = m.get('binary_classification', {})
+                results['lora_moe'] = {
+                    'n_samples': len(preds),
+                    'generation_quality': q,
+                    'binary_classification': b,
+                }
+                lora_rougeL = q.get('rougeL', 0)
+                logger.info(f'LoRA-MoE: ROUGE-L={lora_rougeL:.4f} F1={b.get("f1_score", 0):.4f}')
+            else:
+                lora_rougeL = 0.0
+        except Exception as e:
+            logger.error(f'LoRA-MoE评估失败: {e}')
+            lora_rougeL = 0.0
 
     EXP_DIR.mkdir(parents=True, exist_ok=True)
     save_experiment_results(results, EXP_DIR, 'results.json')
@@ -343,6 +369,9 @@ def main():
     parser.add_argument('--from-cache', action='store_true')
     parser.add_argument('--no-bertscore', action='store_true')
     parser.add_argument('--test-mode', action='store_true')
+    parser.add_argument('--only-missing', action='store_true',
+                        help='Skip shot/run combos that already have a full-run cache. '
+                             'Test-mode caches are treated as missing and re-run automatically.')
     args = parser.parse_args()
     if args.from_cache:
         args.force_regenerate = False

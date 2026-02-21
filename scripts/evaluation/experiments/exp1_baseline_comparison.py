@@ -59,6 +59,22 @@ def _make_samples(inputs, predictions, references):
     ]
 
 
+def _is_full_run_cache(cache_dir, filename):
+    """Return True if a non-test-mode cache file exists for this combination."""
+    import json as _json
+    filepath = Path(cache_dir) / filename
+    if not filepath.exists():
+        return False
+    try:
+        raw = _json.loads(filepath.read_text(encoding='utf-8'))
+        return not (
+            raw.get('test_mode', False)
+            or raw.get('metadata', {}).get('test_mode', False)
+        )
+    except Exception:
+        return False
+
+
 def run_bm25(train_data, test_data, args):
     cache_path = CACHE_DIR / 'baselines' / 'bm25_text_predictions.json'
     cached = load_predictions_cache(cache_path.parent, cache_path.name)
@@ -269,10 +285,23 @@ def run(args):
         'lora_moe': lambda: run_lora_moe(test_data, args),
     }
 
+    method_cache_paths = {
+        'bm25':     (CACHE_DIR / 'baselines', 'bm25_text_predictions.json'),
+        'lsa':      (CACHE_DIR / 'baselines', 'lsa_text_predictions.json'),
+        'template': (CACHE_DIR / 'baselines', 'template_text_predictions.json'),
+        'zeroshot': (CACHE_DIR / 'baselines', 'zeroshot_text_predictions.json'),
+        'lora_moe': (CACHE_DIR / 'lora_moe',  'text_predictions.json'),
+    }
+
     metrics_by_method = {}
 
     for method, runner in method_runners.items():
         logger.info(f'\n--- 执行方法: {method} ---')
+        if getattr(args, 'only_missing', False):
+            cache_dir_m, cache_file_m = method_cache_paths[method]
+            if _is_full_run_cache(cache_dir_m, cache_file_m):
+                logger.info(f'{method}: cache exists, skipping (--only-missing)')
+                continue
         try:
             cached = runner()
             if cached is None:
@@ -343,6 +372,9 @@ def main():
                         help='Disable BERTScore for faster evaluation')
     parser.add_argument('--test-mode', action='store_true',
                         help='Use 10 samples only (quick validation)')
+    parser.add_argument('--only-missing', action='store_true',
+                        help='Skip methods that already have a full-run cache. '
+                             'Test-mode caches are treated as missing and re-run automatically.')
     args = parser.parse_args()
 
     if args.from_cache:

@@ -43,6 +43,22 @@ FRACTIONS = [0.10, 0.25, 0.50, 0.75, 1.00]
 METHODS = ['lora_moe', 'lora_single', 'full_finetuning']
 
 
+def _is_full_run_cache(cache_dir, filename):
+    """Return True if a non-test-mode cache file exists for this combination."""
+    import json as _json
+    filepath = Path(cache_dir) / filename
+    if not filepath.exists():
+        return False
+    try:
+        raw = _json.loads(filepath.read_text(encoding='utf-8'))
+        return not (
+            raw.get('test_mode', False)
+            or raw.get('metadata', {}).get('test_mode', False)
+        )
+    except Exception:
+        return False
+
+
 def _fraction_tag(fraction):
     return f'{int(fraction * 100)}pct'
 
@@ -227,6 +243,11 @@ def run(args):
             label = f'{method}/{tag}'
             logger.info(f'\n--- {label} ---')
 
+            if getattr(args, 'only_missing', False) and _is_full_run_cache(
+                    CACHE_DIR_BASE / f'{method}_exp5', f'text_{tag}_predictions.json'):
+                logger.info(f'{label}: cache exists, skipping (--only-missing)')
+                continue
+
             try:
                 train_for_fraction(method, fraction, train_data, args)
             except Exception as e:
@@ -298,6 +319,9 @@ def main():
     parser.add_argument('--from-cache', action='store_true')
     parser.add_argument('--no-bertscore', action='store_true')
     parser.add_argument('--test-mode', action='store_true')
+    parser.add_argument('--only-missing', action='store_true',
+                        help='Skip method/fraction combos that already have a full-run cache. '
+                             'Test-mode caches are treated as missing and re-run automatically.')
     args = parser.parse_args()
     if args.from_cache:
         args.force_regenerate = False
