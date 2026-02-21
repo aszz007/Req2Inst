@@ -194,15 +194,14 @@ class ImageExpert(BaseExpert):
                 logger.info(instruction)
                 logger.info("=" * 80)
 
-            # 验证输出格式
+            # 验证输出格式（仅记录日志，不覆盖模型输出）
             if self.validate_output(instruction):
                 logger.info("指令生成成功,格式验证通过")
-                return instruction
             else:
                 if show_debug:
-                    logger.warning("指令格式验证失败,尝试回退方案")
-                    logger.warning(f"失败的指令内容：\n{instruction}")
-                return self._fallback_generation(input_data)
+                    logger.warning("指令格式验证失败，直接返回模型输出")
+                    logger.warning(f"验证未通过的指令内容：\n{instruction}")
+            return instruction
 
         except Exception as e:
             logger.error(f"指令生成失败: {e}")
@@ -260,16 +259,14 @@ class ImageExpert(BaseExpert):
                 logger.info(instructions[i])
                 logger.info("=" * 80)
 
-            # 验证每个输出（先规范化再验证）
+            # 验证每个输出（先规范化再验证，仅记录日志，不覆盖模型输出）
             validated_instructions = []
             for i, instruction in enumerate(instructions):
                 instruction = self._normalize_instruction(instruction)
-                if self.validate_output(instruction):
-                    validated_instructions.append(instruction)
-                else:
+                if not self.validate_output(instruction):
                     if i < 3:
-                        logger.warning(f"样本{i+1}格式验证失败,使用回退方案")
-                    validated_instructions.append(self._fallback_generation(input_data_list[i]))
+                        logger.warning(f"样本{i+1}格式验证失败，直接使用模型输出")
+                validated_instructions.append(instruction)
 
             return validated_instructions
 
