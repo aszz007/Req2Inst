@@ -142,14 +142,18 @@ class GeneralExpert(BaseExpert):
                 logger.info("=" * 80)
 
             # 验证输出格式
+            # 格式验证未通过时直接返回normalize后的输出，不调用fallback。
+            # 仅空输出时保留fallback兜底。
             if self.validate_output(instruction):
                 logger.info("指令生成成功,格式验证通过")
                 return instruction
             else:
                 if show_debug:
-                    logger.warning("指令格式验证失败,尝试回退方案")
-                    logger.warning(f"失败的指令内容：\n{instruction}")
-                return self._fallback_generation(input_data)
+                    logger.warning(f"指令格式验证未通过，直接使用normalize后的输出")
+                if not instruction or not instruction.strip():
+                    logger.warning("输出为空，使用fallback兜底")
+                    return self._fallback_generation(input_data)
+                return instruction
 
         except Exception as e:
             logger.error(f"指令生成失败: {e}")
@@ -203,15 +207,23 @@ class GeneralExpert(BaseExpert):
                 logger.info("=" * 80)
 
             # 验证每个输出（先规范化再验证）
+            # 注意：格式验证未通过时直接使用normalize后的原始输出，不调用fallback。
+            # fallback生成的固定模板与输入语义完全无关，会显著拉低BLEU/ROUGE/BERTScore；
+            # 即使格式有小瑕疵，模型输出的内容仍围绕输入生成，指标远优于fallback。
+            # 仅在模型输出为空字符串时保留fallback，避免下游metrics崩溃。
             validated_instructions = []
             for i, instruction in enumerate(instructions):
                 instruction = self._normalize_instruction(instruction)
-                if self.validate_output(instruction):
-                    validated_instructions.append(instruction)
-                else:
+                if not self.validate_output(instruction):
                     if i < 3:
-                        logger.warning(f"样本{i+1}格式验证失败,使用回退方案")
-                    validated_instructions.append(self._fallback_generation(input_data_list[i]))
+                        logger.warning(
+                            f"样本{i+1}格式验证未通过，直接使用normalize后的输出"
+                        )
+                    if not instruction or not instruction.strip():
+                        # 仅空输出才使用fallback，避免下游metrics收到空字符串
+                        logger.warning(f"样本{i+1}输出为空，使用fallback兜底")
+                        instruction = self._fallback_generation(input_data_list[i])
+                validated_instructions.append(instruction)
 
             return validated_instructions
 

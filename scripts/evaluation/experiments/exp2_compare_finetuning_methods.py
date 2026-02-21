@@ -156,7 +156,7 @@ def run_inference_for_method_expert(method, expert_type, test_data, args):
         for i, (inp, pred, ref) in enumerate(zip(inputs, predictions, references))
     ]
     save_predictions_cache(
-        samples, method, expert_type, {'ckpt': ckpt_path},
+        samples, method, expert_type, {'ckpt': ckpt_path, 'test_mode': args.test_mode},
         cache_subdir, cache_filename
     )
     return load_predictions_cache(cache_subdir, cache_filename)
@@ -226,12 +226,25 @@ def run(args):
             label = f'{method}/{expert_type}'
             logger.info(f'\n--- {label} ---')
 
-            # --only-missing: skip entirely if cache file already exists
+            # --only-missing: skip if a valid full-run cache exists.
+            # Test-mode caches (test_mode=true in metadata) are treated as missing
+            # so a subsequent full run always regenerates them automatically.
             if getattr(args, 'only_missing', False):
+                import json as _json
                 cache_file = CACHE_DIR / method / f'{expert_type}_predictions.json'
                 if cache_file.exists():
-                    logger.info(f'{label}: 缓存已存在，跳过 (--only-missing)')
-                    continue
+                    try:
+                        _raw = _json.loads(cache_file.read_text())
+                        _is_test = (
+                            _raw.get('test_mode', False)
+                            or _raw.get('metadata', {}).get('test_mode', False)
+                        )
+                    except Exception:
+                        _is_test = False
+                    if not _is_test:
+                        logger.info(f'{label}: 缓存已存在，跳过 (--only-missing)')
+                        continue
+                    logger.info(f'{label}: 检测到test模式缓存，将重新推理')
 
             try:
                 cached = run_inference_for_method_expert(method, expert_type, test_data, args)
@@ -303,9 +316,8 @@ def main():
     parser.add_argument('--test-mode', action='store_true',
                         help='Use 10 samples only')
     parser.add_argument('--only-missing', action='store_true',
-                        help='Skip all method/expert combos that already have a cache file. '
-                             'No inference and no metrics are computed for cached combos. '
-                             'Only the combos whose cache JSON does not exist are run in full.')
+                        help='Skip method/expert combos that already have a full-run cache. '
+                             'Test-mode caches are treated as missing and re-run automatically.')
     args = parser.parse_args()
     if args.from_cache:
         args.force_regenerate = False
