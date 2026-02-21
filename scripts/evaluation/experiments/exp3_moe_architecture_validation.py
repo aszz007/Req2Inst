@@ -227,9 +227,9 @@ def plot_cross_domain_heatmap(cross_domain_rougeL, exp_dir):
     ax.set_yticks(range(len(domains)))
     ax.set_xticklabels([d.capitalize() for d in domains])
     ax.set_yticklabels([d.capitalize() for d in domains])
-    ax.set_xlabel('评估领域')
-    ax.set_ylabel('专家类型')
-    ax.set_title('实验3: 跨域ROUGE-L热图（专家 x 评估领域）')
+    ax.set_xlabel('Evaluation Domain')
+    ax.set_ylabel('Expert Type')
+    ax.set_title('Exp3: Cross-Domain ROUGE-L Heatmap (Expert x Eval Domain)')
     for i in range(len(domains)):
         for j in range(len(domains)):
             ax.text(j, i, f'{matrix[i, j]:.3f}', ha='center', va='center', fontsize=10)
@@ -256,7 +256,7 @@ def plot_architecture_comparison(arch_scores, exp_dir):
     ax.set_xticks(x)
     ax.set_xticklabels(configs)
     ax.set_ylabel('Score')
-    ax.set_title('实验3: MoE-4 vs MoE-3 vs 单模型')
+    ax.set_title('Exp3: MoE-4 vs MoE-3 vs Single Model')
     ax.legend()
     ax.set_ylim(0, 1.0)
     ax.grid(axis='y', alpha=0.3)

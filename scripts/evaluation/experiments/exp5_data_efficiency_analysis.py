@@ -183,9 +183,9 @@ def plot_learning_curves(fraction_results, exp_dir):
             ax.plot(xs, ys, marker='o', label=labels[method],
                     color=colors.get(method, None), linewidth=2)
 
-    ax.set_xlabel('训练数据比例 (%)')
+    ax.set_xlabel('Training Data Fraction (%)')
     ax.set_ylabel('ROUGE-L')
-    ax.set_title('实验5: 数据效率 - 学习曲线')
+    ax.set_title('Exp5: Data Efficiency - Learning Curves')
     ax.legend()
     ax.grid(alpha=0.3)
     ax.set_xlim(0, 110)

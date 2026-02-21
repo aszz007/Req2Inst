@@ -159,8 +159,8 @@ def plot_rank_vs_rouge(config_results, exp_dir):
     y_std = [np.std(rank_rougeL[r]) for r in x]
     ax.errorbar(x, y, yerr=y_std, marker='o', capsize=4, linewidth=2)
     ax.set_xlabel('LoRA Rank')
-    ax.set_ylabel('ROUGE-L（各dropout设置的均值）')
-    ax.set_title('实验4: ROUGE-L vs LoRA Rank')
+    ax.set_ylabel('ROUGE-L (Mean over Dropout Settings)')
+    ax.set_title('Exp4: ROUGE-L vs LoRA Rank')
     ax.grid(alpha=0.3)
     plt.tight_layout()
     path = plots_dir / 'rank_vs_rougeL.png'
@@ -198,7 +198,7 @@ def plot_heatmap_dropout_alpha(config_results, exp_dir, fixed_rank=16):
     ax.set_yticklabels([str(d) for d in unique_dropouts])
     ax.set_xlabel('Alpha')
     ax.set_ylabel('Dropout')
-    ax.set_title(f'实验4: ROUGE-L热图（rank={fixed_rank}）')
+    ax.set_title(f'Exp4: ROUGE-L Heatmap (rank={fixed_rank})')
     for i in range(len(unique_dropouts)):
         for j in range(len(unique_alphas)):
             ax.text(j, i, f'{matrix[i, j]:.3f}', ha='center', va='center', fontsize=9)

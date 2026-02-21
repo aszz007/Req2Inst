@@ -224,9 +224,9 @@ def plot_comparison(metrics_by_method, exp_dir, test_mode=False):
 
     ax.set_xlabel('Metric')
     ax.set_ylabel('Score')
-    title = '实验1: 基线方法对比（文本专家）'
+    title = 'Exp1: Baseline Comparison (Text Expert)'
     if test_mode:
-        title += ' [测试模式]'
+        title += ' [Test Mode]'
     ax.set_title(title)
     ax.set_xticks(x)
     ax.set_xticklabels(metric_labels)

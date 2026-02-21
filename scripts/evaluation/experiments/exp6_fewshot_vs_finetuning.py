@@ -200,9 +200,9 @@ def plot_bar_with_errorbars(shot_summary, lora_rougeL, exp_dir, test_mode=False)
     ax.set_xticks(x)
     ax.set_xticklabels(n_shot_labels)
     ax.set_ylabel('ROUGE-L')
-    title = '实验6: Few-Shot vs 微调（ROUGE-L）'
+    title = 'Exp6: Few-Shot vs Fine-Tuning (ROUGE-L)'
     if test_mode:
-        title += ' [测试模式]'
+        title += ' [Test Mode]'
     ax.set_title(title)
     ax.set_ylim(0, 1.0)
     ax.grid(axis='y', alpha=0.3)
