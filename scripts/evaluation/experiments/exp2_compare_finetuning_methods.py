@@ -225,6 +225,14 @@ def run(args):
         for method in METHODS:
             label = f'{method}/{expert_type}'
             logger.info(f'\n--- {label} ---')
+
+            # --only-missing: skip entirely if cache file already exists
+            if getattr(args, 'only_missing', False):
+                cache_file = CACHE_DIR / method / f'{expert_type}_predictions.json'
+                if cache_file.exists():
+                    logger.info(f'{label}: 缓存已存在，跳过 (--only-missing)')
+                    continue
+
             try:
                 cached = run_inference_for_method_expert(method, expert_type, test_data, args)
                 if cached is None:
@@ -294,6 +302,10 @@ def main():
     parser.add_argument('--no-bertscore', action='store_true')
     parser.add_argument('--test-mode', action='store_true',
                         help='Use 10 samples only')
+    parser.add_argument('--only-missing', action='store_true',
+                        help='Skip all method/expert combos that already have a cache file. '
+                             'No inference and no metrics are computed for cached combos. '
+                             'Only the combos whose cache JSON does not exist are run in full.')
     args = parser.parse_args()
     if args.from_cache:
         args.force_regenerate = False
