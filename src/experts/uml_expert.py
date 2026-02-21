@@ -118,26 +118,34 @@ class UMLExpert(BaseExpert):
                     logger.info(f"未知数据类型: {input_data}")
                 logger.info("=" * 80)
 
-            # 解析输入数据
+            # 解析输入数据并构建prompt
             if isinstance(input_data, str):
                 try:
                     uml_data = json.loads(input_data)
+                    # 提取关键元素（用于日志）
+                    if show_debug:
+                        elements = UMLInstructionTemplate.extract_key_elements(uml_data)
+                        logger.debug(f"生成指令 - Actors: {elements['actors']}, Use Cases: {len(elements['use_cases'])}个")
+                    prompt = UMLInstructionTemplate.build_prompt(uml_data)
                 except json.JSONDecodeError:
-                    logger.error("输入不是有效的JSON格式")
-                    return ""
+                    # 跨域评估场景：输入为纯文本而非UML JSON，仍尝试生成
+                    logger.warning("输入非JSON格式，以纯文本方式处理（跨域评估场景）")
+                    uml_data = {}
+                    prompt = (
+                        "Based on the following requirement, generate a crowdsourcing task instruction "
+                        "with three sections: Definition, Emphasis & Caution, and Things to Avoid.\n\n"
+                        f"Requirement: {input_data}\n\nInstruction:"
+                    )
             elif isinstance(input_data, dict):
                 uml_data = input_data
+                # 提取关键元素（用于日志）
+                if show_debug:
+                    elements = UMLInstructionTemplate.extract_key_elements(uml_data)
+                    logger.debug(f"生成指令 - Actors: {elements['actors']}, Use Cases: {len(elements['use_cases'])}个")
+                prompt = UMLInstructionTemplate.build_prompt(uml_data)
             else:
                 logger.error(f"不支持的输入类型: {type(input_data)}")
                 return ""
-
-            # 提取关键元素（用于日志）
-            if show_debug:
-                elements = UMLInstructionTemplate.extract_key_elements(uml_data)
-                logger.debug(f"生成指令 - Actors: {elements['actors']}, Use Cases: {len(elements['use_cases'])}个")
-
-            # 使用UMLInstructionTemplate构建prompt
-            prompt = UMLInstructionTemplate.build_prompt(uml_data)
 
             # 调用模型生成
             infer_cfg = get_inference_config()
@@ -207,18 +215,29 @@ class UMLExpert(BaseExpert):
                 if isinstance(data, str):
                     try:
                         uml_data = json.loads(data)
+                        parsed_data_list[idx] = uml_data
+                        valid_indices.append(idx)
+                        valid_prompts.append(UMLInstructionTemplate.build_prompt(uml_data))
                     except json.JSONDecodeError:
-                        logger.error("输入不是有效的JSON格式，跳过")
-                        continue
+                        # 跨域评估场景：输入为纯文本而非UML JSON，仍尝试生成
+                        logger.warning(f"样本{idx}输入非JSON格式，以纯文本方式处理（跨域评估场景）")
+                        plain_prompt = (
+                            "Based on the following requirement, generate a crowdsourcing task "
+                            "instruction with three sections: Definition, Emphasis & Caution, "
+                            "and Things to Avoid.\n\n"
+                            "Requirement: " + str(data) + "\n\nInstruction:"
+                        )
+                        parsed_data_list[idx] = {}
+                        valid_indices.append(idx)
+                        valid_prompts.append(plain_prompt)
                 elif isinstance(data, dict):
                     uml_data = data
+                    parsed_data_list[idx] = uml_data
+                    valid_indices.append(idx)
+                    valid_prompts.append(UMLInstructionTemplate.build_prompt(uml_data))
                 else:
                     logger.error(f"不支持的输入类型: {type(data)}，跳过")
                     continue
-
-                parsed_data_list[idx] = uml_data
-                valid_indices.append(idx)
-                valid_prompts.append(UMLInstructionTemplate.build_prompt(uml_data))
 
             # 批量生成（仅对有效prompt）
             raw_instructions = [""] * len(input_data_list)
