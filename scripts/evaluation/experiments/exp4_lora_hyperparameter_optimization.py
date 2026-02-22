@@ -97,11 +97,11 @@ def train_config(rank, alpha, dropout, args):
     trainer = LoRATrainer(
         expert_type='text',
         output_dir=str(ckpt_path),
-        debug_samples=False
+        debug_samples=False,
+        lora_rank=rank,
+        lora_alpha=alpha,
+        lora_dropout=dropout,
     )
-    trainer.lora_rank = rank
-    trainer.lora_alpha = alpha
-    trainer.lora_dropout = dropout
 
     trainer.setup_model()
     trainer.prepare_data()

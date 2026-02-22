@@ -43,7 +43,10 @@ class LoRATrainer(BaseTrainer):
                  output_dir: Optional[str] = None,
                  use_4bit: bool = True,
                  use_rtx4090_optimization: bool = True,
-                 debug_samples: bool = False):
+                 debug_samples: bool = False,
+                 lora_rank: int = 8,
+                 lora_alpha: int = 16,
+                 lora_dropout: float = 0.05):
         """
         初始化LoRA训练器
 
@@ -54,6 +57,9 @@ class LoRATrainer(BaseTrainer):
             use_4bit: 是否使用4bit量化训练
             use_rtx4090_optimization: 是否启用RTX 4090优化
             debug_samples: 是否在训练开始前打印前3个训练样本（默认关闭）
+            lora_rank: LoRA秩，默认8
+            lora_alpha: LoRA缩放因子，默认16
+            lora_dropout: LoRA dropout率，默认0.05
         """
         # 调用父类初始化
         super().__init__(
@@ -67,10 +73,10 @@ class LoRATrainer(BaseTrainer):
 
         self.use_4bit = use_4bit
 
-        # LoRA超参数（直接定义，便于实验调整）
-        self.lora_rank = 8
-        self.lora_alpha = 16
-        self.lora_dropout = 0.05
+        # LoRA超参数（通过构造函数传入，支持实验调整）
+        self.lora_rank = lora_rank
+        self.lora_alpha = lora_alpha
+        self.lora_dropout = lora_dropout
 
         # 根据模型版本确定target_modules
         self.target_modules = self._get_target_modules()
