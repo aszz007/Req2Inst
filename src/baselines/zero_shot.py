@@ -7,6 +7,11 @@ Loads the base Qwen3-8B model WITHOUT any LoRA adapter and uses it for:
 
 The few-shot prompt prepends n example (input, output) pairs before the query,
 using the same three-part structure as the fine-tuned experts.
+
+GPU batching note: batch_generate() delegates to LanguageModel.generate_batch()
+which performs left-padded batched inference on GPU, significantly reducing
+CPU overhead and improving GPU utilization compared to sequential single-sample
+calls.
 """
 
 import sys
@@ -20,6 +25,12 @@ from config.settings import get_path_config, get_inference_config
 from src.utils.logger import get_logger
 
 logger = get_logger('baselines.zero_shot')
+
+# Maximum new tokens for baseline generation.  The expected output is a
+# three-part instruction of ~35 words (~47 tokens).  200 tokens is generous
+# enough to cover edge cases while preventing the base model from generating
+# run-on explanations that collapse ROUGE-L scores.
+_BASELINE_MAX_NEW_TOKENS = 200
 
 
 def _build_few_shot_prompt(
@@ -60,7 +71,8 @@ def _build_few_shot_prompt(
         'Each instruction must follow this exact three-part format:\n'
         '  Definition: <what the worker should do>\n'
         '  Emphasis & Caution: <what to pay attention to>\n'
-        '  Things to Avoid: <common mistakes to avoid>'
+        '  Things to Avoid: <common mistakes to avoid>\n'
+        'Keep each section to ONE concise sentence.'
     )
 
     user_parts = []
@@ -85,29 +97,44 @@ class ZeroShotGenerator:
 
     load_model() / unload_model() follow the same pattern as expert classes so
     experiment scripts can treat this class uniformly.
+
+    batch_generate() delegates to LanguageModel.generate_batch() for true GPU
+    batching, eliminating the CPU bottleneck caused by sequential single-sample
+    inference.
     """
 
-    def __init__(self, base_model_path: str = None, use_4bit: bool = True):
+    def __init__(
+        self,
+        base_model_path: str = None,
+        use_4bit: bool = True,
+        max_new_tokens: Optional[int] = None
+    ):
         """
         Args:
             base_model_path: Path to Qwen3-8B weights directory.
                              If None, resolved from get_path_config().
-            use_4bit: Whether to load in 4-bit quantization
+            use_4bit: Whether to load in 4-bit quantization.
+            max_new_tokens: Override max_new_tokens for generation.  Defaults
+                            to _BASELINE_MAX_NEW_TOKENS (200) so the base model
+                            does not produce run-on explanations that degrade
+                            ROUGE-L scores.  Pass a larger value explicitly if
+                            needed (e.g. for few-shot with long examples).
         """
         path_cfg = get_path_config()
         if base_model_path is None:
             base_model_path = str(path_cfg.get_text_model_path())
         self.base_model_path = base_model_path
         self.use_4bit = use_4bit
+        self.max_new_tokens = max_new_tokens if max_new_tokens is not None else _BASELINE_MAX_NEW_TOKENS
         self._lm = None
         self.is_model_loaded = False
 
     def load_model(self) -> bool:
         """
-        加载不带LoRA适配器的基础语言模型。
+        Load the base language model without any LoRA adapter.
 
         Returns:
-            加载成功返回True，否则返回False
+            True on success, False otherwise.
         """
         try:
             from models.language_model import LanguageModel
@@ -128,10 +155,10 @@ class ZeroShotGenerator:
 
     def unload_model(self) -> bool:
         """
-        从GPU显存中释放模型。
+        Release the model from GPU memory.
 
         Returns:
-            卸载成功返回True
+            True on success.
         """
         try:
             if self._lm is not None:
@@ -160,14 +187,14 @@ class ZeroShotGenerator:
         Generate an instruction for a single input.
 
         Args:
-            input_text: Raw requirement / description string
-            input_type: 'text', 'image', or 'uml'
-            n_shots: Number of few-shot examples to prepend (0 = zero-shot)
+            input_text: Raw requirement / description string.
+            input_type: 'text', 'image', or 'uml'.
+            n_shots: Number of few-shot examples to prepend (0 = zero-shot).
             examples: Example dicts with keys 'input' and 'output'.
                       Required when n_shots > 0.
 
         Returns:
-            Generated instruction string (empty string on failure)
+            Generated instruction string (empty string on failure).
         """
         if not self.is_model_loaded:
             logger.warning('模型未加载，尝试加载...')
@@ -184,7 +211,7 @@ class ZeroShotGenerator:
         try:
             result = self._lm.generate(
                 prompt,
-                max_new_tokens=infer_cfg.max_new_tokens,
+                max_new_tokens=self.max_new_tokens,
                 temperature=infer_cfg.temperature,
                 top_p=infer_cfg.top_p,
                 top_k=infer_cfg.top_k,
@@ -204,34 +231,50 @@ class ZeroShotGenerator:
         batch_size: int = 8
     ) -> List[str]:
         """
-        Generate instructions for a list of inputs.
+        Generate instructions for a list of inputs using GPU-batched inference.
 
-        NOTE: The underlying LanguageModel.generate() is called sequentially
-        here because few-shot prompts can be very long. Set batch_size=1 if
-        you encounter OOM errors.
+        Builds all prompts first, then delegates to
+        LanguageModel.generate_batch() which performs left-padded batched
+        tokenization, OOM-safe retry, and tqdm progress tracking entirely on
+        the GPU.  This eliminates the CPU bottleneck of sequential single-sample
+        calls and achieves full GPU utilization.
 
         Args:
-            inputs: List of input strings
-            input_type: 'text', 'image', or 'uml'
-            n_shots: Number of few-shot examples to prepend
-            examples: Example dicts with keys 'input' and 'output'
-            batch_size: Kept for API compatibility; sequential generation is
-                        always used to stay within GPU memory limits
+            inputs: List of input strings.
+            input_type: 'text', 'image', or 'uml'.
+            n_shots: Number of few-shot examples to prepend.
+            examples: Example dicts with keys 'input' and 'output'.
+            batch_size: Number of prompts per GPU forward pass.  Defaults to 8
+                        which is well-suited for RTX 4090 with 4-bit
+                        quantization and short zero/few-shot prompts.
 
         Returns:
-            List of generated instruction strings
+            List of generated instruction strings.
         """
         if not self.is_model_loaded:
             logger.warning('模型未加载，尝试加载...')
             if not self.load_model():
                 return [''] * len(inputs)
 
-        results = []
-        for i, inp in enumerate(inputs):
-            out = self.generate(inp, input_type=input_type, n_shots=n_shots, examples=examples)
-            results.append(out)
-            if (i + 1) % 20 == 0:
-                logger.info(f'零样本已生成 {i + 1}/{len(inputs)}')
+        if n_shots > 0 and not examples:
+            logger.warning('n_shots > 0 但未提供示例，退回到零样本模式')
+            n_shots = 0
+
+        prompts = [
+            _build_few_shot_prompt(inp, input_type, n_shots, examples or [])
+            for inp in inputs
+        ]
+
+        infer_cfg = get_inference_config()
+        results = self._lm.generate_batch(
+            prompts,
+            max_new_tokens=self.max_new_tokens,
+            temperature=infer_cfg.temperature,
+            top_p=infer_cfg.top_p,
+            top_k=infer_cfg.top_k,
+            repetition_penalty=infer_cfg.repetition_penalty,
+            batch_size=batch_size,
+        )
 
         logger.info(f'批量生成完成: {len(results)}个样本')
         return results
