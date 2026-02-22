@@ -29,57 +29,54 @@ def _build_few_shot_prompt(
     examples: List[Dict]
 ) -> str:
     """
-    Build a few-shot prompt by prepending example (input, output) pairs.
+    Build a few-shot prompt in Qwen3 chat template format.
 
-    The format is:
-      [Example 1]
-      Input: <example input>
-      Output: <example output>
+    Uses the standard <|im_start|>/<|im_end|> structure so the base model
+    receives input in the same format as the fine-tuned experts, ensuring
+    consistent generation quality.
 
-      [Example N]
-      ...
-
-      [Query]
-      Input: <actual query>
-      Output:
-
-    For zero-shot (n_shots=0) only the query section is included.
+    For zero-shot (n_shots=0) only the query is included in the user turn.
+    For few-shot, example (input, output) pairs are prepended in the user turn.
 
     Args:
         input_text: Actual query input
         input_type: One of 'text', 'image', 'uml'
         n_shots: Number of examples to prepend
-        examples: List of dicts with keys 'input' and 'output', sampled from
-                  training set. Only the first n_shots entries are used.
+        examples: List of dicts with keys 'input' and 'output'. Only the
+                  first n_shots entries are used.
 
     Returns:
-        Complete prompt string
+        Complete prompt string in Qwen3 chat format (without thinking block;
+        LanguageModel._suppress_thinking handles that at generation time)
     """
-    # Build type-specific task description header
     type_desc = {
         'text': 'software requirements to crowdsourcing instruction',
         'image': 'image description to crowdsourcing annotation instruction',
         'uml': 'UML use-case description to crowdsourcing instruction',
     }.get(input_type, 'requirements to crowdsourcing instruction')
 
-    header = (
+    system_content = (
         f'You are an expert at converting {type_desc}.\n'
         'Each instruction must follow this exact three-part format:\n'
         '  Definition: <what the worker should do>\n'
         '  Emphasis & Caution: <what to pay attention to>\n'
-        '  Things to Avoid: <common mistakes to avoid>\n\n'
+        '  Things to Avoid: <common mistakes to avoid>'
     )
 
-    shots_text = ''
+    user_parts = []
     used_examples = examples[:n_shots] if examples else []
     for i, ex in enumerate(used_examples):
-        shots_text += f'[Example {i + 1}]\n'
-        shots_text += f'Input: {ex["input"].strip()}\n'
-        shots_text += f'Output:\n{ex["output"].strip()}\n\n'
+        user_parts.append(
+            f'[Example {i + 1}]\nInput: {ex["input"].strip()}\nOutput:\n{ex["output"].strip()}'
+        )
+    user_parts.append(f'[Query]\nInput: {input_text.strip()}\nOutput:')
+    user_content = '\n\n'.join(user_parts)
 
-    query_text = f'[Query]\nInput: {input_text.strip()}\nOutput:\n'
-
-    return header + shots_text + query_text
+    return (
+        f'<|im_start|>system\n{system_content}<|im_end|>\n'
+        f'<|im_start|>user\n{user_content}<|im_end|>\n'
+        f'<|im_start|>assistant\n'
+    )
 
 
 class ZeroShotGenerator:

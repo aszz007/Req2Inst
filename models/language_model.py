@@ -354,6 +354,21 @@ class LanguageModel:
             self.is_lora_loaded = False
             return False
 
+    def _suppress_thinking(self, prompt: str) -> str:
+        """
+        For Qwen3-8B, append an empty think block to the prompt to disable
+        chain-of-thought generation. This mirrors what
+        tokenizer.apply_chat_template(..., enable_thinking=False) produces:
+        the pre-filled empty <think></think> block tells the model to skip
+        reasoning and output the answer directly.
+        Has no effect on other model versions or if already suppressed.
+        """
+        if self.model_version != 'qwen3_8b':
+            return prompt
+        if '<think>' in prompt:
+            return prompt
+        return prompt + '<think>\n\n</think>\n'
+
     def generate(self, prompt: str, max_new_tokens: int = 2048,
                  temperature: float = 0.7, top_p: float = 0.9, top_k: int = 50,
                  repetition_penalty: float = 1.1) -> str:
@@ -372,6 +387,9 @@ class LanguageModel:
             str: 生成的文本
         """
         try:
+            # For Qwen3-8B: pre-fill empty think block to disable thinking mode
+            prompt = self._suppress_thinking(prompt)
+
             # 编码输入
             inputs = self.tokenizer(prompt, return_tensors="pt", padding=True)
             input_length = inputs['input_ids'].shape[1]
@@ -474,6 +492,8 @@ class LanguageModel:
 
         for i in range(0, len(prompts), batch_size):
             batch_prompts = prompts[i:i+batch_size]
+            # For Qwen3-8B: pre-fill empty think block to disable thinking mode
+            batch_prompts = [self._suppress_thinking(p) for p in batch_prompts]
 
             try:
                 # Tokenize批量输入
