@@ -712,14 +712,15 @@ class EnhancedMetrics:
         """
         检查单个指令的格式
 
+        支持多行段落内容：当段落标签行尾无内容时，
+        将后续连续非标签行作为该段落的内容（跨域推理时模型常见输出模式）。
+
         Args:
             instruction: 指令文本
 
         Returns:
             dict: 格式检查结果
         """
-        import re
-
         result = {
             'has_definition': False,
             'has_emphasis': False,
@@ -735,28 +736,56 @@ class EnhancedMetrics:
 
         lines = [line.strip() for line in instruction.strip().split('\n') if line.strip()]
 
+        # 段落标签识别表：(前缀, section_key, 内容起始偏移)
+        _SECTION_HEADERS = [
+            ('Definition:', 'definition', len('Definition:')),
+            ('Emphasis & Caution:', 'emphasis', len('Emphasis & Caution:')),
+            ('Emphasis and Caution:', 'emphasis', len('Emphasis and Caution:')),
+            ('Things to Avoid:', 'avoid', len('Things to Avoid:')),
+        ]
+
+        def _match_header(line):
+            for prefix, key, offset in _SECTION_HEADERS:
+                if line.startswith(prefix):
+                    return key, line[offset:].strip()
+            return None, None
+
+        # 按段落聚合内容（支持多行）
+        sections = {}
+        current_key = None
+        current_lines = []
+
         for line in lines:
-            # Definition检查
-            if line.startswith('Definition:'):
-                result['has_definition'] = True
-                content = line[len('Definition:'):].strip()
-                if content and content != '-':
-                    result['definition_has_content'] = True
+            key, inline_content = _match_header(line)
+            if key is not None:
+                if current_key is not None:
+                    sections[current_key] = '\n'.join(current_lines).strip()
+                current_key = key
+                current_lines = [inline_content] if inline_content else []
+            elif current_key is not None:
+                current_lines.append(line)
 
-            # Emphasis检查
-            elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
-                result['has_emphasis'] = True
-                prefix_len = len('Emphasis & Caution:') if 'Emphasis & Caution:' in line else len('Emphasis and Caution:')
-                content = line[prefix_len:].strip()
-                if content:
-                    result['emphasis_valid'] = True
+        if current_key is not None:
+            sections[current_key] = '\n'.join(current_lines).strip()
 
-            # Avoid检查
-            elif line.startswith('Things to Avoid:'):
-                result['has_avoid'] = True
-                content = line[len('Things to Avoid:'):].strip()
-                if content:
-                    result['avoid_valid'] = True
+        # Definition检查
+        if 'definition' in sections:
+            result['has_definition'] = True
+            content = sections['definition']
+            if content and content != '-':
+                result['definition_has_content'] = True
+
+        # Emphasis检查
+        if 'emphasis' in sections:
+            result['has_emphasis'] = True
+            if sections['emphasis']:
+                result['emphasis_valid'] = True
+
+        # Avoid检查
+        if 'avoid' in sections:
+            result['has_avoid'] = True
+            if sections['avoid']:
+                result['avoid_valid'] = True
 
         # 计算格式分数
         score = 0.0
