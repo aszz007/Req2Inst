@@ -21,9 +21,6 @@ from src.utils.logger import get_logger
 logger = get_logger('baselines.inference_utils')
 
 
-_INPUT_TRUNCATE = 300
-_PRED_TRUNCATE = 500
-_REF_TRUNCATE = 500
 _DIAGNOSTICS_SAMPLE_COUNT = 5
 
 
@@ -136,14 +133,14 @@ def save_predictions_cache(
         "timestamp": ...,
         "total_samples": N,
         "diagnostics": { ...compact stats for LLM debugging... },
-        "samples": [{"index": 0, "input": ..., "prediction": ..., "reference": ...,
-                      "_truncated": true}]
+        "samples": [{"index": 0, "input": ..., "prediction": ..., "reference": ...}]
       }
 
-    Long fields in each sample are truncated before saving to keep the file
-    compact for LLM-assisted analysis. A 'diagnostics' section is prepended
-    with format compliance stats, length distribution, top repeated starts,
-    and representative sample previews.
+    Full prediction and reference text is stored in each sample so that
+    compute_all_metrics() operates on complete strings. A 'diagnostics'
+    section is prepended with format compliance stats, length distribution,
+    top repeated starts, and representative sample previews (truncated only
+    there for display compactness).
 
     Args:
         samples: List of dicts with keys: index, input, prediction, reference
@@ -168,25 +165,16 @@ def save_predictions_cache(
 
     diagnostics = _build_diagnostics(samples)
 
-    truncated_samples = []
+    # Store full text so that metric computation uses complete prediction and
+    # reference strings, preventing score underestimation from truncation.
+    stored_samples = []
     for s in samples:
-        inp = s.get('input', '') or ''
-        pred = s.get('prediction', '') or ''
-        ref = s.get('reference', '') or ''
-        needs_truncation = (
-            len(inp) > _INPUT_TRUNCATE
-            or len(pred) > _PRED_TRUNCATE
-            or len(ref) > _REF_TRUNCATE
-        )
-        entry = {
+        stored_samples.append({
             'index': s.get('index', 0),
-            'input': inp[:_INPUT_TRUNCATE],
-            'prediction': pred[:_PRED_TRUNCATE],
-            'reference': ref[:_REF_TRUNCATE],
-        }
-        if needs_truncation:
-            entry['_truncated'] = True
-        truncated_samples.append(entry)
+            'input': s.get('input', '') or '',
+            'prediction': s.get('prediction', '') or '',
+            'reference': s.get('reference', '') or '',
+        })
 
     payload = {
         'method': method,
@@ -196,7 +184,7 @@ def save_predictions_cache(
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'total_samples': len(samples),
         'diagnostics': diagnostics,
-        'samples': truncated_samples,
+        'samples': stored_samples,
     }
 
     with open(filepath, 'w', encoding='utf-8') as f:
