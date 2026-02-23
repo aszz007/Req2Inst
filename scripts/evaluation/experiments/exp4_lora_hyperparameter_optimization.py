@@ -334,11 +334,31 @@ def main():
     parser.add_argument('--only-missing', action='store_true',
                         help='Skip configs that already have a full-run cache. '
                              'Test-mode caches are treated as missing and re-run automatically.')
+    parser.add_argument('--rerun-configs', type=str, default='',
+                        help='Comma-separated list of config names to force re-run '
+                             '(delete cache and re-run inference, e.g. '
+                             '"text_r32_a64_d0.05,text_r16_a32_d0.0"). '
+                             'Use --force-retrain together to also retrain from scratch.')
     args = parser.parse_args()
     if args.from_cache:
         args.force_regenerate = False
         args.force_retrain = False
+    if args.rerun_configs:
+        _delete_caches_for_rerun(args.rerun_configs)
     run(args)
+
+
+def _delete_caches_for_rerun(rerun_configs_str):
+    """Delete inference cache files for the specified config names so they are re-run."""
+    import shutil
+    names = [n.strip() for n in rerun_configs_str.split(',') if n.strip()]
+    for name in names:
+        cache_file = CACHE_DIR / f'{name}_predictions.json'
+        if cache_file.exists():
+            cache_file.unlink()
+            logger.info(f'[rerun] Deleted cache for {name}: {cache_file}')
+        else:
+            logger.info(f'[rerun] No cache found for {name}, will run inference directly')
 
 
 if __name__ == '__main__':
