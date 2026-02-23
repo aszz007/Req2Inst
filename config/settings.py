@@ -201,8 +201,9 @@ class PathConfig:
         self.CHECKPOINTS_DIR = self.PROJECT_ROOT / "checkpoints"
 
         # LoRA-MoE方法（主要方法）
+        # text expert使用exp4超参数搜索得到的最优检查点 (r64, alpha128, dropout0.05)
         self.LORA_MOE_CKPTS = {
-            'text': self.CHECKPOINTS_DIR / "lora_moe" / "text_expert",
+            'text': self.CHECKPOINTS_DIR / "lora_moe_exp4" / "text_r64_a128_d0.05",
             'image': self.CHECKPOINTS_DIR / "lora_moe" / "image_expert",
             'uml': self.CHECKPOINTS_DIR / "lora_moe" / "uml_expert",
             'general': self.CHECKPOINTS_DIR / "lora_moe" / "general_expert",
