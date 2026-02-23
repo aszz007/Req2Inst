@@ -24,7 +24,7 @@ import os
 from pathlib import Path
 
 # 添加项目根目录到路径
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.training.lora_trainer import LoRATrainer

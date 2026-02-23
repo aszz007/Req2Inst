@@ -85,7 +85,7 @@ class TrainingTask:
         self.task_id = task_id
         self.expert_type = expert_type  # 'uml', 'general'
         self.description = description
-        self.script_path = PROJECT_ROOT / 'scripts' / 'training' / f'train_{expert_type}_expert.py'
+        self.script_path = PROJECT_ROOT / 'training' / 'lora_moe' / f'train_{expert_type}_expert.py'
 
     def get_command(self, test_mode: bool = False) -> List[str]:
         """生成训练命令"""
