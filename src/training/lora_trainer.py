@@ -32,7 +32,7 @@ class LoRATrainer(BaseTrainer):
 
     继承BaseTrainer，添加LoRA特有的：
     - 4bit量化配置
-    - LoRA参数配置
+    - LoRA参数配置（默认使用exp4搜索得到的最优值：rank=64, alpha=128）
     - target_modules自动选择
     - LoRA权重保存
     """
@@ -44,8 +44,8 @@ class LoRATrainer(BaseTrainer):
                  use_4bit: bool = True,
                  use_rtx4090_optimization: bool = True,
                  debug_samples: bool = False,
-                 lora_rank: int = 8,
-                 lora_alpha: int = 16,
+                 lora_rank: int = 64,      # ← exp4搜索最优值（原为8）
+                 lora_alpha: int = 128,    # ← exp4搜索最优值（原为16）
                  lora_dropout: float = 0.05):
         """
         初始化LoRA训练器
@@ -57,8 +57,8 @@ class LoRATrainer(BaseTrainer):
             use_4bit: 是否使用4bit量化训练
             use_rtx4090_optimization: 是否启用RTX 4090优化
             debug_samples: 是否在训练开始前打印前3个训练样本（默认关闭）
-            lora_rank: LoRA秩，默认8
-            lora_alpha: LoRA缩放因子，默认16
+            lora_rank: LoRA秩，默认64（exp4超参数搜索最优值）
+            lora_alpha: LoRA缩放因子，默认128（= 2 × rank，标准比例）
             lora_dropout: LoRA dropout率，默认0.05
         """
         # 调用父类初始化
@@ -82,7 +82,7 @@ class LoRATrainer(BaseTrainer):
         self.target_modules = self._get_target_modules()
 
         logger.info(f"4bit量化: {use_4bit}")
-        logger.info(f"LoRA配置: rank={self.lora_rank}, alpha={self.lora_alpha}")
+        logger.info(f"LoRA配置: rank={self.lora_rank}, alpha={self.lora_alpha}, dropout={self.lora_dropout}")
         logger.info(f"Target modules: {self.target_modules}")
         logger.info("训练稳定性配置:")
         logger.info("  - 梯度裁剪: max_grad_norm=1.0 (标准设置)")
@@ -103,6 +103,9 @@ class LoRATrainer(BaseTrainer):
         - General (最长序列): batch=1, grad_accum=128
 
         保持有效batch=128以保证训练稳定性
+
+        注意：rank=64相比rank=8显存占用约增加2-3GB（adapter参数量8x），
+        RTX 4090 24GB在上述保守配置下仍可安全训练。
 
         Returns:
             (batch_size, gradient_accumulation_steps)

@@ -201,16 +201,16 @@ class PathConfig:
         self.CHECKPOINTS_DIR = self.PROJECT_ROOT / "checkpoints"
 
         # LoRA-MoE方法（主要方法）
-        # text expert使用exp4超参数搜索得到的最优检查点 (r64, alpha128, dropout0.05)
+        # 所有专家均使用exp4超参数搜索得到的最优配置 (r64, alpha128, dropout0.05)
         self.LORA_MOE_CKPTS = {
             'text': self.CHECKPOINTS_DIR / "lora_moe_exp4" / "text_r64_a128_d0.05",
-            'image': self.CHECKPOINTS_DIR / "lora_moe" / "image_expert",
-            'uml': self.CHECKPOINTS_DIR / "lora_moe" / "uml_expert",
-            'general': self.CHECKPOINTS_DIR / "lora_moe" / "general_expert",
+            'image': self.CHECKPOINTS_DIR / "lora_moe_exp4" / "image_r64_a128_d0.05",
+            'uml': self.CHECKPOINTS_DIR / "lora_moe_exp4" / "uml_r64_a128_d0.05",
+            'general': self.CHECKPOINTS_DIR / "lora_moe_exp4" / "general_r64_a128_d0.05",
         }
 
         # LoRA-Single方法（对比基线）
-        self.LORA_SINGLE_CKPT = self.CHECKPOINTS_DIR / "lora_single" / "unified_expert"
+        self.LORA_SINGLE_CKPT = self.CHECKPOINTS_DIR / "lora_single_exp4" / "unified_r64_a128_d0.05"
 
         # P-Tuning v2方法（对比基线）
         self.PTUNING_CKPTS = {
@@ -404,10 +404,10 @@ class LoRAConfig:
     """LoRA超参数配置"""
 
     # LoRA rank (秩)
-    rank: int = 8
+    rank: int = 64
 
     # LoRA alpha (缩放因子)
-    alpha: int = 16
+    alpha: int = 128
 
     # Dropout概率
     dropout: float = 0.05
@@ -445,7 +445,7 @@ class LoRAConfig:
     @classmethod
     def get_conservative_config(cls):
         """保守配置（较小的rank，适合数据量小的场景）"""
-        return cls(rank=8, alpha=16, dropout=0.05)
+        return cls(rank=64, alpha=128, dropout=0.05)
 
     @classmethod
     def get_aggressive_config(cls):
@@ -637,8 +637,8 @@ class FullFineTuningConfig:
 
     # 使用高rank LoRA（保守高质量配置）
     use_high_rank_lora: bool = True
-    lora_rank: int = 16  # 高质量配置
-    lora_alpha: int = 32  # 2倍rank
+    lora_rank: int = 64  # exp4搜索最优值（与lora_moe保持一致）
+    lora_alpha: int = 128  # 2倍rank
     lora_dropout: float = 0.05
 
     # 目标模块（仅attention层以节省显存）
@@ -672,8 +672,8 @@ class FullFineTuningConfig:
     def get_default_config(cls):
         """默认配置（保守高质量策略）"""
         return cls(
-            lora_rank=16,
-            lora_alpha=32,
+            lora_rank=64,
+            lora_alpha=128,
             max_seq_length=2048,
             gradient_accumulation_steps=16,
             num_epochs=3
@@ -689,8 +689,8 @@ class FullFineTuningConfig:
         - 显存占用降低约10-15%
         """
         return cls(
-            lora_rank=16,
-            lora_alpha=32,
+            lora_rank=64,
+            lora_alpha=128,
             max_seq_length=1536,
             gradient_accumulation_steps=16,
             num_epochs=3
