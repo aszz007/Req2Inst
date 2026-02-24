@@ -11,6 +11,8 @@ Output: outputs/evaluations/experiments/exp5_data_efficiency/
 """
 
 import sys
+import torch
+import gc
 import random
 import traceback
 import argparse
@@ -72,6 +74,19 @@ def _get_ckpt_path(method, fraction):
             return path_cfg.FULL_FINETUNING_CKPTS['text']
     return path_cfg.CHECKPOINTS_DIR / f'exp5_{method}' / f'text_{tag}'
 
+def _release_gpu(trainer=None):
+    """Release GPU memory held by a trainer instance."""
+    if trainer is not None:
+        if hasattr(trainer, 'model') and trainer.model is not None:
+            del trainer.model
+            trainer.model = None
+        if hasattr(trainer, 'tokenizer') and trainer.tokenizer is not None:
+            del trainer.tokenizer
+            trainer.tokenizer = None
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
 
 def train_for_fraction(method, fraction, train_data, args):
     ckpt_path = _get_ckpt_path(method, fraction)
@@ -91,31 +106,41 @@ def train_for_fraction(method, fraction, train_data, args):
     subset = random.sample(train_data, n_train)
     logger.info(f'使用 {len(subset)} 条训练样本（比例={fraction}）')
 
-    if method in ('lora_moe', 'lora_single'):
-        from src.training.lora_trainer import LoRATrainer
-        expert_type = 'text' if method == 'lora_moe' else 'general'
-        trainer = LoRATrainer(
-            expert_type=expert_type,
-            output_dir=str(ckpt_path),
-            debug_samples=False
-        )
-        trainer.setup_model()
-        trainer.prepare_data()
-        # Replace training data subset
-        trainer.train_dataset.data = subset
-        trainer.train()
+    trainer = None
+    try:
+        if method in ('lora_moe', 'lora_single'):
+            from src.training.lora_trainer import LoRATrainer
+            expert_type = 'text' if method == 'lora_moe' else 'general'
+            trainer = LoRATrainer(
+                expert_type=expert_type,
+                output_dir=str(ckpt_path),
+                debug_samples=False
+            )
+            trainer.prepare_data()
+            trainer._raw_train_data = subset
+            trainer.train_dataset = subset
+            if not trainer.epochs_from_env:
+                trainer.train_cfg.num_epochs = trainer._get_num_epochs_from_data()
+            trainer.setup_model()
+            trainer.train()
 
-    elif method == 'full_finetuning':
-        from src.training.full_finetuning_trainer import FullFineTuningTrainer
-        trainer = FullFineTuningTrainer(
-            expert_type='text',
-            output_dir=str(ckpt_path),
-            debug_samples=False
-        )
-        trainer.setup_model()
-        trainer.prepare_data()
-        trainer.train_dataset.data = subset
-        trainer.train()
+        elif method == 'full_finetuning':
+            from src.training.full_finetuning_trainer import FullFineTuningTrainer
+            trainer = FullFineTuningTrainer(
+                expert_type='text',
+                output_dir=str(ckpt_path),
+                debug_samples=False
+            )
+            trainer.prepare_data()
+            trainer._raw_train_data = subset
+            trainer.train_dataset = subset
+            if not trainer.epochs_from_env:
+                trainer.train_cfg.num_epochs = trainer._get_num_epochs_from_data()
+            trainer.setup_model()
+            trainer.train()
+
+    finally:
+        _release_gpu(trainer)
 
     logger.info(f'训练完成: {ckpt_path}')
 

@@ -157,17 +157,15 @@ def main():
         path_cfg = get_path_config()
         trainer = LoRATrainer(
             expert_type='general',
+            method_name='lora_single',
             use_4bit=args.use_4bit,
             use_rtx4090_optimization=use_rtx4090_opt,
             use_domain_templates=True
         )
 
-        # 将输出路径和中间checkpoint路径统一指向lora_single目录
-        # output_dir和checkpoint_dir必须同时更新，否则中间checkpoint会写入lora_moe路径
+        # output_dir指向unified_expert而非general_expert，需要覆盖
         trainer.output_dir = path_cfg.LORA_SINGLE_CKPT
         trainer.checkpoint_dir = path_cfg.LORA_SINGLE_CKPT / 'training_checkpoints'
-        # 确保method_name正确，训练曲线文件名和日志标签会使用该值
-        trainer.method_name = 'lora_single'
 
     except Exception as e:
         logger.error(f"创建训练器失败: {e}")

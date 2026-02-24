@@ -39,6 +39,7 @@ class LoRATrainer(BaseTrainer):
 
     def __init__(self,
                  expert_type: str,
+                 method_name: str = 'lora_moe',
                  base_model_path: Optional[str] = None,
                  output_dir: Optional[str] = None,
                  use_4bit: bool = True,
@@ -65,7 +66,7 @@ class LoRATrainer(BaseTrainer):
         # 调用父类初始化
         super().__init__(
             expert_type=expert_type,
-            method_name='lora_moe',
+            method_name=method_name,
             base_model_path=base_model_path,
             output_dir=output_dir,
             use_rtx4090_optimization=use_rtx4090_optimization,

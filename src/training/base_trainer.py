@@ -531,16 +531,14 @@ class BaseTrainer(ABC):
                 all_data, self.expert_type
             )
 
-            # 创建Dataset对象
-            self.train_dataset = InstructionDataset(
-                train_data, self.tokenizer, self.train_cfg.max_seq_length
-            )
-            self.val_dataset = InstructionDataset(
-                val_data, self.tokenizer, self.train_cfg.max_seq_length
-            )
-            self.test_dataset = InstructionDataset(
-                test_data, self.tokenizer, self.train_cfg.max_seq_length
-            )
+            # 延迟创建Dataset：prepare_data()调用时tokenizer尚未加载
+            # setup_model()之后tokenizer才就绪，在train()里再创建InstructionDataset
+            self._raw_train_data = train_data
+            self._raw_val_data = val_data
+            self._raw_test_data = test_data
+            self.train_dataset = train_data  # 列表占位，保证len()正常
+            self.val_dataset = val_data
+            self.test_dataset = test_data
 
             logger.info(f"数据集划分完成:")
             logger.info(f"  训练集: {len(self.train_dataset)}条")
@@ -711,6 +709,21 @@ class BaseTrainer(ABC):
             # 创建输出目录
             self.output_dir.mkdir(parents=True, exist_ok=True)
             self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+            # tokenizer已由setup_model()加载完毕，安全创建InstructionDataset
+            if hasattr(self, '_raw_train_data'):
+                logger.info("创建InstructionDataset（tokenizer已就绪）...")
+                self.train_dataset = InstructionDataset(
+                    self._raw_train_data, self.tokenizer, self.train_cfg.max_seq_length
+                )
+                self.val_dataset = InstructionDataset(
+                    self._raw_val_data, self.tokenizer, self.train_cfg.max_seq_length
+                )
+                self.test_dataset = InstructionDataset(
+                    self._raw_test_data, self.tokenizer, self.train_cfg.max_seq_length
+                )
+                logger.info(f"InstructionDataset创建完成: "
+                            f"train={len(self.train_dataset)}, val={len(self.val_dataset)}")
 
             # 获取batch配置
             batch_size, gradient_accumulation_steps = self._get_batch_config()
