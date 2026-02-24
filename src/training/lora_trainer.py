@@ -46,7 +46,8 @@ class LoRATrainer(BaseTrainer):
                  debug_samples: bool = False,
                  lora_rank: int = 64,      # ← exp4搜索最优值（原为8）
                  lora_alpha: int = 128,    # ← exp4搜索最优值（原为16）
-                 lora_dropout: float = 0.05):
+                 lora_dropout: float = 0.05,
+                 use_domain_templates: bool = False):
         """
         初始化LoRA训练器
 
@@ -68,7 +69,8 @@ class LoRATrainer(BaseTrainer):
             base_model_path=base_model_path,
             output_dir=output_dir,
             use_rtx4090_optimization=use_rtx4090_optimization,
-            debug_samples=debug_samples
+            debug_samples=debug_samples,
+            use_domain_templates=use_domain_templates  # 传递给BaseTrainer
         )
 
         self.use_4bit = use_4bit

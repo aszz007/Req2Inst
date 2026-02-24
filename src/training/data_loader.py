@@ -693,11 +693,13 @@ class GeneralDatasetLoader:
     - 确保训练推理一致性
     """
 
-    def __init__(self):
+    def __init__(self, use_domain_templates: bool = False):
         """
         初始化通用数据加载器
         """
+        self.use_domain_templates = use_domain_templates
         logger.info(f"初始化GeneralDatasetLoader - 将加载text + image + uml数据")
+        logger.info(f"模板模式: {'各领域专用模板 (lora_single)' if use_domain_templates else '通用模板 (general_expert)'}")
 
     def load_all_data(self) -> List[Dict]:
         """
@@ -715,10 +717,13 @@ class GeneralDatasetLoader:
 
         # 重新构建prompt - 使用GeneralInstructionTemplate
         for item in text_raw:
-            prompt = GeneralInstructionTemplate.build_prompt(
-                item['input'],
-                force_type='text'
-            )
+            if self.use_domain_templates:
+                prompt = TextInstructionTemplate.build_prompt(item['input'])
+            else:
+                prompt = GeneralInstructionTemplate.build_prompt(
+                    item['input'],
+                    force_type='text'
+                )
             all_data.append({
                 'input': item['input'],
                 'input_with_prompt': prompt,
@@ -736,12 +741,13 @@ class GeneralDatasetLoader:
 
         # 重新构建prompt - 使用GeneralInstructionTemplate
         for item in image_raw:
-            # item['input']可能是完整JSON字符串或纯文本description
-            # 直接传给GeneralInstructionTemplate，它会自动处理
-            prompt = GeneralInstructionTemplate.build_prompt(
-                item['input'],
-                force_type='image'
-            )
+            if self.use_domain_templates:
+                prompt = ImageInstructionTemplate.build_prompt(item['input'])
+            else:
+                prompt = GeneralInstructionTemplate.build_prompt(
+                    item['input'],
+                    force_type='image'
+                )
             all_data.append({
                 'input': item['input'],
                 'input_with_prompt': prompt,
@@ -759,23 +765,15 @@ class GeneralDatasetLoader:
 
         # 重新构建prompt - 使用GeneralInstructionTemplate
         for item in uml_raw:
-            # 尝试解析为JSON，如果不是JSON则构建简单格式
-            try:
-                uml_json = json.loads(item['input']) if isinstance(item['input'], str) else item['input']
-                # 过滤position字段
-                uml_json = filter_uml_json_positions(uml_json)
-            except (json.JSONDecodeError, TypeError):
-                uml_json = {
-                    "description": item['input'],
-                    "details": {
-                        "diagram_type": "use case diagram"
-                    }
-                }
-
-            prompt = GeneralInstructionTemplate.build_prompt(
-                uml_json,
-                force_type='uml'
-            )
+            if self.use_domain_templates:
+                prompt = UMLInstructionTemplate.build_prompt(str(item['input']))
+            else:
+                try:
+                    uml_json = json.loads(item['input']) if isinstance(item['input'], str) else item['input']
+                    uml_json = filter_uml_json_positions(uml_json)
+                except (json.JSONDecodeError, TypeError):
+                    uml_json = {"description": item['input'], "details": {"diagram_type": "use case diagram"}}
+                prompt = GeneralInstructionTemplate.build_prompt(uml_json, force_type='uml')
             all_data.append({
                 'input': item['input'],
                 'input_with_prompt': prompt,

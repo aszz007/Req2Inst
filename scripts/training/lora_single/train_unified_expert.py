@@ -158,7 +158,8 @@ def main():
         trainer = LoRATrainer(
             expert_type='general',
             use_4bit=args.use_4bit,
-            use_rtx4090_optimization=use_rtx4090_opt
+            use_rtx4090_optimization=use_rtx4090_opt,
+            use_domain_templates=True
         )
 
         # 将输出路径和中间checkpoint路径统一指向lora_single目录

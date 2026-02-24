@@ -224,7 +224,8 @@ class BaseTrainer(ABC):
                  base_model_path: Optional[str] = None,
                  output_dir: Optional[str] = None,
                  use_rtx4090_optimization: bool = True,
-                 debug_samples: bool = False):
+                 debug_samples: bool = False,
+                 use_domain_templates: bool = False):
         """
         初始化基础训练器
 
@@ -244,6 +245,7 @@ class BaseTrainer(ABC):
         self.method_name = method_name
         self.use_rtx4090_optimization = use_rtx4090_optimization
         self.debug_samples = debug_samples
+        self.use_domain_templates = use_domain_templates
 
         # 获取配置
         self.path_cfg = get_path_config()
@@ -513,7 +515,7 @@ class BaseTrainer(ABC):
                 loader = UMLDatasetLoader()
                 all_data = loader.load_csv_file()
             elif self.expert_type == 'general':
-                loader = GeneralDatasetLoader()
+                loader = GeneralDatasetLoader(use_domain_templates=self.use_domain_templates)
                 all_data = loader.load_all_data()
             else:
                 raise ValueError(f"不支持的专家类型: {self.expert_type}")
