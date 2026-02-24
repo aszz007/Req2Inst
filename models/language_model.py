@@ -29,10 +29,12 @@ except ImportError:
     # 在vision环境中这是正常的，不影响使用
     pass
 
-from peft import PeftModel, PeftConfig
+from peft import PeftModel
 from pathlib import Path
 from typing import Optional
 import warnings
+from concurrent.futures import ThreadPoolExecutor
+import os
 import json
 import tempfile
 import shutil
@@ -145,6 +147,7 @@ class LanguageModel:
                 self.model_path,
                 trust_remote_code=True,
                 padding_side='left',
+                use_fast=True,
             )
 
             # 设置特殊tokens
@@ -487,25 +490,41 @@ class LanguageModel:
         results = []
         num_batches = (len(prompts) + batch_size - 1) // batch_size
 
+        # 预处理所有batch列表（suppress_thinking在CPU侧预先完成）
+        all_batches = []
+        for i in range(0, len(prompts), batch_size):
+            bp = [self._suppress_thinking(p) for p in prompts[i:i + batch_size]]
+            all_batches.append(bp)
+
+        # tokenization函数，用于异步预取
+        def _tokenize(batch):
+            return self.tokenizer(
+                batch,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=4096
+            )
+
         # 使用tqdm显示进度条
         pbar = tqdm(total=len(prompts), desc="批量生成", unit="样本", ncols=100)
 
-        for i in range(0, len(prompts), batch_size):
-            batch_prompts = prompts[i:i+batch_size]
-            # For Qwen3-8B: pre-fill empty think block to disable thinking mode
-            batch_prompts = [self._suppress_thinking(p) for p in batch_prompts]
+        # 启动第一个batch的tokenization
+        tok_executor = ThreadPoolExecutor(max_workers=2)
+        next_tok_future = tok_executor.submit(_tokenize, all_batches[0]) if all_batches else None
 
+        for batch_idx, batch_prompts in enumerate(all_batches):
             try:
-                # Tokenize批量输入
-                inputs = self.tokenizer(
-                    batch_prompts,
-                    return_tensors="pt",
-                    padding=True,
-                    truncation=True,
-                    max_length=8192
-                )
-                input_lengths = inputs['input_ids'].shape[1]
-                inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+                # 获取当前batch的tokenization结果（已在GPU推理上一batch时完成）
+                inputs_raw = next_tok_future.result()
+
+                # 立即提交下一个batch的tokenization（与GPU推理并行）
+                if batch_idx + 1 < len(all_batches):
+                    next_tok_future = tok_executor.submit(_tokenize, all_batches[batch_idx + 1])
+
+                input_lengths = inputs_raw['input_ids'].shape[1]
+                inputs = {k: v.to(self.model.device) for k, v in inputs_raw.items()}
+                i = batch_idx * batch_size  # 用于后续错误日志保持兼容
 
                 # 准备停止tokens
                 stop_tokens = []
@@ -545,13 +564,16 @@ class LanguageModel:
                         with torch.cuda.amp.autocast():
                             outputs = self.model.generate(**inputs, **generation_config)
 
-                # 解码批量输出
-                for j, output in enumerate(outputs):
-                    generated_ids = output[input_lengths:]
-                    generated_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-                    generated_text = self._clean_generated_text(generated_text)
-                    generated_text = self._truncate_after_three_parts(generated_text)
-                    results.append(generated_text)
+                # 批量解码（Rust层并行，替代串行decode循环）
+                generated_ids_list = [output[input_lengths:] for output in outputs]
+                decoded_texts = self.tokenizer.batch_decode(generated_ids_list, skip_special_tokens=True)
+
+                def _post_process_one(text):
+                    text = self._clean_generated_text(text)
+                    return self._truncate_after_three_parts(text)
+
+                with ThreadPoolExecutor(max_workers=min(len(decoded_texts), os.cpu_count() or 16)) as _exec:
+                    results.extend(_exec.map(_post_process_one, decoded_texts))
 
                 # 更新进度条
                 pbar.update(len(batch_prompts))
@@ -612,12 +634,15 @@ class LanguageModel:
                                     with torch.cuda.amp.autocast():
                                         retry_outputs = self.model.generate(**retry_inputs, **retry_gen_config)
 
-                            for retry_out in retry_outputs:
-                                gen_ids = retry_out[retry_input_lengths:]
-                                gen_text = self.tokenizer.decode(gen_ids, skip_special_tokens=True)
-                                gen_text = self._clean_generated_text(gen_text)
-                                gen_text = self._truncate_after_three_parts(gen_text)
-                                retry_results.append(gen_text)
+                            retry_ids_list = [o[retry_input_lengths:] for o in retry_outputs]
+                            retry_decoded = self.tokenizer.batch_decode(retry_ids_list, skip_special_tokens=True)
+
+                            def _post_process_retry(t):
+                                t = self._clean_generated_text(t)
+                                return self._truncate_after_three_parts(t)
+
+                            with ThreadPoolExecutor(max_workers=min(len(retry_decoded), os.cpu_count() or 16)) as _exec:
+                                retry_results.extend(_exec.map(_post_process_retry, retry_decoded))
 
                             torch.cuda.empty_cache()
 
@@ -640,6 +665,7 @@ class LanguageModel:
                 pbar.update(len(batch_prompts))
 
         pbar.close()
+        tok_executor.shutdown(wait=False)
         return results
 
     def _clean_generated_text(self, text: str) -> str:
