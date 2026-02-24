@@ -203,14 +203,14 @@ class PathConfig:
         # LoRA-MoE方法（主要方法）
         # 所有专家均使用exp4超参数搜索得到的最优配置 (r64, alpha128, dropout0.05)
         self.LORA_MOE_CKPTS = {
-            'text': self.CHECKPOINTS_DIR / "lora_moe_exp4" / "text_r64_a128_d0.05",
-            'image': self.CHECKPOINTS_DIR / "lora_moe_exp4" / "image_r64_a128_d0.05",
-            'uml': self.CHECKPOINTS_DIR / "lora_moe_exp4" / "uml_r64_a128_d0.05",
-            'general': self.CHECKPOINTS_DIR / "lora_moe_exp4" / "general_r64_a128_d0.05",
+            'text': self.CHECKPOINTS_DIR / "lora_moe" / "text_expert",
+            'image': self.CHECKPOINTS_DIR / "lora_moe" / "image_expert",
+            'uml': self.CHECKPOINTS_DIR / "lora_moe" / "uml_expert",
+            'general': self.CHECKPOINTS_DIR / "lora_moe" / "general_expert",
         }
 
         # LoRA-Single方法（对比基线）
-        self.LORA_SINGLE_CKPT = self.CHECKPOINTS_DIR / "lora_single_exp4" / "unified_r64_a128_d0.05"
+        self.LORA_SINGLE_CKPT = self.CHECKPOINTS_DIR / "lora_single" / "unified_expert"
 
         # P-Tuning v2方法（对比基线）
         self.PTUNING_CKPTS = {
