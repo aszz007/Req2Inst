@@ -9,6 +9,8 @@
 支持模型：Qwen-7B-Chat（遗留）、Qwen3-8B（默认）
 """
 
+import time
+import threading
 import torch
 from transformers import (
     AutoModelForCausalLM,
@@ -391,12 +393,18 @@ class LanguageModel:
         """
         try:
             # For Qwen3-8B: pre-fill empty think block to disable thinking mode
+            _gen_start = time.perf_counter()
+            logger.info(
+                f"[TIMING][generate] called | torch_threads={torch.get_num_threads()} | interop={torch.get_num_interop_threads()} | thread={threading.get_ident()}")
             prompt = self._suppress_thinking(prompt)
 
             # 编码输入
+            _tok_start = time.perf_counter()
             inputs = self.tokenizer(prompt, return_tensors="pt", padding=True)
             input_length = inputs['input_ids'].shape[1]
             inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+            _tok_end = time.perf_counter()
+            logger.info(f"[TIMING][generate] tokenize 1 sample: {_tok_end - _tok_start:.3f}s | input_len={input_length}")
 
             # 准备停止tokens
             stop_tokens = []
@@ -444,11 +452,16 @@ class LanguageModel:
             generated_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
 
             # 清理特殊标记和多余内容
+            _gpu_done = time.perf_counter()
+            logger.info(f"[TIMING][generate] GPU done: {_gpu_done - _gen_start:.3f}s | new_tokens={len(generated_ids)}")
             generated_text = self._clean_generated_text(generated_text)
 
             # 检测并截断三段式指令后的多余内容
             generated_text = self._truncate_after_three_parts(generated_text)
 
+            _post_done = time.perf_counter()
+            logger.info(
+                f"[TIMING][generate] post-process: {_post_done - _gpu_done:.3f}s | total: {_post_done - _gen_start:.3f}s")
             return generated_text
 
         except Exception as e:
@@ -516,6 +529,7 @@ class LanguageModel:
         for batch_idx, batch_prompts in enumerate(all_batches):
             try:
                 # 获取当前batch的tokenization结果（已在GPU推理上一batch时完成）
+                _tok_fetch_start = time.perf_counter()
                 inputs_raw = next_tok_future.result()
 
                 # 立即提交下一个batch的tokenization（与GPU推理并行）
@@ -524,6 +538,9 @@ class LanguageModel:
 
                 input_lengths = inputs_raw['input_ids'].shape[1]
                 inputs = {k: v.to(self.model.device) for k, v in inputs_raw.items()}
+                _tok_end = time.perf_counter()
+                logger.info(
+                    f"[TIMING][batch] tok_fetch+H2D {len(batch_prompts)} samples: {_tok_end - _tok_fetch_start:.3f}s | seq_len={input_lengths}")
                 i = batch_idx * batch_size  # 用于后续错误日志保持兼容
 
                 # 准备停止tokens
@@ -556,6 +573,7 @@ class LanguageModel:
                     "logits_processor": _sanitize_lp,
                 }
 
+                _infer_start = time.perf_counter()
                 # 批量生成
                 with torch.no_grad():
                     if self.use_4bit:
@@ -567,6 +585,9 @@ class LanguageModel:
                 # 批量解码（Rust层并行，替代串行decode循环）
                 generated_ids_list = [output[input_lengths:] for output in outputs]
                 decoded_texts = self.tokenizer.batch_decode(generated_ids_list, skip_special_tokens=True)
+                _infer_end = time.perf_counter()
+                logger.info(
+                    f"[TIMING][batch] model.generate {len(batch_prompts)} samples: {_infer_end - _infer_start:.3f}s")
 
                 def _post_process_one(text):
                     text = self._clean_generated_text(text)
@@ -574,6 +595,8 @@ class LanguageModel:
 
                 with ThreadPoolExecutor(max_workers=min(len(decoded_texts), os.cpu_count() or 16)) as _exec:
                     results.extend(_exec.map(_post_process_one, decoded_texts))
+                    _pp_end = time.perf_counter()
+                    logger.info(f"[TIMING][batch] post-process: {_pp_end - _infer_end:.3f}s")
 
                 # 更新进度条
                 pbar.update(len(batch_prompts))

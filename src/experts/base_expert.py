@@ -197,6 +197,7 @@ class BaseExpert(ABC):
         Note:
             停止token由LanguageModel内部处理(eos_token_id, <|im_end|>等)
         """
+        logger.info(f"[ROUTE] _generate_with_model called (SINGLE) | expert={self.expert_name}")
         if not self.is_model_loaded:
             logger.error("模型未加载,无法生成")
             return ""
@@ -261,6 +262,8 @@ class BaseExpert(ABC):
         Returns:
             list: 生成的文本列表
         """
+        logger.info(
+            f"[ROUTE] _generate_batch_with_model called (BATCH) | expert={self.expert_name} | prompts={len(prompts)} | batch_size={batch_size}")
         if not self.is_model_loaded:
             logger.error("模型未加载,无法生成")
             return [""] * len(prompts)
