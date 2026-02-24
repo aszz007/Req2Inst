@@ -93,6 +93,9 @@ class BaseExpert(ABC):
                     logger.warning(f"LoRA路径不存在: {self.lora_path}")
                     logger.warning("使用基础模型(未微调)")
 
+            # 推理阶段：为CPU预处理分配足够线程（tokenization、后处理等）
+            torch.set_num_threads(min(8, torch.get_num_threads()))
+            torch.set_num_interop_threads(min(4, torch.get_num_interop_threads()))
             self.is_model_loaded = True
             logger.info("模型加载完成")
             return True

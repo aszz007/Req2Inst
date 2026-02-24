@@ -171,7 +171,7 @@ class TextExpert(BaseExpert):
             logger.error(f"指令生成失败: {e}")
             return ""
 
-    def batch_generate_instruction(self, input_data_list: list, batch_size: int = 8) -> list:
+    def batch_generate_instruction(self, input_data_list: list, batch_size: int = 16) -> list:
         """
         批量生成文本众包指令（提高GPU利用率）
 

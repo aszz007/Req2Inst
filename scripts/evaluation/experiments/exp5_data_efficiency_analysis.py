@@ -25,8 +25,6 @@ sys.path.insert(0, str(project_root))
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import numpy as np
-
 from config.settings import get_path_config
 from src.training.data_loader import TextDatasetLoader, split_dataset_for_expert
 from src.baselines.inference_utils import (
@@ -139,10 +137,9 @@ def train_for_fraction(method, fraction, train_data, args):
             trainer.setup_model()
             trainer.train()
 
+        logger.info(f'训练完成: {ckpt_path}')
     finally:
         _release_gpu(trainer)
-
-    logger.info(f'训练完成: {ckpt_path}')
 
 
 def run_inference(method, fraction, test_data, args):

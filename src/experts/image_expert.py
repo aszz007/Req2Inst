@@ -207,7 +207,7 @@ class ImageExpert(BaseExpert):
             logger.error(f"指令生成失败: {e}")
             return ""
 
-    def batch_generate_instruction(self, input_data_list: list, batch_size: int = 4) -> list:
+    def batch_generate_instruction(self, input_data_list: list, batch_size: int = 16) -> list:
         """
         批量生成图像标注指令（提高GPU利用率）
 

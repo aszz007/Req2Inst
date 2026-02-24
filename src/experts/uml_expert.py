@@ -212,7 +212,7 @@ class UMLExpert(BaseExpert):
             logger.error(f"指令生成失败: {e}")
             return ""
 
-    def batch_generate_instruction(self, input_data_list: list, batch_size: int = 4) -> list:
+    def batch_generate_instruction(self, input_data_list: list, batch_size: int = 8) -> list:
         """
         批量生成UML业务逻辑实现指令（提高GPU利用率）
 

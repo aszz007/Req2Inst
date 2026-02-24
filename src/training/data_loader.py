@@ -16,6 +16,7 @@
 """
 
 import os
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "true")
 import json
 import pandas as pd
 import random
@@ -867,7 +868,7 @@ def create_dataloader(
     dataset: InstructionDataset,
     batch_size: int = None,
     shuffle: bool = True,
-    num_workers: int = 2
+    num_workers: int = 8
 ) -> DataLoader:
     """
     创建DataLoader
@@ -890,7 +891,9 @@ def create_dataloader(
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
-        pin_memory=True if torch.cuda.is_available() else False
+        pin_memory=True if torch.cuda.is_available() else False,
+        prefetch_factor=4 if num_workers > 0 else None,
+        persistent_workers=True if num_workers > 0 else False
     )
 
 

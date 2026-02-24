@@ -161,7 +161,7 @@ class GeneralExpert(BaseExpert):
             logger.error(f"异常详情: {traceback.format_exc()}")
             return ""
 
-    def batch_generate_instruction(self, input_data_list: list, batch_size: int = 4) -> list:
+    def batch_generate_instruction(self, input_data_list: list, batch_size: int = 8) -> list:
         """
         批量生成众包指令（提高GPU利用率）
 
