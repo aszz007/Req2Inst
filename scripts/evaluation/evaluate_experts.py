@@ -39,6 +39,7 @@ from src.training.data_loader import (
 )
 from src.experts import TextExpert, ImageExpert, UMLExpert, GeneralExpert
 from src.utils.logger import get_logger
+import traceback
 
 logger = get_logger('evaluation.evaluate_experts')
 
@@ -122,7 +123,7 @@ class ExpertEvaluator:
             self,
             num_samples: Optional[int] = None,
             save_predictions: bool = True,
-            batch_size: int = 8
+            batch_size: int = 16
     ) -> Dict:
         """
         评估文本专家
@@ -130,7 +131,7 @@ class ExpertEvaluator:
         Args:
             num_samples: 使用的样本数(None表示全部)
             save_predictions: 是否保存预测数据到JSON
-            batch_size: 批处理大小（默认8，适合24GB显存+FP16）
+            batch_size: 批处理大小（默认16，适合RTX 4090 24GB推理模式）
 
         Returns:
             dict: 评估结果
@@ -190,7 +191,7 @@ class ExpertEvaluator:
             self,
             num_samples: Optional[int] = None,
             save_predictions: bool = True,
-            batch_size: int = 8
+            batch_size: int = 16
     ) -> Dict:
         """
         评估图像专家
@@ -198,7 +199,7 @@ class ExpertEvaluator:
         Args:
             num_samples: 使用的样本数
             save_predictions: 是否保存预测数据到JSON
-            batch_size: 批处理大小（默认8，适合24GB显存+FP16）
+            batch_size: 批处理大小（默认16，适合RTX 4090 24GB推理模式）
 
         Returns:
             dict: 评估结果

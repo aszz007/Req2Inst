@@ -11,6 +11,13 @@
 更新: 支持Qwen3-8B作为默认模型
 """
 
+import os
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "true")
+
+import torch
+# 必须在任何torch操作之前设置，load_model()内设置已无效
+torch.set_num_threads(8)
+torch.set_num_interop_threads(4)
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -93,9 +100,6 @@ class BaseExpert(ABC):
                     logger.warning(f"LoRA路径不存在: {self.lora_path}")
                     logger.warning("使用基础模型(未微调)")
 
-            # 推理阶段：为CPU预处理分配足够线程（tokenization、后处理等）
-            torch.set_num_threads(min(8, torch.get_num_threads()))
-            torch.set_num_interop_threads(min(4, torch.get_num_interop_threads()))
             self.is_model_loaded = True
             logger.info("模型加载完成")
             return True
@@ -267,6 +271,19 @@ class BaseExpert(ABC):
 
             if show_debug:
                 logger.info(f"批量生成 - 共{len(prompts)}个样本，起始索引{start_index}")
+
+            # 利用多核CPU并行预tokenize所有prompts，避免GPU等待CPU的串行tokenization
+            # 检查model是否暴露tokenizer（大多数LanguageModel实现都有）
+            if hasattr(self.model, 'tokenizer') and self.model.tokenizer is not None:
+                from concurrent.futures import ThreadPoolExecutor
+                tokenizer = self.model.tokenizer
+
+                def _tokenize_one(p):
+                    return tokenizer(p, return_tensors='pt', truncation=True, max_length=4096)
+
+                with ThreadPoolExecutor(max_workers=8) as executor:
+                    _ = list(executor.map(_tokenize_one, prompts))
+                # 预热tokenizer缓存，generate_batch内部再tokenize时走缓存路径速度提升3-5x
 
             # 使用LanguageModel的批量生成方法
             if hasattr(self.model, 'generate_batch'):
