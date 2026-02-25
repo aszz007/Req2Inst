@@ -93,7 +93,9 @@ def train_for_fraction(method, fraction, train_data, args):
         logger.info(f'{method}/{_fraction_tag(fraction)}: 复用已有检查点 {ckpt_path}')
         return
 
-    if ckpt_path.exists() and not args.force_retrain:
+    retrain_targets = set(args.retrain_only.split(',')) if getattr(args, 'retrain_only', None) else set()
+    target_key = f'{method}_{_fraction_tag(fraction)}'
+    if ckpt_path.exists() and not args.force_retrain and target_key not in retrain_targets:
         logger.info(f'{method}/{_fraction_tag(fraction)}: 检查点已存在，跳过训练')
         return
 
@@ -148,7 +150,9 @@ def run_inference(method, fraction, test_data, args):
     filename = f'text_{tag}_predictions.json'
 
     cached = load_predictions_cache(cache_subdir, filename)
-    if cached and not args.force_regenerate:
+    retrain_targets = set(args.retrain_only.split(',')) if getattr(args, 'retrain_only', None) else set()
+    target_key = f'{method}_{tag}'
+    if cached and not args.force_regenerate and target_key not in retrain_targets:
         logger.info(f'{method}/{tag}: 从缓存加载')
         return cached
 
@@ -344,6 +348,8 @@ def main():
     parser.add_argument('--only-missing', action='store_true',
                         help='Skip method/fraction combos that already have a full-run cache. '
                              'Test-mode caches are treated as missing and re-run automatically.')
+    parser.add_argument('--retrain-only', type=str, default=None,
+                        help='Comma-separated list of method_fraction to force retrain, e.g. lora_moe_75pct,lora_single_50pct')
     args = parser.parse_args()
     if args.from_cache:
         args.force_regenerate = False
