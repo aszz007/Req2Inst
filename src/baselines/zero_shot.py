@@ -67,12 +67,21 @@ def _build_few_shot_prompt(
     }.get(input_type, 'requirements to crowdsourcing instruction')
 
     system_content = (
-        f'You are an expert at converting {type_desc}.\n'
-        'Each instruction must follow this exact three-part format:\n'
-        '  Definition: <what the worker should do>\n'
-        '  Emphasis & Caution: <what to pay attention to>\n'
-        '  Things to Avoid: <common mistakes to avoid>\n'
-        'Keep each section to ONE concise sentence.'
+        f'You are a crowdsourcing task design expert. Based on the input {type_desc}, '
+        'write an English task instruction for crowdsourcing workers.\n\n'
+        'Core Principles:\n'
+        '1. Extreme Conciseness: Crowdsourcing workers value time. Use the most concise language possible.\n'
+        '2. Structured Format: Strictly follow the three-part format defined below.\n'
+        '3. English Output: Output must be in English regardless of input language.\n\n'
+        'Output Format Requirements:\n\n'
+        'Definition: Use a clear imperative sentence to describe the main objective. Must start with "In this task,".\n'
+        'Emphasis & Caution: Only highlight conditions most prone to error or that must be met. Use "-" if nothing specific to emphasize.\n'
+        'Things to Avoid: Only list prohibited operations. Use "-" if nothing specific to avoid.\n\n'
+        'CRITICAL RULES:\n'
+        '- Each section must be on a separate line\n'
+        '- Each line must start with the section label (Definition: / Emphasis & Caution: / Things to Avoid:)\n'
+        '- Keep all sections concise\n'
+        '- Output ONLY these three lines, nothing else'
     )
 
     user_parts = []
@@ -87,7 +96,7 @@ def _build_few_shot_prompt(
     return (
         f'<|im_start|>system\n{system_content}<|im_end|>\n'
         f'<|im_start|>user\n{user_content}<|im_end|>\n'
-        f'<|im_start|>assistant\n'
+        f'<|im_start|>assistant\n<think>\n\n</think>\n\n'
     )
 
 
@@ -205,7 +214,11 @@ class ZeroShotGenerator:
             logger.warning('n_shots > 0 但未提供示例，退回到零样本模式')
             n_shots = 0
 
-        prompt = _build_few_shot_prompt(input_text, input_type, n_shots, examples or [])
+        if n_shots == 0 and input_type == 'text':
+            from models.prompt_templates.text_template import TextInstructionTemplate
+            prompt = TextInstructionTemplate.build_prompt(input_text)
+        else:
+            prompt = _build_few_shot_prompt(input_text, input_type, n_shots, examples or [])
 
         infer_cfg = get_inference_config()
         try:
@@ -260,10 +273,14 @@ class ZeroShotGenerator:
             logger.warning('n_shots > 0 但未提供示例，退回到零样本模式')
             n_shots = 0
 
-        prompts = [
-            _build_few_shot_prompt(inp, input_type, n_shots, examples or [])
-            for inp in inputs
-        ]
+        if n_shots == 0 and input_type == 'text':
+            from models.prompt_templates.text_template import TextInstructionTemplate
+            prompts = [TextInstructionTemplate.build_prompt(inp) for inp in inputs]
+        else:
+            prompts = [
+                _build_few_shot_prompt(inp, input_type, n_shots, examples or [])
+                for inp in inputs
+            ]
 
         infer_cfg = get_inference_config()
         results = self._lm.generate_batch(
