@@ -502,7 +502,6 @@ def plot_hyperparameter_summary(summary: Dict, plots_dir: Path):
     ax.set_ylabel('ROUGE-L (mean across dropout configs)')
     ax.set_title('LoRA Rank Optimization (Exp4)')
     ax.grid(alpha=0.3)
-    ax.set_ylim(0, 1.0)
     plt.tight_layout()
     path = plots_dir / 'rank_optimization.png'
     plt.savefig(path, dpi=150, bbox_inches='tight')
@@ -559,13 +558,6 @@ def generate_pdf_report(summary: Dict, all_results: Dict, experiments_dir: Path)
 
     pdf_path = experiments_dir / 'comprehensive_report.pdf'
     plots_dir = experiments_dir / 'plots'
-
-    # Pre-generate all plots
-    plot_overall_performance(summary, plots_dir)
-    plot_method_comparison_radar(summary, plots_dir)
-    plot_efficiency_analysis(summary, plots_dir)
-    plot_exp1_vs_exp2_combined(summary, plots_dir)
-    plot_hyperparameter_summary(summary, plots_dir)
 
     with PdfPages(str(pdf_path)) as pdf:
 
@@ -755,19 +747,26 @@ def generate_pdf_report(summary: Dict, all_results: Dict, experiments_dir: Path)
         rank_plot = plots_dir / 'rank_optimization.png'
         if rank_plot.exists():
             img = plt.imread(str(rank_plot))
-            ax_img = fig.add_axes([0.03, 0.28, 0.45, 0.56])
+            ax_img = fig.add_axes([0.03, 0.50, 0.45, 0.35])
             ax_img.imshow(img)
             ax_img.axis('off')
 
         eff_plot = plots_dir / 'efficiency_analysis.png'
         if eff_plot.exists():
             img = plt.imread(str(eff_plot))
-            ax_img2 = fig.add_axes([0.52, 0.28, 0.46, 0.56])
+            ax_img2 = fig.add_axes([0.52, 0.50, 0.46, 0.35])
             ax_img2.imshow(img)
             ax_img2.axis('off')
 
+        heatmap_plot_e4 = plots_dir.parent / 'exp4_lora_hyperparameters' / 'plots' / 'heatmap_rank16.png'
+        if heatmap_plot_e4.exists():
+            img = plt.imread(str(heatmap_plot_e4))
+            ax_img3 = fig.add_axes([0.20, 0.27, 0.55, 0.20])
+            ax_img3.imshow(img)
+            ax_img3.axis('off')
+
         best_cfg = summary.get('exp4_best_config', {})
-        ax_note = fig.add_axes([0.05, 0.02, 0.90, 0.24])
+        ax_note = fig.add_axes([0.05, 0.02, 0.90, 0.13])
         ax_note.axis('off')
         note = (
             f'Exp4 Best Config: {best_cfg.get("name", "N/A")}  '
@@ -790,7 +789,7 @@ def generate_pdf_report(summary: Dict, all_results: Dict, experiments_dir: Path)
         ax_title.text(0.0, 0.5, 'Experiment 6: Few-Shot vs Fine-Tuning  |  Summary',
                       fontsize=13, fontweight='bold', va='center')
 
-        all_methods_plot = plots_dir / 'all_methods_text_rougeL.png'
+        all_methods_plot = plots_dir.parent / 'exp6_fewshot_learning' / 'plots' / 'fewshot_vs_finetuning.png'
         if all_methods_plot.exists():
             img = plt.imread(str(all_methods_plot))
             ax_img = fig.add_axes([0.03, 0.35, 0.94, 0.50])
