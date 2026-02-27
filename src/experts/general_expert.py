@@ -23,11 +23,34 @@ from typing import Optional, Union
 
 from src.experts.base_expert import BaseExpert
 from models.prompt_templates.general_template import GeneralInstructionTemplate
+from models.prompt_templates.text_template import TextInstructionTemplate
+from models.prompt_templates.image_template import ImageInstructionTemplate
+from models.prompt_templates.uml_template import UMLInstructionTemplate
 from config.settings import get_path_config, get_inference_config
 from src.utils.logger import get_logger
 
 logger = get_logger('experts.general')
 
+def _build_prompt_for_domain(input_data):
+    """按数据类型路由到对应模板，与训练时 use_domain_templates=True 的行为保持一致。"""
+    if isinstance(input_data, dict):
+        data = input_data
+    elif isinstance(input_data, str):
+        try:
+            data = json.loads(input_data)
+        except (json.JSONDecodeError, ValueError):
+            return TextInstructionTemplate.build_prompt(input_data), 'text'
+    else:
+        return TextInstructionTemplate.build_prompt(str(input_data)), 'text'
+
+    if isinstance(data, dict):
+        if 'actors' in data and 'use_cases' in data:
+            return UMLInstructionTemplate.build_prompt(input_data), 'uml'
+        details = data.get('details', {})
+        if isinstance(details, dict) and ('objects' in details or 'scene' in details):
+            return ImageInstructionTemplate.build_prompt(input_data), 'image'
+
+    return TextInstructionTemplate.build_prompt(input_data), 'text'
 
 class GeneralExpert(BaseExpert):
     """通用专家 - 混合多模态数据训练的兜底专家"""
@@ -114,8 +137,7 @@ class GeneralExpert(BaseExpert):
                 input_type = self._detect_input_type(input_data)
                 logger.info(f"[调试] 识别输入类型: {input_type}")
 
-            # 统一使用GeneralInstructionTemplate，与训练时保持一致
-            prompt = GeneralInstructionTemplate.build_prompt(input_data)
+            prompt, _ = _build_prompt_for_domain(input_data)
 
             # 调用模型生成
             infer_cfg = get_inference_config()
@@ -181,8 +203,7 @@ class GeneralExpert(BaseExpert):
         try:
             logger.info(f"批量生成指令 - 共{len(input_data_list)}个样本，batch_size={batch_size}")
 
-            # 构建所有prompts（使用统一的GeneralInstructionTemplate）
-            prompts = [GeneralInstructionTemplate.build_prompt(data) for data in input_data_list]
+            prompts = [_build_prompt_for_domain(data)[0] for data in input_data_list]
 
             # 批量生成
             infer_cfg = get_inference_config()

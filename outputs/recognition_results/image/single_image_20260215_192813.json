@@ -1,0 +1,62 @@
+{
+  "description": "A group of people is seated at an outdoor dining table, enjoying drinks and meals while looking at their phones, with a view of the ocean through large glass windows behind them.",
+  "details": {
+    "objects": [
+      "people",
+      "dining table",
+      "chairs",
+      "glasses",
+      "phones",
+      "bags",
+      "glass doors",
+      "ocean view",
+      "umbrella"
+    ],
+    "scene": "outdoor dining area with indoor view",
+    "spatial_info": {
+      "people": [
+        {
+          "position": "left side of table",
+          "description": "woman with long brown hair wearing a blue sweater and jeans, holding a phone"
+        },
+        {
+          "position": "center-right of table",
+          "description": "woman with short dark hair wearing a light blue top, looking at her phone"
+        },
+        {
+          "position": "center of table",
+          "description": "woman with long dark hair wearing a patterned top, looking down at her phone"
+        },
+        {
+          "position": "background right",
+          "description": "woman in a patterned top standing and leaning over"
+        },
+        {
+          "position": "background center",
+          "description": "man wearing glasses, seated at the table"
+        }
+      ],
+      "dining_table": {
+        "position": "center of the image",
+        "description": "wooden table with glasses, plates, and food items"
+      },
+      "chairs": {
+        "position": "around the table",
+        "description": "wicker chairs with mesh backs"
+      },
+      "glass_doors": {
+        "position": "background",
+        "description": "large glass doors revealing an indoor space and ocean view"
+      },
+      "ocean_view": {
+        "position": "through glass doors",
+        "description": "visible through the glass doors behind the diners"
+      }
+    }
+  },
+  "confidence": 0.996720708568796,
+  "recognition_status": "success",
+  "image_path": "data/raw/image/coco_1k/000000025628.jpg",
+  "image_name": "000000025628.jpg",
+  "model_version": "qwen3"
+}

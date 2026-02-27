@@ -1,0 +1,27 @@
+{
+  "description": "A Japan Airlines Boeing 747 is taxiing on a runway at an airport, with a complex network of highways and industrial buildings visible in the background.",
+  "details": {
+    "objects": [
+      "Japan Airlines Boeing 747",
+      "runway",
+      "highways",
+      "industrial buildings",
+      "bridges",
+      "greenery"
+    ],
+    "scene": "airport runway with urban and industrial background",
+    "spatial_info": {
+      "Japan Airlines Boeing 747": "center foreground, taxiing on the runway",
+      "runway": "horizontal strip in the middle ground",
+      "highways": "multiple elevated and ground-level roads in the background",
+      "industrial buildings": "large structures in the background, including a building with 'JAL' logo",
+      "bridges": "structures crossing over the highways",
+      "greenery": "patches of grass and trees along the runway and highway edges"
+    }
+  },
+  "confidence": 0.9957430377463314,
+  "recognition_status": "success",
+  "image_path": "data/raw/image/coco_1k/000000000540.jpg",
+  "image_name": "000000000540.jpg",
+  "model_version": "qwen3"
+}
