@@ -173,10 +173,28 @@ def plot_rank_vs_rouge(config_results, exp_dir):
     x = list(ranks)
     y = [np.mean(rank_rougeL[r]) for r in x]
     y_std = [np.std(rank_rougeL[r]) for r in x]
-    ax.errorbar(x, y, yerr=y_std, marker='o', capsize=4, linewidth=2)
+    ax.errorbar(x, y, yerr=y_std, marker='o', capsize=4, linewidth=2,
+                color='steelblue', label='Mean ROUGE-L +/- std')
+
+    baseline_rank = 8
+    if baseline_rank in ranks:
+        bi = x.index(baseline_rank)
+        ax.annotate(
+            'Baseline (r8/a16/d0.05)',
+            (x[bi], y[bi]),
+            textcoords='offset points', xytext=(12, -22),
+            arrowprops=dict(arrowstyle='->', color='red'),
+            fontsize=8, color='red'
+        )
+    max_std = max(y_std) if y_std else 0.01
+    for xi, yi, r in zip(x, y, x):
+        ax.annotate(f'n={len(rank_rougeL[r])}',
+                    (xi, yi + max_std * 0.4 + 0.005),
+                    ha='center', fontsize=8, color='gray')
     ax.set_xlabel('LoRA Rank')
     ax.set_ylabel('ROUGE-L (Mean over Dropout Settings)')
     ax.set_title('Exp4: ROUGE-L vs LoRA Rank')
+    ax.legend()
     ax.grid(alpha=0.3)
     plt.tight_layout()
     path = plots_dir / 'rank_vs_rougeL.png'
@@ -224,6 +242,95 @@ def plot_heatmap_dropout_alpha(config_results, exp_dir, fixed_rank=16):
     plt.close()
     logger.info(f'热图已保存: {path}')
 
+def plot_all_configs_bar(config_results, exp_dir):
+    """Horizontal bar chart of all 10 configs sorted by ROUGE-L."""
+    plots_dir = exp_dir / 'plots'
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    if not config_results:
+        return
+
+    baseline_key = (8, 16, 0.05)
+    baseline_rougeL = config_results.get(baseline_key, {}).get(
+        'generation_quality', {}).get('rougeL', 0)
+
+    sorted_items = sorted(
+        config_results.items(),
+        key=lambda kv: kv[1].get('generation_quality', {}).get('rougeL', 0)
+    )
+
+    labels, values, colors = [], [], []
+    for (rank, alpha, dropout), m in sorted_items:
+        rougeL = m.get('generation_quality', {}).get('rougeL', 0)
+        labels.append(_config_name(rank, alpha, dropout))
+        values.append(rougeL)
+        if rank == 8 and alpha == 16 and dropout == 0.05:
+            colors.append('#aec6cf')
+        elif rougeL > baseline_rougeL:
+            colors.append('#77dd77')
+        else:
+            colors.append('#ff9999')
+
+    fig, ax = plt.subplots(figsize=(10, max(5, len(labels) * 0.55)))
+    bars = ax.barh(labels, values, color=colors, edgecolor='gray', height=0.6)
+    for bar, val in zip(bars, values):
+        ax.text(val + 0.002, bar.get_y() + bar.get_height() / 2,
+                f'{val:.4f}', va='center', fontsize=8)
+
+    if baseline_rougeL > 0:
+        ax.axvline(baseline_rougeL, color='steelblue', linestyle='--',
+                   linewidth=1.5,
+                   label=f'Baseline ROUGE-L = {baseline_rougeL:.4f}')
+        ax.legend(fontsize=8)
+
+    ax.set_xlabel('ROUGE-L')
+    ax.set_title('Exp4: Text Expert — All Configs ROUGE-L Comparison\n'
+                 '(green = better than baseline, red = worse, blue = baseline)')
+    ax.grid(axis='x', alpha=0.3)
+    plt.tight_layout()
+    path = plots_dir / 'all_configs_rougeL.png'
+    plt.savefig(path, dpi=150, bbox_inches='tight')
+    plt.close()
+    logger.info(f'图表已保存: {path}')
+
+def plot_dropout_effect(config_results, exp_dir):
+    """Line chart: ROUGE-L vs dropout for each rank that has multiple dropout settings."""
+    from collections import defaultdict
+    plots_dir = exp_dir / 'plots'
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    rank_dropout_rouge = defaultdict(dict)
+    for (rank, alpha, dropout), m in config_results.items():
+        rank_dropout_rouge[rank][dropout] = (
+            m.get('generation_quality', {}).get('rougeL', 0)
+        )
+
+    all_dropouts = sorted(set(d for _, _, d in CONFIGS))
+    ranks_with_multi = sorted(
+        r for r, dd in rank_dropout_rouge.items() if len(dd) > 1
+    )
+
+    if not ranks_with_multi:
+        logger.warning('没有足够的多-dropout配置来绘制 dropout 影响图')
+        return
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for rank in ranks_with_multi:
+        dd = rank_dropout_rouge[rank]
+        xs = [d for d in all_dropouts if d in dd]
+        ys = [dd[d] for d in xs]
+        ax.plot(xs, ys, marker='o', linewidth=2, label=f'rank={rank}')
+
+    ax.set_xlabel('Dropout')
+    ax.set_ylabel('ROUGE-L')
+    ax.set_title('Exp4: Text Expert — Dropout Effect per Rank')
+    ax.legend()
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    path = plots_dir / 'dropout_effect_per_rank.png'
+    plt.savefig(path, dpi=150, bbox_inches='tight')
+    plt.close()
+    logger.info(f'图表已保存: {path}')
 
 def run(args):
     logger.info('=' * 80)
@@ -304,20 +411,39 @@ def run(args):
     try:
         plot_rank_vs_rouge(config_results, EXP_DIR)
         plot_heatmap_dropout_alpha(config_results, EXP_DIR, fixed_rank=16)
+        plot_all_configs_bar(config_results, EXP_DIR)
+        plot_dropout_effect(config_results, EXP_DIR)
     except Exception as e:
         logger.warning(f'绘图失败: {e}')
 
-    # 汇总表
-    logger.info('\n' + '=' * 80)
-    logger.info('配置对比汇总')
-    logger.info('=' * 80)
-    logger.info(f'{"配置名称":<32} {"ROUGE-L":>8} {"F1":>8}')
-    logger.info('-' * 50)
-    for c in results['configs']:
+    baseline_rougeL = next(
+        (c['generation_quality'].get('rougeL', 0)
+         for c in results['configs']
+         if c['rank'] == 8 and c['alpha'] == 16 and c['dropout'] == 0.05),
+        0.0
+    )
+
+    logger.info('\n' + '=' * 90)
+    logger.info('配置对比汇总（按ROUGE-L降序）')
+    logger.info('=' * 90)
+    logger.info(
+        f'{"配置名称":<38} {"ROUGE-L":>8} {"Delta vs base":>14} {"BLEU":>8} {"F1":>8}'
+    )
+    logger.info('-' * 90)
+    for c in sorted(results['configs'],
+                    key=lambda x: x['generation_quality'].get('rougeL', 0),
+                    reverse=True):
         q = c.get('generation_quality', {})
         b = c.get('binary_classification', {})
+        rl = q.get('rougeL', 0)
+        delta = rl - baseline_rougeL
+        sign = '+' if delta >= 0 else ''
+        star = ' *' if c == results.get('best_config') else ''
+        base = ' [baseline]' if (c['rank'] == 8 and c['alpha'] == 16 and c['dropout'] == 0.05) else ''
         logger.info(
-            f'{c["name"]:<32} {q.get("rougeL", 0):>8.4f} {b.get("f1_score", 0):>8.4f}'
+            f'{c["name"]:<38} {rl:>8.4f} {sign}{delta:>13.4f} '
+            f'{q.get("bleu", 0):>8.4f} {b.get("f1_score", 0):>8.4f}'
+            f'{star}{base}'
         )
     logger.info(f'\n结果已保存至: {EXP_DIR}')
 
