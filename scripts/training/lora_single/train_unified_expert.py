@@ -142,7 +142,7 @@ def main():
     print("=" * 80)
     print("目标：验证MoE架构相比单一模型的优势")
     print("配置：")
-    print("  - 使用相同的LoRA超参数（rank=8, alpha=16）")
+    print("  - 使用exp4最优LoRA超参数（rank=64, alpha=128, dropout=0.05）")
     print("  - 使用相同的训练数据集（text + image + uml）")
     print("  - 唯一区别：无MoE路由机制")
     print("预期：LoRA-MoE通过专家专业化达到更好的性能")
