@@ -342,6 +342,43 @@ def plot_method_comparison_radar(summary: Dict, plots_dir: Path):
     plt.close()
     logger.info(f'图表已保存: {path}')
 
+def plot_exp5_learning_curves_only(summary: Dict, plots_dir: Path):
+    """Single-panel learning curve plot for Exp5 (no Exp6 content)."""
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    exp5 = summary.get('exp5_data_efficiency', {})
+    methods_e5 = ['lora_moe', 'lora_single', 'full_finetuning']
+    fractions = [10, 25, 50, 75, 100]
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    for method in methods_e5:
+        xs, ys = [], []
+        for f in fractions:
+            key = f'{method}_{f}pct'
+            entry = exp5.get(key, {})
+            if entry:
+                q = entry.get('generation_quality', {})
+                rougeL = q.get('rougeL', None)
+                if rougeL is not None:
+                    xs.append(f)
+                    ys.append(rougeL)
+        if xs:
+            ax.plot(xs, ys, marker='o', linewidth=2,
+                    color=METHOD_COLORS.get(method, None),
+                    label=METHOD_LABELS.get(method, method))
+
+    ax.set_xlabel('Training Data (%)')
+    ax.set_ylabel('ROUGE-L')
+    ax.set_title('Exp5: Data Efficiency — Learning Curves')
+    ax.legend(fontsize=10)
+    ax.set_xlim(0, 110)
+    ax.set_ylim(0, 1.0)
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    path = plots_dir / 'exp5_learning_curves.png'
+    plt.savefig(path, dpi=150, bbox_inches='tight')
+    plt.close()
+    logger.info(f'图表已保存: {path}')
 
 def plot_efficiency_analysis(summary: Dict, plots_dir: Path):
     """
@@ -764,18 +801,22 @@ def generate_pdf_report(summary: Dict, all_results: Dict, experiments_dir: Path)
         # Key result highlight if exp2 lora_moe_text available
         lora_text = summary.get('exp2_method_comparison', {}).get('lora_moe_text', {})
         if lora_text:
-            highlight = (
-                f'Key Result: LoRA-MoE (Text Expert)\n'
-                f'ROUGE-L = {lora_text.get("rougeL", 0):.4f}  |  '
-                f'F1 = {lora_text.get("f1_score", 0):.4f}  |  '
-                f'BLEU = {lora_text.get("bleu", 0):.4f}'
-            )
-            ax.text(0.5, 0.30, highlight,
-                    ha='center', va='center', fontsize=12,
+            lora_image = summary.get('exp2_method_comparison', {}).get('lora_moe_image', {})
+            highlight_lines = [
+                'Key Results: LoRA-MoE Performance',
+                f'Text Expert:   ROUGE-L={lora_text.get("rougeL", 0):.4f}  |  F1={lora_text.get("f1_score", 0):.4f}  |  BLEU={lora_text.get("bleu", 0):.4f}',
+            ]
+            if lora_image:
+                highlight_lines.append(
+                    f'Image Expert: ROUGE-L={lora_image.get("rougeL", 0):.4f}  |  F1={lora_image.get("f1_score", 0):.4f}  |  BLEU={lora_image.get("bleu", 0):.4f}'
+                )
+            highlight = '\n'.join(highlight_lines)
+            ax.text(0.5, 0.28, highlight,
+                    ha='center', va='center', fontsize=11,
                     transform=ax.transAxes,
                     bbox=dict(boxstyle='round,pad=0.6', facecolor='#e8f4fd',
                               edgecolor='#1f77b4', linewidth=1.5),
-                    color='#1f4e7a')
+                    color='#1f4e7a', fontfamily='monospace')
 
         pdf.savefig(fig, bbox_inches='tight')
         plt.close(fig)
@@ -812,9 +853,10 @@ def generate_pdf_report(summary: Dict, all_results: Dict, experiments_dir: Path)
 
         ax_note = fig.add_axes([0.05, 0.02, 0.90, 0.15])
         ax_note.axis('off')
-        note = ('Observation: IR-based (BM25/LSA) and rule-based (Template) methods serve as '
-                'non-learning baselines. Zero-shot uses the base Qwen3-8B without fine-tuning. '
-                'LoRA-MoE (our method) should outperform all non-fine-tuned approaches.')
+        note = ('Observation: IR-based retrieval (BM25/LSA) achieves high ROUGE-L by copying the most similar '
+                'instruction from the training set, but LoRA-MoE achieves the highest F1 score (0.979), '
+                'indicating superior format compliance and structural quality. Zero-shot and Template methods '
+                'lag significantly, confirming the value of fine-tuning over naive approaches.')
         for i, line in enumerate(_text_wrap(note, 120)):
             ax_note.text(0.0, 0.85 - i * 0.18, line, fontsize=9,
                          color='#444444', transform=ax_note.transAxes)
@@ -857,10 +899,10 @@ def generate_pdf_report(summary: Dict, all_results: Dict, experiments_dir: Path)
 
         ax_note = fig.add_axes([0.05, 0.02, 0.90, 0.22])
         ax_note.axis('off')
-        note = ('Observation: LoRA-MoE achieves competitive performance with minimal trainable '
-                'parameters (rank=8, ~0.1% of total). Full Fine-Tuning uses highest parameter '
-                'count but may overfit on smaller datasets. P-Tuning/Prompt Tuning are more '
-                'parameter-efficient but typically underperform LoRA approaches.')
+        note = ('Observation: LoRA-MoE achieves competitive performance with parameter-efficient LoRA adapters. '
+                'Full Fine-Tuning achieves the highest ROUGE-L but requires significantly more resources. '
+                'P-Tuning v2 performs reasonably while Prompt Tuning underperforms, suggesting that '
+                'LoRA-based methods strike the best balance between quality and efficiency.')
         for i, line in enumerate(_text_wrap(note, 120)):
             ax_note.text(0.0, 0.85 - i * 0.18, line, fontsize=9,
                          color='#444444', transform=ax_note.transAxes)
@@ -971,7 +1013,9 @@ def generate_pdf_report(summary: Dict, all_results: Dict, experiments_dir: Path)
         ax_title.text(0.0, 0.5, 'Experiment 5: Data Efficiency Analysis',
                       fontsize=14, fontweight='bold', va='center')
 
-        eff_plot = plots_dir / 'efficiency_analysis.png'
+        eff_plot = plots_dir / 'exp5_learning_curves.png'
+        if not eff_plot.exists():
+            eff_plot = plots_dir / 'efficiency_analysis.png'
         if eff_plot.exists():
             img = plt.imread(str(eff_plot))
             ax_img = fig.add_axes([0.03, 0.30, 0.94, 0.55])
@@ -989,6 +1033,46 @@ def generate_pdf_report(summary: Dict, all_results: Dict, experiments_dir: Path)
         for i, line in enumerate(_text_wrap(note, 120)):
             ax_note.text(0.0, 0.85 - i * 0.18, line, fontsize=9,
                          color='#444444', transform=ax_note.transAxes)
+
+        pdf.savefig(fig, bbox_inches='tight')
+        plt.close(fig)
+
+        # ---- Page 6: Exp6 + Summary Table ----
+        fig = plt.figure(figsize=(11, 8.5))
+        ax_title = fig.add_axes([0.05, 0.88, 0.90, 0.08])
+        ax_title.axis('off')
+        ax_title.text(0.0, 0.5, 'Experiment 6: Few-Shot vs Fine-Tuning  |  Summary',
+                      fontsize=13, fontweight='bold', va='center')
+
+        all_methods_plot = plots_dir.parent / 'exp6_fewshot_learning' / 'plots' / 'fewshot_vs_finetuning.png'
+        if all_methods_plot.exists():
+            img = plt.imread(str(all_methods_plot))
+            ax_img = fig.add_axes([0.03, 0.35, 0.94, 0.50])
+            ax_img.imshow(img)
+            ax_img.axis('off')
+
+        ax_note = fig.add_axes([0.05, 0.02, 0.90, 0.30])
+        ax_note.axis('off')
+
+        # Mini summary table
+        lora_moe_vals = summary.get('overall_lora_moe', {})
+        lines = ['LoRA-MoE per-expert ROUGE-L summary:']
+        for et in ['text', 'image', 'uml', 'general']:
+            val = lora_moe_vals.get(et, {}).get('rougeL', 0)
+            lines.append(f'  {EXPERT_LABELS[et]}: {val:.4f}')
+        exp6 = summary.get('exp6_fewshot', {})
+        lm_val = exp6.get('lora_moe', {}).get('rougeL', 0)
+        shot5_mean = exp6.get('5_shot', {}).get('mean_rougeL', 0)
+        lines.append(f'\nFew-shot gap: 5-shot={shot5_mean:.4f}  vs  LoRA-MoE={lm_val:.4f}')
+        exp4_best = summary.get('exp4_best_config', {})
+        exp7_best = summary.get('exp7_best_config', {})
+        if exp4_best:
+            lines.append(f'\nExp4 best (Text): {exp4_best.get("name", "N/A")} ROUGE-L={exp4_best.get("rougeL", 0):.4f}')
+        if exp7_best:
+            lines.append(f'Exp7 best (UML):  {exp7_best.get("name", "N/A")} ROUGE-L={exp7_best.get("rougeL", 0):.4f}')
+        ax_note.text(0.0, 1.0, '\n'.join(lines),
+                     va='top', fontfamily='monospace', fontsize=9,
+                     transform=ax_note.transAxes)
 
         pdf.savefig(fig, bbox_inches='tight')
         plt.close(fig)
@@ -1051,46 +1135,6 @@ def generate_pdf_report(summary: Dict, all_results: Dict, experiments_dir: Path)
         pdf.savefig(fig, bbox_inches='tight')
         plt.close(fig)
 
-        # ---- Page 6: Exp6 + Summary Table ----
-        fig = plt.figure(figsize=(11, 8.5))
-        ax_title = fig.add_axes([0.05, 0.88, 0.90, 0.08])
-        ax_title.axis('off')
-        ax_title.text(0.0, 0.5, 'Experiment 6: Few-Shot vs Fine-Tuning  |  Summary',
-                      fontsize=13, fontweight='bold', va='center')
-
-        all_methods_plot = plots_dir.parent / 'exp6_fewshot_learning' / 'plots' / 'fewshot_vs_finetuning.png'
-        if all_methods_plot.exists():
-            img = plt.imread(str(all_methods_plot))
-            ax_img = fig.add_axes([0.03, 0.35, 0.94, 0.50])
-            ax_img.imshow(img)
-            ax_img.axis('off')
-
-        ax_note = fig.add_axes([0.05, 0.02, 0.90, 0.30])
-        ax_note.axis('off')
-
-        # Mini summary table
-        lora_moe_vals = summary.get('overall_lora_moe', {})
-        lines = ['LoRA-MoE per-expert ROUGE-L summary:']
-        for et in ['text', 'image', 'uml', 'general']:
-            val = lora_moe_vals.get(et, {}).get('rougeL', 0)
-            lines.append(f'  {EXPERT_LABELS[et]}: {val:.4f}')
-        exp6 = summary.get('exp6_fewshot', {})
-        lm_val = exp6.get('lora_moe', {}).get('rougeL', 0)
-        shot5_mean = exp6.get('5_shot', {}).get('mean_rougeL', 0)
-        lines.append(f'\nFew-shot gap: 5-shot={shot5_mean:.4f}  vs  LoRA-MoE={lm_val:.4f}')
-        exp4_best = summary.get('exp4_best_config', {})
-        exp7_best = summary.get('exp7_best_config', {})
-        if exp4_best:
-            lines.append(f'\nExp4 best (Text): {exp4_best.get("name", "N/A")} ROUGE-L={exp4_best.get("rougeL", 0):.4f}')
-        if exp7_best:
-            lines.append(f'Exp7 best (UML):  {exp7_best.get("name", "N/A")} ROUGE-L={exp7_best.get("rougeL", 0):.4f}')
-        ax_note.text(0.0, 1.0, '\n'.join(lines),
-                     va='top', fontfamily='monospace', fontsize=9,
-                     transform=ax_note.transAxes)
-
-        pdf.savefig(fig, bbox_inches='tight')
-        plt.close(fig)
-
     logger.info(f'PDF报告已保存: {pdf_path}')
     return pdf_path
 
@@ -1142,6 +1186,10 @@ def run(args):
         plot_efficiency_analysis(summary, plots_dir)
     except Exception as e:
         logger.warning(f'效率分析图生成失败: {e}')
+    try:
+        plot_exp5_learning_curves_only(summary, plots_dir)
+    except Exception as e:
+        logger.warning(f'Exp5独立学习曲线生成失败: {e}')
     try:
         plot_exp1_vs_exp2_combined(summary, plots_dir)
     except Exception as e:
