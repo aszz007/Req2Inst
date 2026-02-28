@@ -42,11 +42,12 @@ from src.baselines.inference_utils import (
     save_experiment_results,
 )
 from src.utils.logger import get_logger
+from src.utils.group_split import group_split_by_input
 
 logger = get_logger('experiments.exp1')
 
 path_cfg = get_path_config()
-CACHE_DIR = path_cfg.OUTPUTS_DIR / 'inference_cache'
+CACHE_DIR = path_cfg.OUTPUTS_DIR / 'inference_cache' / 'exp1_grouped'
 EXP_DIR = path_cfg.OUTPUTS_DIR / 'evaluations' / 'experiments' / 'exp1_baseline_comparison'
 
 METHODS = ['bm25', 'lsa', 'template', 'zeroshot', 'lora_moe']
@@ -266,8 +267,12 @@ def run(args):
     logger.info('加载文本数据集...')
     loader = TextDatasetLoader()
     all_data = loader.load_csv_files()
-    train_data, val_data, test_data = split_dataset_for_expert(all_data, 'text')
-    logger.info(f'数据集划分: 训练集={len(train_data)}, 验证集={len(val_data)}, 测试集={len(test_data)}')
+    train_data, val_data, test_data = group_split_by_input(all_data)
+    train_inputs = set(d['input'] for d in train_data)
+    test_inputs = set(d['input'] for d in test_data)
+    logger.info(f'分组划分: 训练集={len(train_data)}({len(train_inputs)}组), '
+                f'验证集={len(val_data)}, 测试集={len(test_data)}({len(test_inputs)}组), '
+                f'输入重叠={len(train_inputs & test_inputs)}')
 
     results = {
         'experiment': 'exp1_baseline_comparison',
