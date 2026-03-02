@@ -1,6 +1,6 @@
 {
   "experiment": "exp2_finetuning_methods",
-  "timestamp": "2026-02-24 23:28:55",
+  "timestamp": "2026-02-27 15:01:41",
   "test_mode": false,
   "methods": [
     "lora_moe",
@@ -19,16 +19,16 @@
     "lora_moe_text": {
       "n_samples": 248,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/lora_moe/text_expert",
-      "adapter_size_mb": 936.17,
+      "adapter_size_mb": 234.04,
       "generation_quality": {
         "bleu": 0.44639045285575935,
-        "rouge1": 0.6288874343603943,
-        "rouge2": 0.41024569903156083,
-        "rougeL": 0.5654297480037104,
+        "rouge1": 0.6291013215580927,
+        "rouge2": 0.4100554216753928,
+        "rougeL": 0.5656479588742452,
         "meteor": 0.7097178855451834,
-        "bertscore_precision": 0.9460356672925334,
-        "bertscore_recall": 0.9481285447555203,
-        "bertscore_f1": 0.94704695959245
+        "bertscore_precision": 0.946035667773216,
+        "bertscore_recall": 0.948128544515179,
+        "bertscore_f1": 0.9470469588714261
       },
       "format_metrics": {
         "total_samples": 248,
@@ -71,15 +71,15 @@
     "lora_single_text": {
       "n_samples": 248,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/lora_single/unified_expert",
-      "adapter_size_mb": 936.17,
+      "adapter_size_mb": 234.04,
       "generation_quality": {
         "bleu": 0.4303911706672198,
-        "rouge1": 0.620368564099942,
-        "rouge2": 0.3968335370036708,
-        "rougeL": 0.5582335910808724,
+        "rouge1": 0.6205648399289702,
+        "rouge2": 0.396162375267877,
+        "rougeL": 0.5582283074580874,
         "meteor": 0.7051388324316712,
-        "bertscore_precision": 0.9440855001730304,
-        "bertscore_recall": 0.9470370661827826,
+        "bertscore_precision": 0.9440855025764434,
+        "bertscore_recall": 0.9470370673844891,
         "bertscore_f1": 0.9455212595001343
       },
       "format_metrics": {
@@ -123,16 +123,16 @@
     "p_tuning_text": {
       "n_samples": 248,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/p_tuning/text_expert",
-      "adapter_size_mb": 11.27,
+      "adapter_size_mb": 2.81,
       "generation_quality": {
         "bleu": 0.3857205458790396,
-        "rouge1": 0.5824449310272335,
-        "rouge2": 0.3557647665068354,
-        "rougeL": 0.5113597199807556,
+        "rouge1": 0.5823618849186629,
+        "rouge2": 0.35558137798109535,
+        "rougeL": 0.5114635112719159,
         "meteor": 0.6889313676450525,
-        "bertscore_precision": 0.936606531181643,
-        "bertscore_recall": 0.9432513036074177,
-        "bertscore_f1": 0.9398790001869202
+        "bertscore_precision": 0.9366065297395952,
+        "bertscore_recall": 0.9432513028863938,
+        "bertscore_f1": 0.9398789987448724
       },
       "format_metrics": {
         "total_samples": 248,
@@ -175,16 +175,16 @@
     "prompt_tuning_text": {
       "n_samples": 248,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/prompt_tuning/text_expert",
-      "adapter_size_mb": 0.64,
+      "adapter_size_mb": 0.16,
       "generation_quality": {
         "bleu": 0.22085775841197397,
-        "rouge1": 0.4642225061600913,
-        "rouge2": 0.25896892923200177,
-        "rougeL": 0.39495312762938606,
+        "rouge1": 0.46401820398986343,
+        "rouge2": 0.258634430506541,
+        "rougeL": 0.39467197805752285,
         "meteor": 0.5822177457960106,
-        "bertscore_precision": 0.8949010292849233,
-        "bertscore_recall": 0.9259869578865266,
-        "bertscore_f1": 0.9100941808954361
+        "bertscore_precision": 0.8949010288042407,
+        "bertscore_recall": 0.9259869569251614,
+        "bertscore_f1": 0.9100941804147535
       },
       "format_metrics": {
         "total_samples": 248,
@@ -227,15 +227,15 @@
     "full_finetuning_text": {
       "n_samples": 248,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/full_finetuning/text_expert",
-      "adapter_size_mb": 2664.28,
+      "adapter_size_mb": 666.06,
       "generation_quality": {
         "bleu": 0.45035052403985015,
-        "rouge1": 0.6416952845706112,
-        "rouge2": 0.42529037114847174,
-        "rougeL": 0.5799965326399109,
+        "rouge1": 0.6412603067479805,
+        "rouge2": 0.42557724182284185,
+        "rougeL": 0.5797260444398171,
         "meteor": 0.7227272166381086,
-        "bertscore_precision": 0.9466059570831638,
-        "bertscore_recall": 0.9503107479503078,
+        "bertscore_precision": 0.9466059585252116,
+        "bertscore_recall": 0.9503107460275773,
         "bertscore_f1": 0.9484188340363964
       },
       "format_metrics": {
@@ -279,12 +279,12 @@
     "lora_moe_image": {
       "n_samples": 100,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/lora_moe/image_expert",
-      "adapter_size_mb": 936.17,
+      "adapter_size_mb": 234.04,
       "generation_quality": {
         "bleu": 0.6171089006627494,
-        "rouge1": 0.7995301288750147,
-        "rouge2": 0.6329115856679616,
-        "rougeL": 0.7369671629852181,
+        "rouge1": 0.7991937929160846,
+        "rouge2": 0.6323902477184125,
+        "rougeL": 0.7353747759030115,
         "meteor": 0.7907044894371152,
         "bertscore_precision": 0.9583030074834824,
         "bertscore_recall": 0.9606904262304305,
@@ -331,16 +331,16 @@
     "lora_single_image": {
       "n_samples": 100,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/lora_single/unified_expert",
-      "adapter_size_mb": 936.17,
+      "adapter_size_mb": 234.04,
       "generation_quality": {
         "bleu": 0.6059951094860966,
-        "rouge1": 0.7979182764445274,
-        "rouge2": 0.6332985054002468,
-        "rougeL": 0.7331295250820095,
+        "rouge1": 0.7971291610978579,
+        "rouge2": 0.6333421413806,
+        "rougeL": 0.7322832730241513,
         "meteor": 0.7754705772006457,
-        "bertscore_precision": 0.9608925718069077,
+        "bertscore_precision": 0.9608925712108612,
         "bertscore_recall": 0.9576868462562561,
-        "bertscore_f1": 0.9592099547386169
+        "bertscore_f1": 0.959209953546524
       },
       "format_metrics": {
         "total_samples": 100,
@@ -383,16 +383,16 @@
     "p_tuning_image": {
       "n_samples": 100,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/p_tuning/image_expert",
-      "adapter_size_mb": 11.27,
+      "adapter_size_mb": 2.81,
       "generation_quality": {
         "bleu": 0.49129515390114586,
-        "rouge1": 0.7548171494550042,
-        "rouge2": 0.570551591335011,
-        "rougeL": 0.6760123421384006,
+        "rouge1": 0.7549224420400567,
+        "rouge2": 0.5711148045765655,
+        "rougeL": 0.6749280742028931,
         "meteor": 0.7588307718790814,
-        "bertscore_precision": 0.9445062220096588,
-        "bertscore_recall": 0.9542007839679718,
-        "bertscore_f1": 0.9492071551084519
+        "bertscore_precision": 0.9445062237977981,
+        "bertscore_recall": 0.9542007851600647,
+        "bertscore_f1": 0.9492071568965912
       },
       "format_metrics": {
         "total_samples": 100,
@@ -435,15 +435,15 @@
     "prompt_tuning_image": {
       "n_samples": 100,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/prompt_tuning/image_expert",
-      "adapter_size_mb": 0.64,
+      "adapter_size_mb": 0.16,
       "generation_quality": {
         "bleu": 0.3243332306818174,
-        "rouge1": 0.6448037804651334,
-        "rouge2": 0.43127582222007876,
-        "rougeL": 0.5263189981715033,
+        "rouge1": 0.6445653561681168,
+        "rouge2": 0.43189486358314366,
+        "rougeL": 0.5265683329975503,
         "meteor": 0.6820034965489015,
-        "bertscore_precision": 0.8861715453863144,
-        "bertscore_recall": 0.9393902379274368,
+        "bertscore_precision": 0.8861715459823608,
+        "bertscore_recall": 0.9393902373313904,
         "bertscore_f1": 0.9118974357843399
       },
       "format_metrics": {
@@ -487,12 +487,12 @@
     "full_finetuning_image": {
       "n_samples": 100,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/full_finetuning/image_expert",
-      "adapter_size_mb": 2664.28,
+      "adapter_size_mb": 666.06,
       "generation_quality": {
         "bleu": 0.6179947792312324,
-        "rouge1": 0.8041416966016339,
-        "rouge2": 0.6403297460225937,
-        "rougeL": 0.7425981386062441,
+        "rouge1": 0.8031834652791745,
+        "rouge2": 0.6412593309731152,
+        "rougeL": 0.7409386939509278,
         "meteor": 0.7831629482410992,
         "bertscore_precision": 0.9612783581018448,
         "bertscore_recall": 0.9597659069299698,
@@ -539,16 +539,16 @@
     "lora_moe_uml": {
       "n_samples": 150,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/lora_moe/uml_expert",
-      "adapter_size_mb": 936.17,
+      "adapter_size_mb": 234.04,
       "generation_quality": {
-        "bleu": 0.35427254101755157,
-        "rouge1": 0.6416467624507903,
-        "rouge2": 0.4049519114657842,
-        "rougeL": 0.5130680061137582,
-        "meteor": 0.6036463276249624,
-        "bertscore_precision": 0.9163369866212209,
-        "bertscore_recall": 0.9191083486874898,
-        "bertscore_f1": 0.9176583115259807
+        "bleu": 0.36518364767546413,
+        "rouge1": 0.6425686059593851,
+        "rouge2": 0.40952676240260294,
+        "rougeL": 0.5151314274752417,
+        "meteor": 0.6062489701179663,
+        "bertscore_precision": 0.9166348171234131,
+        "bertscore_recall": 0.9202447485923767,
+        "bertscore_f1": 0.9183768765131632
       },
       "format_metrics": {
         "total_samples": 150,
@@ -564,14 +564,14 @@
         "avg_format_score": 1.0
       },
       "binary_classification": {
-        "TP": 127,
-        "FP": 23,
+        "TP": 129,
+        "FP": 21,
         "FN": 0,
         "TN": 0,
-        "precision": 0.8466666666666667,
+        "precision": 0.86,
         "recall": 1.0,
-        "f1_score": 0.9169675090252708,
-        "accuracy": 0.8466666666666667,
+        "f1_score": 0.924731182795699,
+        "accuracy": 0.86,
         "total_samples": 150,
         "format_threshold": 1.0,
         "rouge_threshold": 0.4,
@@ -591,16 +591,16 @@
     "lora_single_uml": {
       "n_samples": 150,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/lora_single/unified_expert",
-      "adapter_size_mb": 936.17,
+      "adapter_size_mb": 234.04,
       "generation_quality": {
-        "bleu": 0.37011851774929466,
-        "rouge1": 0.6464387400573555,
-        "rouge2": 0.4142686357497004,
-        "rougeL": 0.519124060166033,
-        "meteor": 0.6092580388953326,
-        "bertscore_precision": 0.918485787709554,
-        "bertscore_recall": 0.9215674416224162,
-        "bertscore_f1": 0.9199634869893392
+        "bleu": 0.3688093045616761,
+        "rouge1": 0.6436958635497798,
+        "rouge2": 0.4127786012344029,
+        "rougeL": 0.5165920840735982,
+        "meteor": 0.6072487642223574,
+        "bertscore_precision": 0.9181803198655446,
+        "bertscore_recall": 0.9210386872291565,
+        "bertscore_f1": 0.9195449646313986
       },
       "format_metrics": {
         "total_samples": 150,
@@ -616,14 +616,14 @@
         "avg_format_score": 1.0
       },
       "binary_classification": {
-        "TP": 130,
-        "FP": 20,
+        "TP": 129,
+        "FP": 21,
         "FN": 0,
         "TN": 0,
-        "precision": 0.8666666666666667,
+        "precision": 0.86,
         "recall": 1.0,
-        "f1_score": 0.9285714285714286,
-        "accuracy": 0.8666666666666667,
+        "f1_score": 0.924731182795699,
+        "accuracy": 0.86,
         "total_samples": 150,
         "format_threshold": 1.0,
         "rouge_threshold": 0.4,
@@ -643,12 +643,12 @@
     "p_tuning_uml": {
       "n_samples": 150,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/p_tuning/uml_expert",
-      "adapter_size_mb": 11.27,
+      "adapter_size_mb": 2.81,
       "generation_quality": {
         "bleu": 0.28966360458858764,
-        "rouge1": 0.5861043576867271,
-        "rouge2": 0.3514712837626282,
-        "rougeL": 0.4633663413274203,
+        "rouge1": 0.5860357705072657,
+        "rouge2": 0.35152749367371683,
+        "rougeL": 0.46361066016709584,
         "meteor": 0.5196516905545362,
         "bertscore_precision": 0.913266909122467,
         "bertscore_recall": 0.9062495795885722,
@@ -695,12 +695,12 @@
     "prompt_tuning_uml": {
       "n_samples": 150,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/prompt_tuning/uml_expert",
-      "adapter_size_mb": 0.64,
+      "adapter_size_mb": 0.16,
       "generation_quality": {
         "bleu": 0.22890415581112053,
-        "rouge1": 0.5294589486284612,
-        "rouge2": 0.2930417375928672,
-        "rougeL": 0.4097885874401538,
+        "rouge1": 0.5290706880952475,
+        "rouge2": 0.29357242498992664,
+        "rougeL": 0.4094418401691072,
         "meteor": 0.4549910148113806,
         "bertscore_precision": 0.8976697524388632,
         "bertscore_recall": 0.8903212360541026,
@@ -747,12 +747,12 @@
     "full_finetuning_uml": {
       "n_samples": 150,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/full_finetuning/uml_expert",
-      "adapter_size_mb": 2664.28,
+      "adapter_size_mb": 666.06,
       "generation_quality": {
         "bleu": 0.3575828625609572,
-        "rouge1": 0.6396951013276393,
-        "rouge2": 0.4080618454639628,
-        "rougeL": 0.5131875529470593,
+        "rouge1": 0.6394038158579616,
+        "rouge2": 0.4080486149624379,
+        "rougeL": 0.5142799815701429,
         "meteor": 0.6131648344129419,
         "bertscore_precision": 0.9146613558133443,
         "bertscore_recall": 0.920914828379949,
@@ -799,16 +799,16 @@
     "lora_moe_general": {
       "n_samples": 498,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/lora_moe/general_expert",
-      "adapter_size_mb": 936.17,
+      "adapter_size_mb": 234.04,
       "generation_quality": {
-        "bleu": 0.4087990770517604,
-        "rouge1": 0.6524557095634033,
-        "rouge2": 0.4340220600962874,
-        "rougeL": 0.5710482984733621,
-        "meteor": 0.683843413049248,
-        "bertscore_precision": 0.9394169692772938,
-        "bertscore_recall": 0.940513499529965,
-        "bertscore_f1": 0.9399148323928496
+        "bleu": 0.38587261506731124,
+        "rouge1": 0.6378538920317502,
+        "rouge2": 0.41685998651384215,
+        "rougeL": 0.5514767624261863,
+        "meteor": 0.6710289029960103,
+        "bertscore_precision": 0.9363727220090996,
+        "bertscore_recall": 0.9381712050323027,
+        "bertscore_f1": 0.9372203107100414
       },
       "format_metrics": {
         "total_samples": 498,
@@ -824,14 +824,14 @@
         "avg_format_score": 1.0
       },
       "binary_classification": {
-        "TP": 461,
-        "FP": 37,
+        "TP": 441,
+        "FP": 57,
         "FN": 0,
         "TN": 0,
-        "precision": 0.9257028112449799,
+        "precision": 0.8855421686746988,
         "recall": 1.0,
-        "f1_score": 0.9614181438998957,
-        "accuracy": 0.9257028112449799,
+        "f1_score": 0.9392971246006391,
+        "accuracy": 0.8855421686746988,
         "total_samples": 498,
         "format_threshold": 1.0,
         "rouge_threshold": 0.4,
@@ -851,16 +851,16 @@
     "lora_single_general": {
       "n_samples": 498,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/lora_single/unified_expert",
-      "adapter_size_mb": 936.17,
+      "adapter_size_mb": 234.04,
       "generation_quality": {
-        "bleu": 0.29867009770498015,
-        "rouge1": 0.5478057606940139,
-        "rouge2": 0.32923970016326876,
-        "rougeL": 0.45583573133553634,
-        "meteor": 0.5902340219517856,
-        "bertscore_precision": 0.9214459196870107,
-        "bertscore_recall": 0.9203257091552857,
-        "bertscore_f1": 0.9207385115355373
+        "bleu": 0.4235895644426763,
+        "rouge1": 0.6619201707600746,
+        "rouge2": 0.4478889730001363,
+        "rougeL": 0.5827597812155083,
+        "meteor": 0.6970951225947477,
+        "bertscore_precision": 0.9395656488746046,
+        "bertscore_recall": 0.9422376225272335,
+        "bertscore_f1": 0.9408479200070163
       },
       "format_metrics": {
         "total_samples": 498,
@@ -876,14 +876,14 @@
         "avg_format_score": 1.0
       },
       "binary_classification": {
-        "TP": 342,
-        "FP": 156,
+        "TP": 467,
+        "FP": 31,
         "FN": 0,
         "TN": 0,
-        "precision": 0.6867469879518072,
+        "precision": 0.9377510040160643,
         "recall": 1.0,
-        "f1_score": 0.8142857142857143,
-        "accuracy": 0.6867469879518072,
+        "f1_score": 0.9678756476683937,
+        "accuracy": 0.9377510040160643,
         "total_samples": 498,
         "format_threshold": 1.0,
         "rouge_threshold": 0.4,
@@ -903,16 +903,16 @@
     "p_tuning_general": {
       "n_samples": 498,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/p_tuning/general_expert",
-      "adapter_size_mb": 11.27,
+      "adapter_size_mb": 2.81,
       "generation_quality": {
         "bleu": 0.34187393625845885,
-        "rouge1": 0.5772577303963584,
-        "rouge2": 0.3491527209503674,
-        "rougeL": 0.4808376113795748,
+        "rouge1": 0.5768444241631432,
+        "rouge2": 0.34883912503837256,
+        "rougeL": 0.48041113185184514,
         "meteor": 0.6190186686054824,
-        "bertscore_precision": 0.9226559793135248,
-        "bertscore_recall": 0.9275230899393319,
-        "bertscore_f1": 0.9249672237409645
+        "bertscore_precision": 0.9226559788347727,
+        "bertscore_recall": 0.9275230895802677,
+        "bertscore_f1": 0.9249672233819004
       },
       "format_metrics": {
         "total_samples": 498,
@@ -955,16 +955,16 @@
     "prompt_tuning_general": {
       "n_samples": 498,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/prompt_tuning/general_expert",
-      "adapter_size_mb": 0.64,
+      "adapter_size_mb": 0.16,
       "generation_quality": {
         "bleu": 0.1985867532714812,
-        "rouge1": 0.40993515584372,
-        "rouge2": 0.22095927660735298,
-        "rougeL": 0.339241688499604,
+        "rouge1": 0.4100156485733336,
+        "rouge2": 0.2208954974246774,
+        "rougeL": 0.33901050606969674,
         "meteor": 0.4556939774412518,
-        "bertscore_precision": 0.8804014627952652,
-        "bertscore_recall": 0.8883207864071949,
-        "bertscore_f1": 0.8840597421529303
+        "bertscore_precision": 0.8804014630346413,
+        "bertscore_recall": 0.8883207882025156,
+        "bertscore_f1": 0.8840597432301226
       },
       "format_metrics": {
         "total_samples": 498,
@@ -1007,16 +1007,16 @@
     "full_finetuning_general": {
       "n_samples": 498,
       "checkpoint": "/root/autodl-tmp/crowdsourcing_instruction_generator/checkpoints/full_finetuning/general_expert",
-      "adapter_size_mb": 2664.28,
+      "adapter_size_mb": 666.06,
       "generation_quality": {
         "bleu": 0.4073577818781119,
-        "rouge1": 0.6490000660378159,
-        "rouge2": 0.4348413268622531,
-        "rougeL": 0.5686065964804173,
+        "rouge1": 0.6487455803579523,
+        "rouge2": 0.43502141468818833,
+        "rougeL": 0.5685813205093553,
         "meteor": 0.691284215290408,
-        "bertscore_precision": 0.9362553051676616,
-        "bertscore_recall": 0.9415922343252174,
-        "bertscore_f1": 0.9388390307924355
+        "bertscore_precision": 0.9362553055267258,
+        "bertscore_recall": 0.9415922344449055,
+        "bertscore_f1": 0.9388390315105637
       },
       "format_metrics": {
         "total_samples": 498,
