@@ -358,8 +358,7 @@ def _benchmark_gpu_method(method, test_inputs, n_warmup, n_latency, n_throughput
     _infer_batch(gen, batch_inputs, method, effective_bs)
     _gpu_sync()
     wall = time.perf_counter() - t0
-    # 注意: GPU峰值显存在此处记录后由调用方 run() 通过 _gpu_peak_mb() 读取,
-    # 不在此处赋值给局部变量 (unload_model 不会重置峰值统计)
+    # 注意: GPU峰值显存由调用方 run() 在卸载前通过 _gpu_peak_mb() 读取
 
     # --- 卸载模型 ---
     gen.unload_model()
@@ -393,8 +392,8 @@ def plot_latency_comparison(results_by_method, test_mode=False):
                    label='Median')
     # P95 标记
     ax.scatter(p95s, y, marker='|', color='red', s=120, zorder=5, label='P95')
-    offset = max(max(medians, default=0), 1e-9) * 0.02   # 防止全零时偏移量为0
     for i, (med, p95) in enumerate(zip(medians, p95s)):
+        offset = max(max(medians), 0.1) * 0.02
         ax.text(max(med, p95) + offset, i,
                 f'{med:.1f}ms', va='center', fontsize=8)
 
@@ -461,8 +460,8 @@ def plot_throughput_comparison(results_by_method, test_mode=False):
     fig, ax = plt.subplots(figsize=(10, max(5, len(methods) * 0.7)))
     y = np.arange(len(methods))
     bars = ax.barh(y, throughputs, color=colors, edgecolor='gray', height=0.55)
-    offset = max(max(throughputs, default=0), 1e-9) * 0.02   # 防止全零时偏移量为0
     for bar, val in zip(bars, throughputs):
+        offset = max(max(throughputs), 0.1) * 0.02
         ax.text(val + offset, bar.get_y() + bar.get_height() / 2,
                 f'{val:.1f}', va='center', fontsize=8)
 
@@ -493,8 +492,8 @@ def plot_gpu_memory_comparison(results_by_method, test_mode=False):
     fig, ax = plt.subplots(figsize=(9, max(4, len(methods) * 0.7)))
     y = np.arange(len(methods))
     bars = ax.barh(y, mem_vals, color=colors, edgecolor='gray', height=0.55)
-    offset = max(max(mem_vals, default=0), 1e-9) * 0.02   # 防止全零时偏移量为0
     for bar, val in zip(bars, mem_vals):
+        offset = max(max(mem_vals), 0.1) * 0.02
         ax.text(val + offset, bar.get_y() + bar.get_height() / 2,
                 f'{val:.0f} MB', va='center', fontsize=8)
 
@@ -505,20 +504,22 @@ def plot_gpu_memory_comparison(results_by_method, test_mode=False):
     if test_mode:
         title += ' [Test Mode]'
     ax.set_title(title)
-    # 动态图例: 仅包含实际参与测试的方法, 避免图例与结果脱节
-    quant_groups = [
-        ('lora_moe',        COLOR_MAP['lora_moe'],        'LoRA-MoE (4bit)'),
-        ('lora_single',     COLOR_MAP['lora_single'],     'LoRA-Single (4bit)'),
-        ('zeroshot',        COLOR_MAP['zeroshot'],        'Zero-Shot (4bit)'),
-        ('full_finetuning', COLOR_MAP['full_finetuning'], 'Full FT (4bit)'),
-        ('p_tuning',        COLOR_MAP['p_tuning'],        'P-Tuning v2 (FP16)'),
-        ('prompt_tuning',   COLOR_MAP['prompt_tuning'],   'Prompt Tuning (FP16)'),
-    ]
-    legend_handles = [plt.Rectangle((0, 0), 1, 1, color=c)
-                      for m, c, _ in quant_groups if m in methods]
-    legend_labels  = [lbl for m, _, lbl in quant_groups if m in methods]
+    # 根据实际参与测试的方法动态生成图例
+    legend_handles = []
+    legend_labels = []
+    if 'lora_moe' in methods:
+        legend_handles.append(plt.Rectangle((0, 0), 1, 1, color=COLOR_MAP['lora_moe']))
+        legend_labels.append('LoRA-MoE (4bit)')
+    other_4bit = {'zeroshot', 'lora_single', 'full_finetuning'}
+    if other_4bit & set(methods):
+        legend_handles.append(plt.Rectangle((0, 0), 1, 1, color=COLOR_MAP['lora_single']))
+        legend_labels.append('Other 4bit Methods')
+    soft_prompt = {'p_tuning', 'prompt_tuning'}
+    if soft_prompt & set(methods):
+        legend_handles.append(plt.Rectangle((0, 0), 1, 1, color=COLOR_MAP['p_tuning']))
+        legend_labels.append('Soft-Prompt (FP16)')
     if legend_handles:
-        ax.legend(legend_handles, legend_labels, fontsize=8)
+        ax.legend(handles=legend_handles, labels=legend_labels, fontsize=8)
     ax.grid(axis='x', alpha=0.3)
     ax.invert_yaxis()
     plt.tight_layout()
@@ -539,8 +540,8 @@ def plot_load_time_comparison(results_by_method, test_mode=False):
     fig, ax = plt.subplots(figsize=(10, max(5, len(methods) * 0.7)))
     y = np.arange(len(methods))
     bars = ax.barh(y, load_times, color=colors, edgecolor='gray', height=0.55)
-    offset = max(max(load_times, default=0), 1e-9) * 0.02   # 防止全零时偏移量为0
     for bar, val in zip(bars, load_times):
+        offset = max(max(load_times), 0.1) * 0.02
         ax.text(val + offset, bar.get_y() + bar.get_height() / 2,
                 f'{val:.2f}s', va='center', fontsize=8)
 
@@ -871,8 +872,8 @@ def run(args):
                 f'  加载时间:    {load_time:.2f}s\n'
                 f'  延迟(中位):  {entry["latency_median_ms"]:.1f}ms  '
                 f'(P95={entry["latency_p95_ms"]:.1f}ms, '
-                f'Min={entry["latency_min_ms"]:.1f}ms, '
-                f'Max={entry["latency_max_ms"]:.1f}ms)\n'
+                f'Min={entry.get("latency_min_ms", 0):.1f}ms, '
+                f'Max={entry.get("latency_max_ms", 0):.1f}ms)\n'
                 f'  吞吐:       {tp_info["samples_per_sec"]:.1f} samples/sec '
                 f'(batch={tp_info["batch_size"]})\n'
                 f'  GPU显存:    {peak_mem:.0f} MB\n'
