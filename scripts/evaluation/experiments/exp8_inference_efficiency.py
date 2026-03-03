@@ -278,7 +278,7 @@ def _benchmark_cpu_method(method, train_data, test_inputs, n_warmup, n_latency, 
         'batch_size': len(batch_inputs),
         'samples_per_sec': round(len(batch_inputs) / max(wall, 1e-9), 2),
     }
-    return load_time, latencies, throughput_info
+    return load_time, latencies, throughput_info, []
 
 
 def _infer_one(gen_obj, inp, method):
@@ -307,6 +307,7 @@ def _benchmark_gpu_method(method, test_inputs, n_warmup, n_latency, n_throughput
     # --- 加载模型 ---
     if method == 'zeroshot':
         from src.baselines.zero_shot import ZeroShotGenerator
+        logger.info(f'  [DEBUG] 加载基础模型 (无adapter), use_4bit=True')
         _clear_gpu()
         t0 = time.perf_counter()
         gen = ZeroShotGenerator(use_4bit=True)
@@ -328,6 +329,8 @@ def _benchmark_gpu_method(method, test_inputs, n_warmup, n_latency, n_throughput
         if not ckpt_path or not Path(ckpt_path).exists():
             logger.error(f'{method}: 检查点路径不存在或未配置: {ckpt_path}')
             return None, None, None
+        logger.info(f'  [DEBUG] 检查点路径: {ckpt_path}')
+        logger.info(f'  [DEBUG] use_4bit={use_4bit}, throughput_batch_size={batch_size}')
         _clear_gpu()
         t0 = time.perf_counter()
         gen = TextExpert(lora_path=ckpt_path, use_4bit=use_4bit)
@@ -336,7 +339,10 @@ def _benchmark_gpu_method(method, test_inputs, n_warmup, n_latency, n_throughput
             return None, None, None
         load_time = time.perf_counter() - t0
 
+    # GPU显存快照
+    logger.info(f'  [DEBUG] 模型加载后GPU显存: {_gpu_current_mb():.0f} MB (峰值: {_gpu_peak_mb():.0f} MB)')
     effective_bs = 1 if method in METHODS_REQUIRE_FP16 else batch_size
+    logger.info(f'  [DEBUG] 吞吐测量batch_size: {effective_bs} (配置={batch_size}, FP16强制={"是" if method in METHODS_REQUIRE_FP16 else "否"})')
 
     # --- 预热 ---
     for inp in test_inputs[:n_warmup]:
@@ -344,12 +350,28 @@ def _benchmark_gpu_method(method, test_inputs, n_warmup, n_latency, n_throughput
 
     # --- 延迟测量 (逐条推理, batch_size=1) ---
     latencies = []
+    output_lengths = []  # 记录每条输出字符数, 用于分析延迟差异
     for inp in test_inputs[n_warmup:n_warmup + n_latency]:
         _gpu_sync()
         t0 = time.perf_counter()
-        _infer_one(gen, inp, method)
+        result = _infer_one(gen, inp, method)
         _gpu_sync()
         latencies.append((time.perf_counter() - t0) * 1000)
+        # 提取输出长度
+        if isinstance(result, list) and len(result) > 0:
+            out_text = result[0] if isinstance(result[0], str) else str(result[0])
+        elif isinstance(result, str):
+            out_text = result
+        else:
+            out_text = str(result) if result else ''
+        output_lengths.append(len(out_text))
+    # 输出长度统计 (用于解释延迟差异)
+    if output_lengths:
+        avg_len = sum(output_lengths) / len(output_lengths)
+        min_len = min(output_lengths)
+        max_len = max(output_lengths)
+        logger.info(f'  [DEBUG] 输出长度统计: 平均={avg_len:.0f}字符, '
+                     f'最短={min_len}, 最长={max_len}')
 
     # --- 吞吐测量 ---
     batch_inputs = test_inputs[:n_throughput]
@@ -369,7 +391,7 @@ def _benchmark_gpu_method(method, test_inputs, n_warmup, n_latency, n_throughput
         'batch_size': effective_bs,
         'samples_per_sec': round(len(batch_inputs) / max(wall, 1e-9), 2),
     }
-    return load_time, latencies, throughput_info
+    return load_time, latencies, throughput_info, output_lengths
 
 
 # ---------------------------------------------------------------------------
@@ -821,12 +843,12 @@ def run(args):
 
         try:
             if method in CPU_METHODS:
-                load_time, latencies, tp_info = _benchmark_cpu_method(
+                load_time, latencies, tp_info, out_lens = _benchmark_cpu_method(
                     method, train_data, test_inputs, n_warmup, n_latency, n_throughput
                 )
                 peak_mem = 0.0
             elif method in GPU_METHODS:
-                load_time, latencies, tp_info = _benchmark_gpu_method(
+                load_time, latencies, tp_info, out_lens = _benchmark_gpu_method(
                     method, test_inputs, n_warmup, n_latency, n_throughput
                 )
                 if load_time is None:
@@ -843,6 +865,16 @@ def run(args):
 
             # 保存原始延迟数据
             latencies_dict[method] = latencies if latencies else []
+
+            # 输出长度统计 (仅GPU方法有数据)
+            out_len_stats = {}
+            if out_lens:
+                out_arr = np.array(out_lens)
+                out_len_stats = {
+                    'output_length_mean': round(float(np.mean(out_arr)), 1),
+                    'output_length_min': int(np.min(out_arr)),
+                    'output_length_max': int(np.max(out_arr)),
+                }
 
             entry = {
                 'method': method,
@@ -864,6 +896,7 @@ def run(args):
                 'throughput_n_samples': tp_info['n_samples'],
                 'peak_gpu_memory_mb': round(peak_mem, 1),
                 'adapter_size_mb': round(adapter_mb, 2),
+                **out_len_stats,
             }
             results['methods'][method] = entry
             results_by_method[method] = entry
@@ -931,6 +964,69 @@ def run(args):
             f'{e.get("latency_max_ms", 0):>10.1f} {e["throughput_samples_per_sec"]:>10.1f} '
             f'{e["peak_gpu_memory_mb"]:>10.0f} {e["adapter_size_mb"]:>12.1f}'
         )
+    # Diagnostic: output length vs latency correlation
+    gpu_with_outlen = [(m, results_by_method[m]) for m in METHOD_ORDER
+                       if m in results_by_method and m in GPU_METHODS
+                       and 'output_length_mean' in results_by_method[m]]
+    if gpu_with_outlen:
+        logger.info('\n' + '=' * 80)
+        logger.info('Diagnostic: Output Length vs Latency Correlation')
+        logger.info('=' * 80)
+        logger.info(f'{"Method":<18} {"Latency(ms)":>12} {"AvgOutput(ch)":>14} {"Min":>8} {"Max":>8} {"ms/char":>10}')
+        logger.info('-' * 80)
+        for m, e in gpu_with_outlen:
+            avg_out = e.get('output_length_mean', 0)
+            ms_per_char = e['latency_median_ms'] / max(avg_out, 1)
+            logger.info(
+                f'{e["label"]:<18} {e["latency_median_ms"]:>12.1f} '
+                f'{avg_out:>14.0f} {e.get("output_length_min", 0):>8} '
+                f'{e.get("output_length_max", 0):>8} {ms_per_char:>10.2f}'
+            )
+
+    # Save debug diagnostics JSON
+    try:
+        import json as _json
+        diag = {
+            'checkpoint_paths': {},
+            'output_length_analysis': {},
+            'batch_efficiency': {},
+        }
+        try:
+            diag['checkpoint_paths'] = {
+                'lora_moe_text': str(path_cfg.LORA_MOE_CKPTS.get('text', '')),
+                'lora_single': str(getattr(path_cfg, 'LORA_SINGLE_CKPT', '')),
+                'p_tuning_text': str(getattr(path_cfg, 'PTUNING_CKPTS', {}).get('text', '')),
+                'prompt_tuning_text': str(getattr(path_cfg, 'PROMPT_TUNING_CKPTS', {}).get('text', '')),
+                'full_ft_text': str(getattr(path_cfg, 'FULL_FINETUNING_CKPTS', {}).get('text', '')),
+            }
+        except Exception:
+            pass
+        for m in METHOD_ORDER:
+            if m in results_by_method and 'output_length_mean' in results_by_method[m]:
+                e = results_by_method[m]
+                avg_out = e.get('output_length_mean', 0)
+                diag['output_length_analysis'][m] = {
+                    'avg_output_chars': avg_out,
+                    'latency_median_ms': e['latency_median_ms'],
+                    'ms_per_char': round(e['latency_median_ms'] / max(avg_out, 1), 2),
+                }
+        for m in METHOD_ORDER:
+            if m in results_by_method and m in GPU_METHODS:
+                e = results_by_method[m]
+                ps_batch = e['throughput_wall_s'] / max(e['throughput_n_samples'], 1) * 1000
+                diag['batch_efficiency'][m] = {
+                    'latency_median_ms': e['latency_median_ms'],
+                    'per_sample_in_batch_ms': round(ps_batch, 1),
+                    'batch_speedup': round(e['latency_median_ms'] / max(ps_batch, 0.1), 1),
+                    'batch_size': e['throughput_batch_size'],
+                }
+        diag_path = EXP_DIR / 'debug_diagnostics.json'
+        with open(diag_path, 'w', encoding='utf-8') as df:
+            _json.dump(diag, df, indent=2, ensure_ascii=False)
+        logger.info(f'Debug diagnostics saved: {diag_path}')
+    except Exception as diag_err:
+        logger.warning(f'Failed to save diagnostics: {diag_err}')
+
     logger.info(f'\n结果已保存至: {EXP_DIR}')
 
 
@@ -959,6 +1055,9 @@ def _get_hardware_info():
 
 
 def main():
+    # 命令行参数覆盖全局配置
+    global N_LATENCY, N_THROUGHPUT
+
     parser = argparse.ArgumentParser(description='实验8: 推理效率基准测试')
     parser.add_argument('--test-mode', action='store_true',
                         help='使用最少样本快速验证流程')
@@ -973,9 +1072,6 @@ def main():
     parser.add_argument('--n-throughput', type=int, default=None,
                         help=f'覆盖吞吐测量样本数 (默认: {N_THROUGHPUT})')
     args = parser.parse_args()
-
-    # 命令行参数覆盖全局配置
-    global N_LATENCY, N_THROUGHPUT
     if args.n_latency is not None:
         N_LATENCY = args.n_latency
     if args.n_throughput is not None:
