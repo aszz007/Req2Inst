@@ -128,7 +128,6 @@ METHOD_LABELS = {
 CPU_METHODS = {'bm25', 'lsa', 'template'}
 GPU_METHODS = {'zeroshot', 'lora_moe', 'lora_single',
                'p_tuning', 'prompt_tuning', 'full_finetuning'}
-ALL_METHODS = list(CPU_METHODS) + list(GPU_METHODS)
 
 # 显示顺序: CPU基线在前, GPU方法在后
 METHOD_ORDER = [
@@ -136,6 +135,9 @@ METHOD_ORDER = [
     'zeroshot', 'lora_moe', 'lora_single',
     'p_tuning', 'prompt_tuning', 'full_finetuning',
 ]
+
+# 有序的方法列表, 与METHOD_ORDER保持一致
+ALL_METHODS = list(METHOD_ORDER)
 
 # ---------------------------------------------------------------------------
 # GPU 工具函数
@@ -317,12 +319,15 @@ def _benchmark_gpu_method(method, test_inputs, n_warmup, n_latency, n_throughput
         from src.experts import TextExpert
         ckpt_map = {
             'lora_moe':        lambda: str(path_cfg.LORA_MOE_CKPTS['text']),
-            'lora_single':     lambda: str(path_cfg.LORA_SINGLE_CKPT),
-            'p_tuning':        lambda: str(path_cfg.PTUNING_CKPTS['text']),
-            'prompt_tuning':   lambda: str(path_cfg.PROMPT_TUNING_CKPTS['text']),
-            'full_finetuning': lambda: str(path_cfg.FULL_FINETUNING_CKPTS['text']),
+            'lora_single':     lambda: str(getattr(path_cfg, 'LORA_SINGLE_CKPT', '')),
+            'p_tuning':        lambda: str(getattr(path_cfg, 'PTUNING_CKPTS', {}).get('text', '')),
+            'prompt_tuning':   lambda: str(getattr(path_cfg, 'PROMPT_TUNING_CKPTS', {}).get('text', '')),
+            'full_finetuning': lambda: str(getattr(path_cfg, 'FULL_FINETUNING_CKPTS', {}).get('text', '')),
         }
         ckpt_path = ckpt_map[method]()
+        if not ckpt_path or not Path(ckpt_path).exists():
+            logger.error(f'{method}: 检查点路径不存在或未配置: {ckpt_path}')
+            return None, None, None
         _clear_gpu()
         t0 = time.perf_counter()
         gen = TextExpert(lora_path=ckpt_path, use_4bit=use_4bit)
@@ -356,10 +361,7 @@ def _benchmark_gpu_method(method, test_inputs, n_warmup, n_latency, n_throughput
     peak_inference = _gpu_peak_mb()
 
     # --- 卸载模型 ---
-    if method == 'zeroshot':
-        gen.unload_model()
-    else:
-        gen.unload_model()
+    gen.unload_model()
 
     throughput_info = {
         'n_samples': len(batch_inputs),
@@ -387,7 +389,7 @@ def plot_latency_comparison(results_by_method, test_mode=False):
     y = np.arange(len(methods))
     fig, ax = plt.subplots(figsize=(10, max(5, len(methods) * 0.7)))
     bars = ax.barh(y, medians, color=colors, edgecolor='gray', height=0.55,
-                   label='中位数')
+                   label='Median')
     # P95 标记
     ax.scatter(p95s, y, marker='|', color='red', s=120, zorder=5, label='P95')
     for i, (med, p95) in enumerate(zip(medians, p95s)):
@@ -396,10 +398,10 @@ def plot_latency_comparison(results_by_method, test_mode=False):
 
     ax.set_yticks(y)
     ax.set_yticklabels(labels)
-    ax.set_xlabel('单样本延迟 (ms)')
-    title = '实验8: 推理延迟对比 (batch_size=1)'
+    ax.set_xlabel('Latency per Sample (ms)')
+    title = 'Exp8: Inference Latency Comparison (batch_size=1)'
     if test_mode:
-        title += ' [测试模式]'
+        title += ' [Test Mode]'
     ax.set_title(title)
     ax.legend(fontsize=8)
     ax.grid(axis='x', alpha=0.3)
@@ -410,7 +412,7 @@ def plot_latency_comparison(results_by_method, test_mode=False):
     logger.info(f'图表已保存: {PLOTS_DIR / "latency_comparison.png"}')
 
 
-def plot_latency_distribution(results_by_method, latencies_dict, test_mode=False):
+def plot_latency_distribution(latencies_dict, test_mode=False):
     """延迟分布箱线图, 直观展示各方法延迟稳定性."""
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -433,10 +435,10 @@ def plot_latency_distribution(results_by_method, latencies_dict, test_mode=False
     for median_line in bp['medians']:
         median_line.set(color='black', linewidth=1.5)
 
-    ax.set_xlabel('单样本延迟 (ms)')
-    title = '实验8: 延迟分布箱线图'
+    ax.set_xlabel('Latency per Sample (ms)')
+    title = 'Exp8: Latency Distribution (Box Plot)'
     if test_mode:
-        title += ' [测试模式]'
+        title += ' [Test Mode]'
     ax.set_title(title)
     ax.grid(axis='x', alpha=0.3)
     plt.tight_layout()
@@ -463,10 +465,10 @@ def plot_throughput_comparison(results_by_method, test_mode=False):
 
     ax.set_yticks(y)
     ax.set_yticklabels(labels)
-    ax.set_xlabel('吞吐量 (samples/sec)')
-    title = '实验8: 吞吐量对比 (最优Batch Size)'
+    ax.set_xlabel('Throughput (samples/sec)')
+    title = 'Exp8: Throughput Comparison (Optimal Batch Size)'
     if test_mode:
-        title += ' [测试模式]'
+        title += ' [Test Mode]'
     ax.set_title(title)
     ax.grid(axis='x', alpha=0.3)
     ax.invert_yaxis()
@@ -494,18 +496,18 @@ def plot_gpu_memory_comparison(results_by_method, test_mode=False):
 
     ax.set_yticks(y)
     ax.set_yticklabels(labels)
-    ax.set_xlabel('GPU峰值显存 (MB)')
-    title = '实验8: GPU显存对比'
+    ax.set_xlabel('Peak GPU Memory (MB)')
+    title = 'Exp8: GPU Memory Comparison'
     if test_mode:
-        title += ' [测试模式]'
+        title += ' [Test Mode]'
     ax.set_title(title)
     ax.legend(
         handles=[
             plt.Rectangle((0, 0), 1, 1, color=COLOR_MAP['lora_moe']),
-            plt.Rectangle((0, 0), 1, 1, color=COLOR_MAP['zeroshot']),
+            plt.Rectangle((0, 0), 1, 1, color=COLOR_MAP['lora_single']),
             plt.Rectangle((0, 0), 1, 1, color=COLOR_MAP['p_tuning']),
         ],
-        labels=['LoRA-MoE (4bit)', '其他LoRA (4bit)', '软提示 (FP16)'],
+        labels=['LoRA-MoE (4bit)', 'Other LoRA (4bit)', 'Soft-Prompt (FP16)'],
         fontsize=8
     )
     ax.grid(axis='x', alpha=0.3)
@@ -534,10 +536,10 @@ def plot_load_time_comparison(results_by_method, test_mode=False):
 
     ax.set_yticks(y)
     ax.set_yticklabels(labels)
-    ax.set_xlabel('加载时间 (秒)')
-    title = '实验8: 模型加载时间对比'
+    ax.set_xlabel('Load Time (seconds)')
+    title = 'Exp8: Model Load Time Comparison'
     if test_mode:
-        title += ' [测试模式]'
+        title += ' [Test Mode]'
     ax.set_title(title)
     ax.grid(axis='x', alpha=0.3)
     ax.invert_yaxis()
@@ -573,11 +575,11 @@ def plot_combined_efficiency(results_by_method, test_mode=False):
                     (latencies[i], memories[i]),
                     textcoords='offset points', xytext=(8, 8), fontsize=8)
 
-    ax.set_xlabel('中位延迟 (ms/sample)')
-    ax.set_ylabel('GPU峰值显存 (MB)')
-    title = '实验8: 延迟 vs 显存 (气泡=adapter大小)'
+    ax.set_xlabel('Median Latency (ms/sample)')
+    ax.set_ylabel('Peak GPU Memory (MB)')
+    title = 'Exp8: Latency vs Memory (bubble = adapter size)'
     if test_mode:
-        title += ' [测试模式]'
+        title += ' [Test Mode]'
     ax.set_title(title)
     ax.grid(alpha=0.3)
     plt.tight_layout()
@@ -595,8 +597,8 @@ def plot_summary_table(results_by_method, test_mode=False):
         return
 
     # 构建表格数据
-    columns = ['方法', '设备', '量化', '加载(s)', '延迟(ms)', 'P95(ms)',
-               '吞吐(/s)', '显存(MB)', 'Adapter(MB)']
+    columns = ['Method', 'Device', 'Quant', 'Load(s)', 'Latency(ms)', 'P95(ms)',
+               'Thru(/s)', 'Memory(MB)', 'Adapter(MB)']
     cell_data = []
     for m in methods:
         e = results_by_method[m]
@@ -640,9 +642,9 @@ def plot_summary_table(results_by_method, test_mode=False):
                 cell = table[row_idx, j]
                 cell.set_facecolor('#f8f9fa' if i % 2 == 0 else 'white')
 
-    title = '实验8: 推理效率综合汇总'
+    title = 'Exp8: Inference Efficiency Summary'
     if test_mode:
-        title += ' [测试模式]'
+        title += ' [Test Mode]'
     ax.set_title(title, fontsize=13, fontweight='bold', pad=20)
     plt.tight_layout()
     plt.savefig(PLOTS_DIR / 'summary_table.png', dpi=150, bbox_inches='tight')
@@ -682,18 +684,18 @@ def generate_report(results, results_by_method, test_mode=False):
 
     # 结果汇总表
     lines.append('## 3. 结果汇总\n')
-    lines.append('| 方法 | 设备 | 量化 | 加载(s) | 延迟(ms) | P95(ms) | 吞吐(/s) | 显存(MB) | Adapter(MB) |')
-    lines.append('|------|------|------|---------|----------|---------|----------|----------|-------------|')
+    lines.append('| 方法 | 设备 | 量化 | 加载(s) | 延迟(ms) | P95(ms) | Min(ms) | Max(ms) | 吞吐(/s) | 显存(MB) | Adapter(MB) |')
+    lines.append('|------|------|------|---------|----------|---------|---------|---------|----------|----------|-------------|')
     for m in METHOD_ORDER:
         if m not in results_by_method:
             continue
         e = results_by_method[m]
-        highlight = ' **' if m == 'lora_moe' else ''
-        end_hl = '**' if m == 'lora_moe' else ''
+        highlight = '**' if m == 'lora_moe' else ''
         lines.append(
-            f'| {highlight}{e["label"]}{end_hl} | {e["device"]} | {e["quantisation"]} | '
+            f'| {highlight}{e["label"]}{highlight} | {e["device"]} | {e["quantisation"]} | '
             f'{e["load_time_s"]:.2f} | {e["latency_median_ms"]:.1f} | '
-            f'{e["latency_p95_ms"]:.1f} | {e["throughput_samples_per_sec"]:.1f} | '
+            f'{e["latency_p95_ms"]:.1f} | {e.get("latency_min_ms", 0):.1f} | '
+            f'{e.get("latency_max_ms", 0):.1f} | {e["throughput_samples_per_sec"]:.1f} | '
             f'{e["peak_gpu_memory_mb"]:.0f} | {e["adapter_size_mb"]:.1f} |'
         )
     lines.append('')
@@ -722,8 +724,12 @@ def generate_report(results, results_by_method, test_mode=False):
             lines.append(f'\n### LoRA-MoE 效率分析\n')
             lines.append(f'- 加载时间: {moe["load_time_s"]:.2f}s')
             lines.append(f'- 中位延迟: {moe["latency_median_ms"]:.1f}ms '
-                         f'(P95={moe["latency_p95_ms"]:.1f}ms)')
-            lines.append(f'- 吞吐量: {moe["throughput_samples_per_sec"]:.1f} samples/sec')
+                         f'(P95={moe["latency_p95_ms"]:.1f}ms, '
+                         f'Std={moe["latency_std_ms"]:.1f}ms)')
+            lines.append(f'- 延迟范围: {moe.get("latency_min_ms", 0):.1f}ms ~ '
+                         f'{moe.get("latency_max_ms", 0):.1f}ms')
+            lines.append(f'- 吞吐量: {moe["throughput_samples_per_sec"]:.1f} samples/sec '
+                         f'(batch_size={moe["throughput_batch_size"]})')
             lines.append(f'- GPU显存: {moe["peak_gpu_memory_mb"]:.0f} MB')
             lines.append(f'- Adapter大小: {moe["adapter_size_mb"]:.1f} MB')
     lines.append('')
@@ -875,7 +881,7 @@ def run(args):
     try:
         if results_by_method:
             plot_latency_comparison(results_by_method, args.test_mode)
-            plot_latency_distribution(results_by_method, latencies_dict, args.test_mode)
+            plot_latency_distribution(latencies_dict, args.test_mode)
             plot_throughput_comparison(results_by_method, args.test_mode)
             plot_gpu_memory_comparison(results_by_method, args.test_mode)
             plot_load_time_comparison(results_by_method, args.test_mode)
@@ -925,7 +931,7 @@ def _get_hardware_info():
         if torch.cuda.is_available():
             info['gpu_name'] = torch.cuda.get_device_name(0)
             info['gpu_memory_total_mb'] = round(
-                torch.cuda.get_device_properties(0).total_mem / (1024 ** 2)
+                torch.cuda.get_device_properties(0).total_memory / (1024 ** 2)
             )
             info['cuda_version'] = torch.version.cuda or 'N/A'
         info['torch_version'] = torch.__version__
