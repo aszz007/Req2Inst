@@ -52,6 +52,10 @@ from src.baselines.inference_utils import (
     compute_all_metrics, save_experiment_results,
 )
 from src.utils.logger import get_logger
+from src.routing.learned_router import (
+    RouterMLP, HiddenStateExtractor,
+    EXPERT_TO_IDX, IDX_TO_EXPERT,
+)
 
 logger = get_logger('experiments.exp10')
 
@@ -65,9 +69,6 @@ FEATURE_CACHE_DIR = CACHE_DIR / 'exp10_router_features'
 
 ALL_TYPES = ['text', 'image', 'uml', 'general']
 SPECIALIZED_TYPES = ['text', 'image', 'uml']
-
-EXPERT_TO_IDX = {'text': 0, 'image': 1, 'uml': 2, 'general': 3}
-IDX_TO_EXPERT = {v: k for k, v in EXPERT_TO_IDX.items()}
 
 
 # ─────────────────────────────────────────────
@@ -123,146 +124,6 @@ def _load_exp9_results():
     return phase1, phase2
 
 
-# ─────────────────────────────────────────────
-# MLP 路由器定义
-# ─────────────────────────────────────────────
-
-class RouterMLP:
-    """轻量级MLP路由分类器（4类：text/image/uml/general）"""
-
-    def __init__(self, input_dim=4096, hidden1=512, hidden2=128, num_classes=4, dropout1=0.2, dropout2=0.1):
-        try:
-            import torch
-            import torch.nn as nn
-        except ImportError:
-            raise RuntimeError("需要安装PyTorch")
-
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-        class _MLP(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.net = nn.Sequential(
-                    nn.Linear(input_dim, hidden1),
-                    nn.LayerNorm(hidden1),
-                    nn.ReLU(),
-                    nn.Dropout(dropout1),
-                    nn.Linear(hidden1, hidden2),
-                    nn.LayerNorm(hidden2),
-                    nn.ReLU(),
-                    nn.Dropout(dropout2),
-                    nn.Linear(hidden2, num_classes),
-                )
-
-            def forward(self, x):
-                return self.net(x)
-
-        self.model = _MLP().to(self.device)
-        total_params = sum(p.numel() for p in self.model.parameters())
-        logger.info(f"RouterMLP初始化完成，参数量: {total_params:,}")
-
-    def save(self, path):
-        import torch
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(self.model.state_dict(), path)
-        logger.info(f"Router已保存: {path}")
-
-    def load(self, path):
-        import torch
-        self.model.load_state_dict(torch.load(path, map_location=self.device))
-        self.model.eval()
-        logger.info(f"Router已加载: {path}")
-
-    def predict_proba(self, features_np):
-        """
-        Args:
-            features_np: np.ndarray, shape (N, input_dim)
-        Returns:
-            probs: np.ndarray, shape (N, 4)
-        """
-        import torch
-        import torch.nn.functional as F
-        self.model.eval()
-        with torch.no_grad():
-            x = torch.tensor(features_np, dtype=torch.float32).to(self.device)
-            logits = self.model(x)
-            probs = F.softmax(logits, dim=-1).cpu().numpy()
-        return probs
-
-    def predict(self, features_np):
-        probs = self.predict_proba(features_np)
-        return np.argmax(probs, axis=1)
-
-
-# ─────────────────────────────────────────────
-# 特征提取
-# ─────────────────────────────────────────────
-
-def extract_hidden_states(inputs, base_model, tokenizer, batch_size=4, max_length=512):
-    """
-    从基础模型提取输入文本的最后一层hidden state（最后一个token位置）
-
-    Args:
-        inputs: List[str]，原始输入文本
-        base_model: 已加载的Qwen3-8B模型
-        tokenizer: 对应tokenizer
-        batch_size: 批次大小
-        max_length: 截断长度
-
-    Returns:
-        np.ndarray, shape (N, hidden_size)
-    """
-    import torch
-    base_model.eval()
-    all_features = []
-
-    for i in range(0, len(inputs), batch_size):
-        batch = inputs[i: i + batch_size]
-        try:
-            encoded = tokenizer(
-                batch,
-                return_tensors='pt',
-                padding=True,
-                truncation=True,
-                max_length=max_length,
-            )
-            input_ids = encoded['input_ids'].to(base_model.device)
-            attention_mask = encoded['attention_mask'].to(base_model.device)
-
-            with torch.no_grad():
-                outputs = base_model(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    output_hidden_states=True,
-                    return_dict=True,
-                )
-                # 最后一层hidden state
-                last_hidden = outputs.hidden_states[-1]  # (B, seq_len, hidden_size)
-
-                # 取每条序列最后一个非padding token的特征
-                seq_lens = attention_mask.sum(dim=1) - 1  # 最后有效token的索引
-                batch_features = last_hidden[
-                    torch.arange(len(batch)), seq_lens, :
-                ].cpu().float().numpy()
-
-            all_features.append(batch_features)
-
-        except Exception as e:
-            logger.error(f"特征提取失败 batch {i}: {e}")
-            # 用零向量填充
-            hidden_size = base_model.config.hidden_size
-            all_features.append(np.zeros((len(batch), hidden_size), dtype=np.float32))
-
-        if (i // batch_size) % 20 == 0:
-            logger.info(f"  特征提取进度: {min(i + batch_size, len(inputs))}/{len(inputs)}")
-
-    features = np.concatenate(all_features, axis=0)
-    # L2归一化
-    norms = np.linalg.norm(features, axis=1, keepdims=True)
-    norms = np.where(norms == 0, 1.0, norms)
-    features = features / norms
-    return features
 
 
 # ─────────────────────────────────────────────
@@ -323,8 +184,9 @@ def run_phase1(args, exp9_phase1):
             test_data = test_data[:10]
 
         inputs = [d['input'] for d in test_data]
-        features = extract_hidden_states(
-            inputs, base_model, tokenizer,
+        extractor = HiddenStateExtractor(base_model, tokenizer)
+        features = extractor.extract(
+            inputs,
             batch_size=4 if not args.test_mode else 2,
         )
 
@@ -360,9 +222,8 @@ def run_phase1(args, exp9_phase1):
         if args.test_mode:
             general_test = general_test[:20]
         general_inputs = [d['input'] for d in general_test]
-        general_features = extract_hidden_states(
-            general_inputs, base_model, tokenizer, batch_size=4
-        )
+        extractor = HiddenStateExtractor(base_model, tokenizer)
+        general_features = extractor.extract(general_inputs, batch_size=4)
         general_labels = _rebuild_per_sample_labels('general', general_test, args)
         np.savez(general_feat_path, features=general_features, labels=np.array(general_labels))
 
