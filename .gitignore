@@ -219,6 +219,8 @@ logs/
 
 # 其他
 .idea/
+outputs/
+cloc.exe/
 inputs/
 checkpoints/
 chrome_user_data/

@@ -158,8 +158,6 @@ def run_phase1(args, exp9_phase1):
     # ── 步骤2: 提取或加载特征缓存 ──
     logger.info("\n--- 步骤2: 特征提取 ---")
 
-    oracle_selections = exp9_phase1.get('oracle_selections', {})
-
     all_features = {}
     all_labels = {}
 
@@ -190,17 +188,7 @@ def run_phase1(args, exp9_phase1):
             batch_size=4 if not args.test_mode else 2,
         )
 
-        # 构建标签：Oracle最优专家
-        selections = oracle_selections.get(domain, {})
-        labels = []
-        for i in range(len(test_data)):
-            # oracle_selections是聚合统计，需要逐样本对应
-            # 这里用聚合分布构建标签（各样本同domain取最高频专家）
-            # 精确逐样本标签需从缓存的逐样本ROUGE-L重建，这里用整体最优
-            best_expert = max(selections, key=selections.get) if selections else domain
-            labels.append(EXPERT_TO_IDX[best_expert])
-
-        # 更准确的做法：逐样本重建Oracle标签
+        # 逐样本重建Oracle标签（从exp9缓存的per-sample ROUGE-L中选最优专家）
         labels = _rebuild_per_sample_labels(domain, test_data, args)
 
         all_features[domain] = features
@@ -224,7 +212,8 @@ def run_phase1(args, exp9_phase1):
         general_inputs = [d['input'] for d in general_test]
         extractor = HiddenStateExtractor(base_model, tokenizer)
         general_features = extractor.extract(general_inputs, batch_size=4)
-        general_labels = _rebuild_per_sample_labels('general', general_test, args)
+        # 修复：general域应该从exp9_oracle加载跨域缓存
+        general_labels = _rebuild_general_labels(general_test, args)
         np.savez(general_feat_path, features=general_features, labels=np.array(general_labels))
 
     del lm, base_model, tokenizer
@@ -281,15 +270,24 @@ def run_phase1(args, exp9_phase1):
     accuracy_results['general'] = float(acc_general)
     logger.info(f"  general: 路由准确率={acc_general:.4f} ({acc_general*100:.1f}%)")
 
-    # 混淆矩阵
+    # 混淆矩阵：汇总所有域（specialized + general），才能展示完整的4分类分布
     from sklearn.metrics import confusion_matrix, classification_report
-    cm = confusion_matrix(y_true_general, y_pred_general, labels=[0, 1, 2, 3])
+    all_y_true = np.concatenate(
+        [all_labels[d] for d in SPECIALIZED_TYPES] + [np.array(general_labels)]
+    )
+    all_y_pred = np.concatenate(
+        [router.predict(all_features[d]) for d in SPECIALIZED_TYPES] + [y_pred_general]
+    )
+    cm = confusion_matrix(all_y_true, all_y_pred, labels=[0, 1, 2, 3])
     report = classification_report(
-        y_true_general, y_pred_general,
+        all_y_true, all_y_pred,
         target_names=['text', 'image', 'uml', 'general'],
         output_dict=True, zero_division=0
     )
-    logger.info(f"  General域分类报告:\n{classification_report(y_true_general, y_pred_general, target_names=['text','image','uml','general'], zero_division=0)}")
+    logger.info(
+        f"  全域分类报告:\n"
+        f"{classification_report(all_y_true, all_y_pred, target_names=['text','image','uml','general'], zero_division=0)}"
+    )
 
     results = {
         'phase': 'phase1',
@@ -325,8 +323,9 @@ def _rebuild_per_sample_labels(domain, test_data, args):
         if expert_type == domain:
             cache = load_predictions_cache(CACHE_DIR / 'lora_moe', f'{domain}_predictions.json')
         else:
+            # 修复：跨域缓存路径应该是 exp3_cross_domain，而非 exp9_oracle
             cache = load_predictions_cache(
-                CACHE_DIR / 'exp9_oracle',
+                CACHE_DIR / 'exp3_cross_domain',
                 f'{expert_type}_expert_on_{domain}_predictions.json'
             )
             if cache is None and expert_type == 'general':
@@ -334,6 +333,8 @@ def _rebuild_per_sample_labels(domain, test_data, args):
                 cache = load_predictions_cache(CACHE_DIR / 'lora_moe', 'general_predictions.json')
         if cache:
             expert_caches[expert_type] = cache.get('samples', [])
+        else:
+            logger.warning(f"  [标签重建] 缓存未找到: {expert_type} on {domain}，该专家将被跳过")
 
     for i in range(n):
         best_expert = domain  # 默认匹配专家
@@ -358,6 +359,66 @@ def _rebuild_per_sample_labels(domain, test_data, args):
 
     return labels
 
+
+def _rebuild_general_labels(test_data, args):
+    """
+    专门为general域重建Oracle标签
+
+    general域的跨域缓存在exp9_oracle目录中
+    """
+    from rouge_score import rouge_scorer as rs_mod
+    scorer = rs_mod.RougeScorer(['rougeL'], use_stemmer=True)
+
+    n = len(test_data)
+    labels = []
+
+    # general域的跨域缓存在exp9_oracle
+    expert_caches = {}
+    for expert_type in ALL_TYPES:
+        if expert_type == 'general':
+            cache = load_predictions_cache(CACHE_DIR / 'lora_moe', 'general_predictions.json')
+        elif expert_type == 'text':
+            # text专家在general域：使用exp3的MoE-3退化路由缓存
+            cache = load_predictions_cache(
+                CACHE_DIR / 'exp3_moe3_general_via_text',
+                'general_via_text_predictions.json'
+            )
+        else:
+            cache = load_predictions_cache(
+                CACHE_DIR / 'exp9_oracle',
+                f'{expert_type}_expert_on_general_predictions.json'
+            )
+        if cache:
+            samples = cache.get('samples', [])
+            # 验证样本数量是否匹配
+            if len(samples) < len(test_data):
+                logger.warning(f"  [标签重建] {expert_type}缓存样本数({len(samples)}) < 测试集({len(test_data)})")
+            expert_caches[expert_type] = samples
+        else:
+            logger.warning(f"  [标签重建] general域缓存未找到: {expert_type}")
+
+    for i in range(n):
+        best_expert = 'general'
+        best_score = -1.0
+
+        for expert_type, samples in expert_caches.items():
+            if i >= len(samples):
+                continue
+            pred = samples[i].get('prediction', '')
+            ref = test_data[i].get('output', '')
+            if not pred or not pred.strip():
+                continue
+            try:
+                score = scorer.score(ref, pred)['rougeL'].fmeasure
+            except Exception:
+                score = 0.0
+            if score > best_score:
+                best_score = score
+                best_expert = expert_type
+
+        labels.append(EXPERT_TO_IDX.get(best_expert, EXPERT_TO_IDX['general']))
+
+    return labels
 
 def _train_router(router, train_X, train_y, val_X, val_y, args):
     """训练MLP路由器"""
@@ -469,6 +530,15 @@ def run_phase2(args, phase1_results, exp9_phase1):
     general_features = feat_data['features']
     if args.test_mode:
         general_features = general_features[:10]
+
+    # 确保特征数量与测试集对齐（test_mode下特征可能只有20条）
+    n_cached = len(general_features)
+    if len(general_test) != n_cached:
+        logger.warning(
+            f"General测试集({len(general_test)})与缓存特征({n_cached})数量不匹配，"
+            f"截断测试集到缓存长度"
+        )
+        general_test = general_test[:n_cached]
 
     logger.info(f"General特征维度: {general_features.shape}")
 
@@ -622,6 +692,7 @@ def _run_output_ensemble(router, features, general_test, args):
 
     # 加载基础模型
     import torch
+    from peft import PeftModel
     from models.language_model import LanguageModel
     from models.prompt_templates.general_template import GeneralInstructionTemplate
 
@@ -633,6 +704,21 @@ def _run_output_ensemble(router, features, general_test, args):
     adapter_paths = {}
     for et in ALL_TYPES:
         adapter_paths[et] = str(path_cfg.get_expert_weight_path(et))
+
+    # 一次性将所有 adapter 挂载到 base_model，后续用 set_adapter 切换
+    # 避免每条样本反复 from_pretrained（原实现约 996 次加载，极慢）
+    logger.info("  预加载所有专家 adapter（一次性，后续 set_adapter 切换）...")
+    model_with_adapters = base_model
+    for et in ALL_TYPES:
+        try:
+            model_with_adapters = PeftModel.from_pretrained(
+                model_with_adapters, adapter_paths[et], adapter_name=et,
+                is_trainable=False,
+            )
+            logger.info(f"    已加载 adapter: {et}")
+        except Exception as e:
+            logger.warning(f"    adapter 加载失败 {et}: {e}")
+    model_with_adapters.eval()
 
     samples = []
     routing_stats = defaultdict(int)
@@ -658,7 +744,7 @@ def _run_output_ensemble(router, features, general_test, args):
             pred = _single_expert_from_cache(expert1, 'general', i)
         else:
             pred = _logit_ensemble_generate(
-                base_model, tokenizer, adapter_paths,
+                model_with_adapters, tokenizer,
                 sample['input'], expert1, expert2, w1, w2,
                 args
             )
@@ -674,7 +760,7 @@ def _run_output_ensemble(router, features, general_test, args):
             'w2': w2,
         })
 
-    del lm, base_model, tokenizer
+    del lm, model_with_adapters, tokenizer
     _cleanup_gpu()
 
     save_predictions_cache(
@@ -693,80 +779,74 @@ def _run_output_ensemble(router, features, general_test, args):
     return {'rougeL': rougeL, 'top2_rate': top2_rate, 'routing_stats': dict(routing_stats)}
 
 
-def _logit_ensemble_generate(base_model, tokenizer, adapter_paths,
+def _logit_ensemble_generate(model_with_adapters, tokenizer,
                               input_text, expert1, expert2, w1, w2, args):
     """
-    核心：两专家logit加权融合生成
+    核心：两专家同步自回归logit加权融合生成
 
-    1. 加载expert1 LoRA → 前向推理 → 缓存每步logits
-    2. 切换expert2 LoRA → 前向推理 → 缓存每步logits
-    3. 加权平均logits → 贪婪解码
+    正确实现：每一步 t，两个专家共享相同的 current_ids（已生成序列），
+    分别前向推理得到下一步 logit，加权融合后贪婪解码，再将融合结果追加到
+    current_ids 进入下一步。
+
+    原错误实现是两个专家各自独立完成完整序列，导致步骤 t 的 conditioning
+    context 完全不同，加权平均在语义上无意义。
+
+    使用 set_adapter 切换专家，避免反复 from_pretrained 的性能开销。
     """
     import torch
-    from peft import PeftModel
+    import torch.nn.functional as F
+    from models.prompt_templates.general_template import GeneralInstructionTemplate
 
     max_new_tokens = 512
+    stop_ids = {tokenizer.eos_token_id, tokenizer.pad_token_id}
 
-    def _get_logits_sequence(adapter_path, prompt_ids):
-        """加载adapter，执行teacher-forcing前向推理，返回每步logit"""
-        try:
-            peft_model = PeftModel.from_pretrained(
-                base_model, adapter_path,
-                is_trainable=False,
-            )
-            peft_model.eval()
-            all_logits = []
-
-            # 自回归逐token推理，收集logits
-            input_ids = prompt_ids.clone()
-            for _ in range(max_new_tokens):
-                with torch.no_grad():
-                    out = peft_model(input_ids=input_ids, return_dict=True)
-                next_logits = out.logits[:, -1, :]  # (1, vocab_size)
-                all_logits.append(next_logits.cpu())
-                next_token = next_logits.argmax(dim=-1, keepdim=True)
-                if next_token.item() in (tokenizer.eos_token_id, tokenizer.pad_token_id):
-                    break
-                input_ids = torch.cat([input_ids, next_token], dim=1)
-
-            del peft_model
-            _cleanup_gpu()
-            return all_logits
-
-        except Exception as e:
-            logger.warning(f"  adapter推理失败 ({adapter_path}): {e}")
-            return []
-
-    from models.prompt_templates.general_template import GeneralInstructionTemplate
     prompt = GeneralInstructionTemplate.build_prompt(input_text)
-    prompt_ids = tokenizer(prompt, return_tensors='pt').input_ids.to(base_model.device)
+    current_ids = tokenizer(prompt, return_tensors='pt').input_ids.to(
+        model_with_adapters.base_model.model.device
+        if hasattr(model_with_adapters, 'base_model') else next(model_with_adapters.parameters()).device
+    )
 
-    logits1 = _get_logits_sequence(adapter_paths[expert1], prompt_ids)
-    logits2 = _get_logits_sequence(adapter_paths[expert2], prompt_ids)
-
-    if not logits1 and not logits2:
-        return _single_expert_from_cache('general', 'general', 0)
-    if not logits1:
-        return _decode_from_logits(tokenizer, logits2)
-    if not logits2:
-        return _decode_from_logits(tokenizer, logits1)
-
-    # 对齐长度（取较短的）
-    min_len = min(len(logits1), len(logits2))
-    logits1 = logits1[:min_len]
-    logits2 = logits2[:min_len]
-
-    # 加权融合
-    import torch.nn.functional as F
     fused_tokens = []
-    for l1, l2 in zip(logits1, logits2):
-        p1 = F.softmax(l1.to(base_model.device), dim=-1)
-        p2 = F.softmax(l2.to(base_model.device), dim=-1)
-        p_fused = w1 * p1 + w2 * p2
-        next_token = p_fused.argmax(dim=-1).item()
-        if next_token in (tokenizer.eos_token_id, tokenizer.pad_token_id):
+
+    for step in range(max_new_tokens):
+        # ── Expert 1 前向 ──
+        logits1 = None
+        try:
+            model_with_adapters.set_adapter(expert1)
+            model_with_adapters.eval()
+            with torch.no_grad():
+                logits1 = model_with_adapters(input_ids=current_ids).logits[:, -1, :]
+        except Exception as e:
+            logger.warning(f"  step={step} expert1={expert1} 推理失败: {e}")
+
+        # ── Expert 2 前向（相同 current_ids）──
+        logits2 = None
+        try:
+            model_with_adapters.set_adapter(expert2)
+            model_with_adapters.eval()
+            with torch.no_grad():
+                logits2 = model_with_adapters(input_ids=current_ids).logits[:, -1, :]
+        except Exception as e:
+            logger.warning(f"  step={step} expert2={expert2} 推理失败: {e}")
+
+        # ── 融合 ──
+        if logits1 is None and logits2 is None:
             break
-        fused_tokens.append(next_token)
+        elif logits1 is None:
+            p_fused = F.softmax(logits2, dim=-1)
+        elif logits2 is None:
+            p_fused = F.softmax(logits1, dim=-1)
+        else:
+            p1 = F.softmax(logits1, dim=-1)
+            p2 = F.softmax(logits2, dim=-1)
+            p_fused = w1 * p1 + w2 * p2
+
+        next_token = p_fused.argmax(dim=-1, keepdim=True)  # (1, 1)
+        if next_token.item() in stop_ids:
+            break
+
+        fused_tokens.append(next_token.item())
+        current_ids = torch.cat([current_ids, next_token], dim=1)
 
     if not fused_tokens:
         return ''
@@ -776,10 +856,11 @@ def _logit_ensemble_generate(base_model, tokenizer, adapter_paths,
 def _decode_from_logits(tokenizer, logits_list):
     """从logit列表贪婪解码"""
     import torch
+    stop_ids = {tokenizer.eos_token_id, tokenizer.pad_token_id}
     tokens = []
     for l in logits_list:
         token = l.argmax(dim=-1).item()
-        if token == tokenizer.eos_token_id:
+        if token in stop_ids:
             break
         tokens.append(token)
     return tokenizer.decode(tokens, skip_special_tokens=True)
@@ -839,7 +920,12 @@ def run_phase3(args, phase1_results, phase2_results, exp9_phase1, exp9_phase2):
     PLOT_DIR.mkdir(parents=True, exist_ok=True)
 
     exp9_strategies = exp9_phase1.get('strategies', {})
-    soft_rougeL = (exp9_phase2 or {}).get('best_rougeL', None)
+    # 兼容 exp9 phase2 可能用不同 key 存储 Soft Routing 结果
+    soft_rougeL = (
+        (exp9_phase2 or {}).get('best_rougeL')
+        or (exp9_phase2 or {}).get('soft_routing', {}).get('rougeL')
+        or (exp9_phase2 or {}).get('strategies', {}).get('Soft Routing', {}).get('per_domain', {}).get('general')
+    )
     soft_general_rougeL = soft_rougeL  # Exp9 Soft只评估了General域
 
     hard_rougeL = exp9_strategies.get('Hard Routing', {}).get('per_domain', {}).get('general', 0.0)

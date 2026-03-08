@@ -116,16 +116,22 @@ class RouterMLP:
     # ──────────────────────────────────────
 
     def save(self, path) -> None:
-        """保存模型权重"""
+        """保存模型权重（含 input_dim 元数据，供 load 时自动适配）"""
         import torch
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(self.model.state_dict(), path)
-        logger.info(f"Router 已保存: {path}")
+        torch.save(
+            {'state_dict': self.model.state_dict(), 'input_dim': self.input_dim},
+            path,
+        )
+        logger.info(f"Router 已保存: {path} (input_dim={self.input_dim})")
 
     def load(self, path) -> bool:
         """
         加载模型权重
+
+        同时支持新格式（dict 含 state_dict + input_dim）和旧格式（裸 state_dict）。
+        当 checkpoint 中的 input_dim 与当前实例不一致时，自动重建 MLP 以匹配维度。
 
         Returns:
             bool: 加载是否成功
@@ -136,11 +142,32 @@ class RouterMLP:
             logger.error(f"Router 权重文件不存在: {path}")
             return False
         try:
-            self.model.load_state_dict(
-                torch.load(path, map_location=self.device)
-            )
+            ckpt = torch.load(path, map_location=self.device)
+
+            # 区分新格式（dict with metadata）和旧格式（裸 state_dict）
+            if isinstance(ckpt, dict) and 'state_dict' in ckpt:
+                state_dict = ckpt['state_dict']
+                ckpt_input_dim = ckpt.get('input_dim', self.input_dim)
+            else:
+                # 旧格式兼容：直接是 state_dict
+                state_dict = ckpt
+                ckpt_input_dim = self.input_dim
+                logger.warning(
+                    f"Router 权重为旧格式（不含 input_dim 元数据），"
+                    f"假设 input_dim={self.input_dim}"
+                )
+
+            # 若 input_dim 不符，重建 MLP 以匹配 checkpoint 维度
+            if ckpt_input_dim != self.input_dim:
+                logger.warning(
+                    f"input_dim 不匹配（当前={self.input_dim}，"
+                    f"checkpoint={ckpt_input_dim}），重建 MLP..."
+                )
+                self.__init__(input_dim=ckpt_input_dim)
+
+            self.model.load_state_dict(state_dict)
             self.model.eval()
-            logger.info(f"Router 已加载: {path}")
+            logger.info(f"Router 已加载: {path} (input_dim={self.input_dim})")
             return True
         except Exception as e:
             logger.error(f"Router 加载失败: {e}")
@@ -417,12 +444,21 @@ class LearnedRouterInference:
             feature_cache_path: 特征缓存路径（可选，避免重复提取）
         """
         self.extractor = HiddenStateExtractor(base_model, tokenizer, max_length)
+        # input_dim 作为初始猜测值；若 checkpoint 中记录了不同的 input_dim，
+        # RouterMLP.load() 会自动检测并重建模型，无需调用方手动传入正确维度。
         self.router = RouterMLP(input_dim=input_dim)
         self.collapse_threshold = collapse_threshold
         self.feature_cache_path = Path(feature_cache_path) if feature_cache_path else None
 
         if not self.router.load(router_ckpt):
             raise RuntimeError(f"Router 权重加载失败: {router_ckpt}")
+
+        # 加载后同步实际使用的 input_dim（可能因 checkpoint 而被重建）
+        logger.info(
+            f"LearnedRouterInference 初始化完成 | "
+            f"input_dim={self.router.input_dim} | "
+            f"collapse_threshold={collapse_threshold}"
+        )
 
     def route_single(self, input_text: str) -> str:
         """
