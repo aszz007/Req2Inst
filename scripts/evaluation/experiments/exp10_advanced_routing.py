@@ -225,15 +225,24 @@ def run_phase1(args, exp9_phase1):
     train_X = np.concatenate([all_features[d] for d in SPECIALIZED_TYPES], axis=0)
     train_y = np.concatenate([all_labels[d] for d in SPECIALIZED_TYPES], axis=0)
 
-    # General前80%作为验证集
-    n_val = int(len(general_features) * 0.8)
-    val_X = general_features[:n_val]
-    val_y = np.array(general_labels[:n_val])
-    test_X = general_features[n_val:]
-    test_y = np.array(general_labels[n_val:])
+    # General 域：前 40% 加入训练（引入真实 'general' 标签样本），
+    #             40%~80% 作验证集，后 20% 作测试集
+    # 若不加入 general 域训练数据，'general' 类在训练集只有 ~2 条（0.4%），
+    # 导致 MLP 永远不预测 'general'，General 域路由准确率 0%。
+    n_total_general = len(general_features)
+    n_train_general = int(n_total_general * 0.4)   # ~199 条加入训练
+    n_val_end = int(n_total_general * 0.8)           # 验证集截止索引
 
-    logger.info(f"  训练集: {len(train_X)} 条 (specialized domains)")
-    logger.info(f"  验证集: {n_val} 条 (general前80%)")
+    train_X = np.concatenate([train_X, general_features[:n_train_general]], axis=0)
+    train_y = np.concatenate([train_y, np.array(general_labels[:n_train_general])], axis=0)
+
+    val_X = general_features[n_train_general:n_val_end]
+    val_y = np.array(general_labels[n_train_general:n_val_end])
+    test_X = general_features[n_val_end:]
+    test_y = np.array(general_labels[n_val_end:])
+
+    logger.info(f"  训练集: {len(train_X)} 条 (specialized + general前40%)")
+    logger.info(f"  验证集: {len(val_X)} 条 (general 40%~80%)")
     logger.info(f"  测试集: {len(test_X)} 条 (general后20%)")
 
     # 类别分布
@@ -318,19 +327,26 @@ def _rebuild_per_sample_labels(domain, test_data, args):
     labels = []
 
     # 收集各专家在该domain上的缓存
+    # 注意：exp3 的跨域矩阵只涵盖 SPECIALIZED_TYPES × SPECIALIZED_TYPES（3×3），
+    # general 专家从未在专化域（text/image/uml）上评估过，因此：
+    #   - domain in SPECIALIZED_TYPES 时跳过 general 专家（无对应缓存）
+    #   - 不能用 lora_moe/general_predictions.json 替代，那是 general 域的预测，
+    #     索引不对应当前 domain 的测试样本，会引入纯噪声标签
     expert_caches = {}
     for expert_type in ALL_TYPES:
         if expert_type == domain:
+            # 对角线：匹配专家在本域
             cache = load_predictions_cache(CACHE_DIR / 'lora_moe', f'{domain}_predictions.json')
+        elif expert_type == 'general' and domain in SPECIALIZED_TYPES:
+            # general 专家从未在专化域上推理（exp3 只做了 3×3 矩阵），无有效缓存，跳过
+            logger.debug(f"  [标签重建] 跳过 general expert on {domain}（exp3 未生成此缓存）")
+            continue
         else:
-            # 修复：跨域缓存路径应该是 exp3_cross_domain，而非 exp9_oracle
+            # 跨域：使用 exp3_cross_domain 目录（仅含专化域组合）
             cache = load_predictions_cache(
                 CACHE_DIR / 'exp3_cross_domain',
                 f'{expert_type}_expert_on_{domain}_predictions.json'
             )
-            if cache is None and expert_type == 'general':
-                # 尝试lora_moe中的general_expert
-                cache = load_predictions_cache(CACHE_DIR / 'lora_moe', 'general_predictions.json')
         if cache:
             expert_caches[expert_type] = cache.get('samples', [])
         else:
@@ -436,7 +452,18 @@ def _train_router(router, train_X, train_y, val_X, val_y, args):
     loader = DataLoader(dataset, batch_size=32, shuffle=True)
 
     optimizer = torch.optim.AdamW(router.model.parameters(), lr=1e-4, weight_decay=1e-2)
-    criterion = nn.CrossEntropyLoss()
+
+    # 计算类别权重：即使加入了 general 域训练数据，各类样本数仍不均衡，
+    # 逆频率加权避免模型因为多数类数量优势而忽略少数类。
+    class_counts = np.bincount(train_y, minlength=4).astype(float)
+    class_weights = np.where(class_counts > 0, 1.0 / class_counts, 0.0)
+    # 归一化为均值 = 1，数值更稳定
+    class_weights = class_weights / (class_weights.mean() + 1e-9)
+    logger.info(f"  类别样本数: {dict(zip(['text','image','uml','general'], class_counts.astype(int)))}")
+    logger.info(f"  类别权重:   {dict(zip(['text','image','uml','general'], class_weights.round(3)))}")
+    criterion = nn.CrossEntropyLoss(
+        weight=torch.tensor(class_weights, dtype=torch.float32).to(device)
+    )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=50, eta_min=1e-6
     )
@@ -723,25 +750,31 @@ def _run_output_ensemble(router, features, general_test, args):
     samples = []
     routing_stats = defaultdict(int)
 
+    # 预加载所有专家在 general 域的缓存，避免 _single_expert_from_cache
+    # 在每条 w1_raw>=0.85 的样本时反复读取相同的大 JSON 文件（性能修复）
+    preloaded_caches = _load_all_expert_caches_for_general()
+    logger.info(f"  已预加载专家缓存: {list(preloaded_caches.keys())}")
+
     for i, (sample, prob) in enumerate(zip(general_test, probs)):
         # 选top-2专家
         top2_idxs = np.argsort(prob)[::-1][:2]
         expert1 = IDX_TO_EXPERT[top2_idxs[0]]
         expert2 = IDX_TO_EXPERT[top2_idxs[1]]
-        w1 = float(prob[top2_idxs[0]])
-        w2 = float(prob[top2_idxs[1]])
-        # 归一化
-        w_sum = w1 + w2
-        w1, w2 = w1 / w_sum, w2 / w_sum
+        w1_raw = float(prob[top2_idxs[0]])  # 原始 top-1 概率，用于 collapse 阈值判断
+        w2_raw = float(prob[top2_idxs[1]])
+        # 归一化（仅用于 logit 融合权重）
+        w_sum = w1_raw + w2_raw
+        w1 = w1_raw / w_sum
+        w2 = w2_raw / w_sum
 
         routing_stats[f"{expert1}+{expert2}"] += 1
 
         if i % 50 == 0:
             logger.info(f"  Ensemble进度: {i}/{len(general_test)} | 当前: {expert1}({w1:.2f})+{expert2}({w2:.2f})")
 
-        # 如果最高权重>=0.85，退化为单专家推理
-        if w1 >= 0.85:
-            pred = _single_expert_from_cache(expert1, 'general', i)
+        # 如果原始 top-1 概率 >= 0.85，退化为单专家推理（与 need_ensemble 统计逻辑保持一致）
+        if w1_raw >= 0.85:
+            pred = _single_expert_from_cache(expert1, 'general', i, preloaded_caches)
         else:
             pred = _logit_ensemble_generate(
                 model_with_adapters, tokenizer,
@@ -866,10 +899,35 @@ def _decode_from_logits(tokenizer, logits_list):
     return tokenizer.decode(tokens, skip_special_tokens=True)
 
 
-def _single_expert_from_cache(expert_name, domain, sample_idx):
-    """从已有缓存取单专家预测结果"""
+def _single_expert_from_cache(expert_name, domain, sample_idx, preloaded_caches=None):
+    """从已有缓存取单专家预测结果
+
+    Args:
+        preloaded_caches: 可选的预加载缓存字典 {expert_name: [samples]}，
+                          优先使用，避免重复读取磁盘。
+    """
+    # 优先使用调用方传入的预加载缓存
+    if preloaded_caches is not None:
+        samples = preloaded_caches.get(expert_name, [])
+        if samples and sample_idx < len(samples):
+            pred = samples[sample_idx].get('prediction', '')
+            if pred:
+                return pred
+        # 回退到 general expert
+        general_samples = preloaded_caches.get('general', [])
+        if general_samples and sample_idx < len(general_samples):
+            return general_samples[sample_idx].get('prediction', '')
+        return ''
+
+    # 没有预加载缓存时按文件逐条读取（兼容直接调用）
     if expert_name == domain:
         cache = load_predictions_cache(CACHE_DIR / 'lora_moe', f'{domain}_predictions.json')
+    elif expert_name == 'text' and domain == 'general':
+        # text 专家在 general 域的缓存在 exp3_moe3 目录，不在 exp9_oracle
+        cache = load_predictions_cache(
+            CACHE_DIR / 'exp3_moe3_general_via_text',
+            'general_via_text_predictions.json'
+        )
     else:
         cache = load_predictions_cache(
             CACHE_DIR / 'exp9_oracle',
@@ -886,11 +944,28 @@ def _single_expert_from_cache(expert_name, domain, sample_idx):
 
 
 def _load_all_expert_caches_for_general():
-    """加载所有专家在general域上的缓存"""
+    """加载所有专家在general域上的缓存
+
+    注意：text 专家在 general 域的缓存来源于 exp3_moe3_general_via_text
+    （与 _rebuild_general_labels 保持一致），而非 exp9_oracle。
+    image/uml 专家来自 exp9_oracle，general 专家来自 lora_moe。
+    """
     caches = {}
     for expert in ALL_TYPES:
         if expert == 'general':
             cache = load_predictions_cache(CACHE_DIR / 'lora_moe', 'general_predictions.json')
+        elif expert == 'text':
+            # text 专家在 general 域使用 exp3 MoE-3 退化路由缓存
+            cache = load_predictions_cache(
+                CACHE_DIR / 'exp3_moe3_general_via_text',
+                'general_via_text_predictions.json'
+            )
+            if cache is None:
+                logger.warning("  [缓存] text-on-general 主路径未找到，尝试 exp9_oracle 回退")
+                cache = load_predictions_cache(
+                    CACHE_DIR / 'exp9_oracle',
+                    'text_expert_on_general_predictions.json'
+                )
         else:
             cache = load_predictions_cache(
                 CACHE_DIR / 'exp9_oracle',
@@ -898,6 +973,8 @@ def _load_all_expert_caches_for_general():
             )
         if cache:
             caches[expert] = cache.get('samples', [])
+        else:
+            logger.warning(f"  [缓存] 专家 '{expert}' 在 general 域的缓存未找到，该专家将被跳过")
     return caches
 
 
