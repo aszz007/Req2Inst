@@ -203,6 +203,11 @@ class RouterMLP:
                 return self.head(h2)
 
         self.model = _MLP().to(self.device)
+        # 后处理校准偏置：对每个类别的 logit 添加一个标量偏置，
+        # 在验证集上通过坐标下降搜索，使 macro-F1 最大化。
+        # 零向量 = 无校准（默认行为与未校准一致）。
+        self.calibration_offsets: np.ndarray = np.zeros(num_classes, dtype=np.float32)
+        self.num_classes = num_classes
         total_params = sum(p.numel() for p in self.model.parameters())
         logger.info(
             f"RouterMLP 初始化完成 | 参数量: {total_params:,} | 设备: {self.device} | "
@@ -224,12 +229,15 @@ class RouterMLP:
                 'input_dim': self.input_dim,
                 'hidden1': self.hidden1,
                 'hidden2': self.hidden2,
+                'calibration_offsets': self.calibration_offsets,
             },
             path,
         )
+        cal_nonzero = np.any(self.calibration_offsets != 0)
         logger.info(
             f"Router 已保存: {path} "
-            f"(input_dim={self.input_dim}, hidden1={self.hidden1}, hidden2={self.hidden2})"
+            f"(input_dim={self.input_dim}, hidden1={self.hidden1}, hidden2={self.hidden2}, "
+            f"calibrated={'yes' if cal_nonzero else 'no'})"
         )
 
     def load(self, path) -> bool:
@@ -283,9 +291,20 @@ class RouterMLP:
 
             self.model.load_state_dict(state_dict)
             self.model.eval()
+
+            # 恢复校准偏置（旧 checkpoint 不含此字段时保持零向量）
+            if isinstance(ckpt, dict) and 'calibration_offsets' in ckpt:
+                self.calibration_offsets = np.array(
+                    ckpt['calibration_offsets'], dtype=np.float32
+                )
+            else:
+                self.calibration_offsets = np.zeros(self.num_classes, dtype=np.float32)
+
+            cal_nonzero = np.any(self.calibration_offsets != 0)
             logger.info(
                 f"Router 已加载: {path} "
-                f"(input_dim={self.input_dim}, hidden1={self.hidden1}, hidden2={self.hidden2})"
+                f"(input_dim={self.input_dim}, hidden1={self.hidden1}, hidden2={self.hidden2}, "
+                f"calibrated={'yes, offsets=' + str(self.calibration_offsets.round(2)) if cal_nonzero else 'no'})"
             )
             return True
         except Exception as e:
@@ -313,8 +332,33 @@ class RouterMLP:
         with torch.no_grad():
             x = torch.tensor(features, dtype=torch.float32).to(self.device)
             logits = self.model(x)
+
+            # 应用后处理校准偏置（坐标下降在验证集上搜索的最优 per-class 偏移）
+            # 零向量时等价于无校准，不影响未设置校准时的行为
+            if np.any(self.calibration_offsets != 0):
+                offsets_t = torch.tensor(
+                    self.calibration_offsets, dtype=torch.float32, device=logits.device
+                )
+                logits = logits + offsets_t
+
             probs = F.softmax(logits, dim=-1).cpu().numpy()
         return probs
+
+    def set_calibration_offsets(self, offsets: np.ndarray) -> None:
+        """
+        设置后处理校准偏置（由 exp10._calibrate_class_offsets 计算后调用）
+
+        Args:
+            offsets: np.ndarray, shape (4,)，每个类别的 logit 偏置值
+                     正值 → 提高该类别的预测概率（提升 recall）
+                     负值 → 降低该类别的预测概率（提升 precision）
+        """
+        self.calibration_offsets = np.array(offsets, dtype=np.float32)
+        logger.info(
+            f"校准偏置已设置: "
+            f"text={offsets[0]:+.2f}, image={offsets[1]:+.2f}, "
+            f"uml={offsets[2]:+.2f}, general={offsets[3]:+.2f}"
+        )
 
     def predict(self, features: np.ndarray) -> np.ndarray:
         """
