@@ -898,9 +898,25 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
       - 也可能被设为 0（合法内容 token），无条件加入会导致误截断
       - 修复：只在 pad_token_id 明确是特殊符（id>3）且与 eos 不同时才加入
 
+    ── 性能优化: KV Cache ────────────────────────────────────────────────────
+    原实现每个 decoding step 传入完整 current_ids（prompt + 所有已生成 token），
+    导致计算复杂度为 O(n²)：
+      - 假设 prompt 长度 L=300，输出长度 T=512，则每条样本总计算量约
+        Σ(L+t) for t=0..T-1 ≈ (300+512/2)*512 ≈ 280k token 次前向
+      - 两个专家各自一份，实际 ≈ 560k token 次前向，GPU 长时间处理长序列
+      - CPU 需要不断拼接和搬运越来越长的 current_ids，形成 CPU 瓶颈（GPU 利用率~40%）
+
+    修复：每个专家独立维护 KV Cache（past_key_values），每步只处理 1 个新 token：
+      - Prefill 阶段：用完整 prompt 对两个专家各做一次全量前向，得到初始 KV Cache
+      - Decode 阶段：每步只传入上一步生成的单 token + 对应专家的 KV Cache
+      - 计算复杂度降至 O(n)：每步 GPU 只处理 1 个 token，显著降低 CPU 调度开销
+      - 两个专家的 KV Cache 完全独立（past_kv1 / past_kv2），切换 adapter 不互相污染
+      - 注意：KV Cache 存储在 fp16/bf16（非 4bit），24GB 显存完全够用
+        （Qwen3-8B 32层 × 2专家 × max_len≈812 ≈ ~200MB，远小于模型本身占用）
+
     ── 正确性保证 ────────────────────────────────────────────────────────────
-    每一步 t，两个专家共享相同的 current_ids（已生成序列），
-    保证 conditioning context 完全一致，logit 融合在语义上有意义。
+    每一步 t，两个专家的 KV Cache 均由完全相同的 token 序列（prompt + fused_tokens[:t]）
+    积累而来，保证 conditioning context 完全一致，logit 融合在语义上有意义。
     """
     import torch
     from models.prompt_templates.general_template import GeneralInstructionTemplate
@@ -920,42 +936,91 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
         if hasattr(model_with_adapters, 'base_model')
         else next(model_with_adapters.parameters()).device
     )
-    current_ids = tokenizer(prompt, return_tensors='pt').input_ids.to(device)
+    prompt_ids = tokenizer(prompt, return_tensors='pt').input_ids.to(device)
 
+    # ── Prefill 阶段：完整 prompt 各过一次两个专家，建立各自 KV Cache ──
+    # 注意：两个专家的 KV Cache 独立存储，切换 adapter 时彼此不干扰
+    past_kv1, past_kv2 = None, None
+    logits1_init, logits2_init = None, None
+
+    try:
+        model_with_adapters.set_adapter(expert1)
+        model_with_adapters.eval()
+        with torch.no_grad():
+            out1 = model_with_adapters(input_ids=prompt_ids, use_cache=True)
+            logits1_init = out1.logits[:, -1, :]   # (1, vocab_size)
+            past_kv1 = out1.past_key_values         # expert1 专属 KV Cache
+    except Exception as e:
+        logger.warning(f"  prefill expert1={expert1} 失败: {e}")
+
+    try:
+        model_with_adapters.set_adapter(expert2)
+        model_with_adapters.eval()
+        with torch.no_grad():
+            out2 = model_with_adapters(input_ids=prompt_ids, use_cache=True)
+            logits2_init = out2.logits[:, -1, :]   # (1, vocab_size)
+            past_kv2 = out2.past_key_values         # expert2 专属 KV Cache
+    except Exception as e:
+        logger.warning(f"  prefill expert2={expert2} 失败: {e}")
+
+    # Prefill 完全失败则返回空串
+    if logits1_init is None and logits2_init is None:
+        return ''
+
+    # ── 第一个 token：由 prefill 的 logits 融合得到 ──
+    if logits1_init is None:
+        logits_fused_init = logits2_init
+    elif logits2_init is None:
+        logits_fused_init = logits1_init
+    else:
+        logits_fused_init = w1 * logits1_init + w2 * logits2_init  # logit空间加权
+
+    next_token = logits_fused_init.argmax(dim=-1, keepdim=True)  # (1, 1)
     fused_tokens = []
 
-    for step in range(max_new_tokens):
-        # ── Expert 1 前向 ──
-        logits1 = None
-        try:
-            model_with_adapters.set_adapter(expert1)
-            model_with_adapters.eval()
-            with torch.no_grad():
-                logits1 = model_with_adapters(input_ids=current_ids).logits[:, -1, :]
-        except Exception as e:
-            logger.warning(f"  step={step} expert1={expert1} 推理失败: {e}")
+    if next_token.item() in stop_ids:
+        return ''
+    fused_tokens.append(next_token.item())
 
-        # ── Expert 2 前向（相同 current_ids，保证 conditioning context 一致）──
-        logits2 = None
-        try:
-            model_with_adapters.set_adapter(expert2)
-            model_with_adapters.eval()
-            with torch.no_grad():
-                logits2 = model_with_adapters(input_ids=current_ids).logits[:, -1, :]
-        except Exception as e:
-            logger.warning(f"  step={step} expert2={expert2} 推理失败: {e}")
+    # ── Decode 阶段：每步只传入上一个 token + 对应 KV Cache，O(n) 复杂度 ──
+    for step in range(max_new_tokens - 1):
+        logits1, logits2 = None, None
 
-        # ── 修复1: logit 空间加权融合（Product of Experts）──
-        #
-        # 原代码（有 bug）：
-        #   p1 = F.softmax(logits1, dim=-1)
-        #   p2 = F.softmax(logits2, dim=-1)
-        #   p_fused = w1 * p1 + w2 * p2        # ← 概率空间算术混合，分布坍缩
-        #
-        # 修复后：直接在 logit 空间加权，等价于 Product of Experts
-        #   logits_fused = w1 * logits1 + w2 * logits2
-        #
-        # 注意：对单专家回退情形，直接用原始 logits 做 argmax，语义等价于原实现。
+        # Expert 1：传入单 token + expert1 专属 KV Cache
+        if past_kv1 is not None:
+            try:
+                model_with_adapters.set_adapter(expert1)
+                model_with_adapters.eval()
+                with torch.no_grad():
+                    out1 = model_with_adapters(
+                        input_ids=next_token,
+                        past_key_values=past_kv1,
+                        use_cache=True,
+                    )
+                    logits1 = out1.logits[:, -1, :]
+                    past_kv1 = out1.past_key_values  # 更新 expert1 KV Cache
+            except Exception as e:
+                logger.warning(f"  step={step} expert1={expert1} 推理失败: {e}")
+                past_kv1 = None  # KV Cache 失效，后续降级
+
+        # Expert 2：传入相同单 token（conditioning context 一致）+ expert2 专属 KV Cache
+        if past_kv2 is not None:
+            try:
+                model_with_adapters.set_adapter(expert2)
+                model_with_adapters.eval()
+                with torch.no_grad():
+                    out2 = model_with_adapters(
+                        input_ids=next_token,
+                        past_key_values=past_kv2,
+                        use_cache=True,
+                    )
+                    logits2 = out2.logits[:, -1, :]
+                    past_kv2 = out2.past_key_values  # 更新 expert2 KV Cache
+            except Exception as e:
+                logger.warning(f"  step={step} expert2={expert2} 推理失败: {e}")
+                past_kv2 = None
+
+        # ── logit 空间加权融合（Product of Experts），与修复1保持一致 ──
         if logits1 is None and logits2 is None:
             break
         elif logits1 is None:
@@ -963,14 +1028,13 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
         elif logits2 is None:
             logits_fused = logits1
         else:
-            logits_fused = w1 * logits1 + w2 * logits2  # ← 核心修复：logit空间加权
+            logits_fused = w1 * logits1 + w2 * logits2
 
         next_token = logits_fused.argmax(dim=-1, keepdim=True)  # (1, 1)
         if next_token.item() in stop_ids:
             break
 
         fused_tokens.append(next_token.item())
-        current_ids = torch.cat([current_ids, next_token], dim=1)
 
     if not fused_tokens:
         return ''
