@@ -55,6 +55,7 @@ from src.utils.logger import get_logger
 from src.routing.learned_router import (
     RouterMLP, HiddenStateExtractor,
     EXPERT_TO_IDX, IDX_TO_EXPERT,
+    FocalLoss,
 )
 
 logger = get_logger('experiments.exp10')
@@ -458,61 +459,116 @@ def _train_router(router, train_X, train_y, val_X, val_y, args):
     """
     训练MLP路由器
 
-    优化要点（对比原实现）：
-    1. 早停指标改为 macro-F1（原来是 accuracy）
-       - accuracy 在不均衡类别下会偏向多数类（text 最多），模型只要全预测 text
-         就能获得较高 accuracy，掩盖了少数类（image/general）完全没学到的事实
-       - macro-F1 对每个类别一视同仁，只要某类 recall=0 就会直接拉低指标
-    2. patience 5 → 15，max_epochs 50 → 100
-       - 原来 5 个 epoch 无提升就停止，等价于约 110 个梯度步，严重不足
-    3. 学习率 1e-4 → 5e-4
-       - 2.1M 参数 MLP 在 ~700 样本上收敛极快，更大 LR 可加速有效学习
-    4. 加入 label_smoothing=0.1
-       - Oracle 标签本身存在噪声（两个专家 ROUGE-L 相差很小时标签近似随机），
-         软标签可防止模型对噪声标签过拟合
+    相比上一版本的优化（本次针对 text/general 召回率低的专项改进）：
+
+    ── 问题诊断 ─────────────────────────────────────────────────────────────
+    上版结果: text=79.4%, general=71.5%（global routing acc）
+    分类报告: general recall=0.38（严重偏低），text recall=0.87（尚可）
+    根因分析：
+    1. CrossEntropyLoss + 类权重：对"以中等置信度误分 general→text"的惩罚不足
+       CE 损失平等对待"p_t=0.3 误分"和"p_t=0.01 误分"，梯度信号弱
+    2. CosineAnnealingWarmRestarts（T_0=20）：T_0 处 LR 重启，
+       Epoch 20 时 val_F1 从 0.63 掉回 0.61，最优 checkpoint 在重启前被错过
+    3. 64 条 general 训练样本：模型在训练集中几乎没见过 general 样本，
+       决策边界完全偏向 text 侧
+
+    ── 本次四项优化 ─────────────────────────────────────────────────────────
+    1. Focal Loss（gamma=2）
+       FL = -alpha_t · (1-p_t)^gamma · CE
+       p_t 越低（越难分），(1-p_t)^2 越大，梯度惩罚越强。
+       general 样本被误判为 text 时 p_t 约 0.2~0.4，focal weight 约 0.36~0.64，
+       有效放大梯度信号，迫使模型专注学习 text-general 边界。
+       gamma=0 时退化为加权 CE，可对比验证。
+
+    2. 少数类噪声增强（general × 4份 + text × 1份）
+       在 L2归一化特征空间加入 std=0.005 的高斯噪声（相当于 0.5% 量级扰动）：
+         general: 64 → 64 + 4×64 = 320 条（增加 5 倍训练信号）
+         text:   244 → 244 + 244 = 488 条（缩小训练量差距，防止 text 过度压制 general）
+       噪声强度刻意很小：不改变特征语义方向，仅防止模型对稀疏 general 样本记忆式过拟合。
+       增强后重新计算逆频率类权重（general 权重适当下降，由 Focal Loss 补偿）。
+
+    3. ReduceLROnPlateau（替代 CosineAnnealingWarmRestarts）
+       mode='max', patience=8, factor=0.5：连续 8 个 epoch val_F1 无改善则 LR 减半。
+       消除 WarmRestarts 的 LR 重启，避免已找到的好点被高 LR 破坏；
+       plateau 检测让 LR 下降时机与验证集性能直接挂钩，更自适应。
+
+    4. patience 15 → 20 + per-class F1 监控
+       给模型更多时间在低 LR 区域精调 text-general 决策面；
+       每 10 epoch 打印各类别独立 F1，便于诊断哪类仍在改善。
     """
     import torch
     import torch.nn as nn
-    import torch.nn.functional as F
     from torch.utils.data import DataLoader, TensorDataset
     from sklearn.metrics import f1_score
 
     device = router.device
-    X_t = torch.tensor(train_X, dtype=torch.float32)
-    y_t = torch.tensor(train_y, dtype=torch.long)
+
+    # ── 优化2：少数类噪声增强（增强前先复制，不修改原始数组）──
+    rng = np.random.default_rng(42)
+    noise_std = 0.005  # L2归一化空间：0.5% 量级，不改变语义方向
+
+    aug_X_parts = [train_X]
+    aug_y_parts = [train_y]
+
+    general_mask = (train_y == 3)
+    if general_mask.sum() > 0:
+        gX = train_X[general_mask]
+        for _ in range(4):   # general: 64 → 320 (+4份噪声副本)
+            aug_X_parts.append(gX + rng.standard_normal(gX.shape).astype(np.float32) * noise_std)
+            aug_y_parts.append(np.full(len(gX), 3, dtype=np.int64))
+        logger.info(f"  [增强] general: {general_mask.sum()} → {general_mask.sum()*5} 条")
+
+    text_mask = (train_y == 0)
+    if text_mask.sum() > 0:
+        tX = train_X[text_mask]
+        aug_X_parts.append(tX + rng.standard_normal(tX.shape).astype(np.float32) * noise_std)
+        aug_y_parts.append(np.zeros(len(tX), dtype=np.int64))
+        logger.info(f"  [增强] text: {text_mask.sum()} → {text_mask.sum()*2} 条")
+
+    train_X_aug = np.concatenate(aug_X_parts, axis=0)
+    train_y_aug = np.concatenate(aug_y_parts, axis=0).astype(np.int64)
+    logger.info(f"  增强后训练集: {len(train_X_aug)} 条 (原 {len(train_X)} 条)")
+
+    # 增强后重新计算类权重
+    class_counts = np.bincount(train_y_aug, minlength=4).astype(float)
+    class_weights = np.where(class_counts > 0, 1.0 / class_counts, 0.0)
+    class_weights = class_weights / (class_weights.mean() + 1e-9)
+    logger.info(f"  类别样本数(增强后): {dict(zip(['text','image','uml','general'], class_counts.astype(int)))}")
+    logger.info(f"  类别权重(增强后):   {dict(zip(['text','image','uml','general'], class_weights.round(3)))}")
+
+    X_t = torch.tensor(train_X_aug, dtype=torch.float32)
+    y_t = torch.tensor(train_y_aug, dtype=torch.long)
     X_v = torch.tensor(val_X, dtype=torch.float32).to(device)
     y_v = torch.tensor(val_y, dtype=torch.long).to(device)
 
     dataset = TensorDataset(X_t, y_t)
-    loader = DataLoader(dataset, batch_size=32, shuffle=True)
+    # batch_size 维持32，但训练集更大，每 epoch 步数更多
+    loader = DataLoader(dataset, batch_size=32, shuffle=True, drop_last=False)
 
     optimizer = torch.optim.AdamW(
         router.model.parameters(), lr=5e-4, weight_decay=1e-2
     )
 
-    # 类别权重：逆频率加权，归一化为均值=1
-    class_counts = np.bincount(train_y, minlength=4).astype(float)
-    class_weights = np.where(class_counts > 0, 1.0 / class_counts, 0.0)
-    class_weights = class_weights / (class_weights.mean() + 1e-9)
-    logger.info(f"  类别样本数: {dict(zip(['text','image','uml','general'], class_counts.astype(int)))}")
-    logger.info(f"  类别权重:   {dict(zip(['text','image','uml','general'], class_weights.round(3)))}")
+    # ── 优化1：Focal Loss（gamma=2，含逆频率类权重）──
+    alpha_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
+    criterion = FocalLoss(alpha=alpha_tensor, gamma=2.0)
 
-    criterion = nn.CrossEntropyLoss(
-        weight=torch.tensor(class_weights, dtype=torch.float32).to(device),
-        label_smoothing=0.1,   # 防止对噪声 Oracle 标签过拟合
+    # ── 优化3：ReduceLROnPlateau（替代 CosineAnnealingWarmRestarts）──
+    # mode='max': val_macro_F1 越高越好
+    # patience=8: 连续 8 epoch 无改善才降 LR（与 early_stop_patience=20 配合）
+    # factor=0.5: 每次降为当前 LR 的一半
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='max', factor=0.5, patience=8, min_lr=1e-6, verbose=False
     )
 
-    # CosineAnnealingWarmRestarts：T_0=20 个 epoch 后重启一次
-    # 比 CosineAnnealingLR 更不容易陷入局部最优
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=20, T_mult=2, eta_min=1e-6
-    )
-
-    max_epochs = 10 if args.test_mode else 100
-    patience = 5 if args.test_mode else 15
+    max_epochs = 10 if args.test_mode else 120   # 稍微放宽上限
+    patience = 5 if args.test_mode else 20        # ── 优化4：patience 15→20 ──
     best_val_f1 = 0.0
     no_improve = 0
-    history = {'train_loss': [], 'val_acc': [], 'val_macro_f1': []}
+    history = {'train_loss': [], 'val_acc': [], 'val_macro_f1': [],
+               'per_class_f1': [], 'lr': []}
+
+    y_v_np = y_v.cpu().numpy()
 
     for epoch in range(max_epochs):
         router.model.train()
@@ -526,29 +582,40 @@ def _train_router(router, train_X, train_y, val_X, val_y, args):
             torch.nn.utils.clip_grad_norm_(router.model.parameters(), 1.0)
             optimizer.step()
             epoch_loss += loss.item()
-        scheduler.step()
 
-        # 验证：同时记录 accuracy 和 macro-F1，以 macro-F1 为早停依据
+        # 验证
         router.model.eval()
         with torch.no_grad():
             val_logits = router.model(X_v)
             val_pred = val_logits.argmax(dim=1).cpu().numpy()
-        y_v_np = y_v.cpu().numpy()
+
         val_acc = float((val_pred == y_v_np).mean())
         val_f1 = float(f1_score(y_v_np, val_pred, average='macro', zero_division=0))
+        # ── 优化4：per-class F1（text=0, image=1, uml=2, general=3）──
+        per_class = f1_score(y_v_np, val_pred, average=None,
+                             zero_division=0, labels=[0, 1, 2, 3]).tolist()
 
         avg_loss = epoch_loss / len(loader)
+        current_lr = optimizer.param_groups[0]['lr']
         history['train_loss'].append(avg_loss)
         history['val_acc'].append(val_acc)
         history['val_macro_f1'].append(val_f1)
+        history['per_class_f1'].append(per_class)
+        history['lr'].append(current_lr)
 
+        # 打印：epoch 1 + 每 10 epoch + 最终 epoch
         if (epoch + 1) % 10 == 0 or epoch == 0:
             logger.info(
                 f"  Epoch {epoch+1}/{max_epochs}: "
-                f"loss={avg_loss:.4f}, val_acc={val_acc:.4f}, val_macro_F1={val_f1:.4f}"
+                f"loss={avg_loss:.4f}, val_acc={val_acc:.4f}, val_macro_F1={val_f1:.4f} | "
+                f"per-class F1: text={per_class[0]:.3f} img={per_class[1]:.3f} "
+                f"uml={per_class[2]:.3f} gen={per_class[3]:.3f} | lr={current_lr:.2e}"
             )
 
-        # 早停：以 macro-F1 为准，而非 accuracy
+        # ── 优化3：ReduceLROnPlateau 步进（必须在验证后调用，传入监控指标）──
+        scheduler.step(val_f1)
+
+        # 早停：以 macro-F1 为准
         if val_f1 > best_val_f1:
             best_val_f1 = val_f1
             no_improve = 0

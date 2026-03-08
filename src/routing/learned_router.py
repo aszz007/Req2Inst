@@ -46,16 +46,98 @@ IDX_TO_EXPERT: Dict[int, str] = {v: k for k, v in EXPERT_TO_IDX.items()}
 ALL_EXPERTS: List[str] = ['text', 'image', 'uml', 'general']
 
 
+class FocalLoss:
+    """
+    Focal Loss：聚焦难分样本，专项解决 text-general 边界模糊导致的 general recall 低问题
+
+    FL(p_t) = -alpha_t · (1 - p_t)^gamma · log(p_t)
+
+    ── 为什么 CrossEntropyLoss + 类权重还不够 ─────────────────────────────────
+    CrossEntropyLoss 对所有样本同等惩罚（经类权重缩放后）。
+    然而 general 样本被误分为 text 时，模型对 text 的置信度往往已经较高（0.5~0.7），
+    常规 CE 对这类"中等置信度误分"的惩罚力度仍然不足：
+      - CE 损失 ≈ -log(0.3) = 1.2（general 被以 70% 置信度错判为 text）
+      - 类权重 1.86 × 1.2 = 2.2，梯度信号仍偏弱
+
+    Focal Loss 在此基础上乘以 (1-p_t)^gamma：
+      - p_t=0.3 时，focal weight = (1-0.3)^2 = 0.49，损失 = 0.49 × 1.2 = 0.59
+      - p_t=0.1 时，focal weight = (1-0.1)^2 = 0.81，损失 = 0.81 × 2.3 = 1.86
+    即越难分的样本，gamma 项越大，梯度越强（而非越小）。
+
+    ── 实现为纯函数包装而非 nn.Module ──────────────────────────────────────────
+    避免在 exp10._train_router 中引入额外的 Module 注册，保持调用侧简洁。
+    FocalLoss 实例可直接替换 nn.CrossEntropyLoss() 使用：
+        criterion = FocalLoss(alpha=class_weights_tensor, gamma=2.0)
+        loss = criterion(logits, targets)
+    """
+
+    def __init__(self, alpha=None, gamma: float = 2.0):
+        """
+        Args:
+            alpha: 类别权重张量 (num_classes,)，已移至正确 device；
+                   传入前应已做逆频率归一化，与 CrossEntropyLoss(weight=...) 语义一致
+            gamma: 聚焦参数，值越大对难分样本的权重放大越强，推荐 1.5~2.5
+                   gamma=0 退化为加权 CrossEntropyLoss
+        """
+        self.alpha = alpha  # torch.Tensor or None
+        self.gamma = gamma
+
+    def __call__(self, logits, targets):
+        """
+        Args:
+            logits: (N, num_classes)，模型原始输出（未经 softmax）
+            targets: (N,)，整数类别标签
+
+        Returns:
+            scalar loss
+        """
+        import torch
+        import torch.nn.functional as F
+
+        # 移动 alpha 到当前 logits 所在设备（首次 __call__ 时自动对齐）
+        alpha = self.alpha
+        if alpha is not None and alpha.device != logits.device:
+            alpha = alpha.to(logits.device)
+            self.alpha = alpha  # 缓存，避免每步重复搬运
+
+        # per-sample 标准 CE 损失（含类权重）
+        ce_loss = F.cross_entropy(logits, targets, weight=alpha, reduction='none')
+
+        # p_t：模型对正确类别的预测概率
+        # 利用 CE=-log(p_t) 反推，避免重复 softmax
+        with torch.no_grad():
+            p_t = torch.exp(-ce_loss)
+
+        # Focal weight：难分样本（p_t 低）自动获得更大权重
+        focal_weight = (1.0 - p_t) ** self.gamma
+
+        return (focal_weight * ce_loss).mean()
+
+
 class RouterMLP:
     """
-    轻量级 MLP 路由分类器
+    带残差连接的 MLP 路由分类器
 
-    架构：
-        Linear(input_dim, 512) → LayerNorm → ReLU → Dropout(0.2)
-        → Linear(512, 128) → LayerNorm → ReLU → Dropout(0.1)
-        → Linear(128, 4) → Softmax
+    ── 架构说明 ──────────────────────────────────────────────────────────────
+    Block1: Linear(input_dim→512) → LayerNorm → GELU → Dropout(0.15)
+    Block2: Linear(512→256)       → LayerNorm → GELU → Dropout(0.10)
+    Skip:   Linear(512→256, bias=False)   ← 残差跳跃投影
+    Add:    Block2_out + Skip_out
+    Head:   Linear(256→4)
 
-    总参数量约 2.1M（input_dim=4096 时）
+    相比原始 Sequential 架构的改进：
+    1. hidden2: 128 → 256
+       原来 128 维决策层对 text/general 的特征边界（高维、连续）表达能力不足；
+       256 维提供更充裕的分类空间，捕捉两类之间的细粒度差异。
+    2. 残差 Skip 连接（512→256）
+       Block1 提取的粗粒度域特征可以绕过 Block2 直接传入分类头；
+       允许 Head 同时参考"粗粒度原始信号"和"Block2 的精炼信号"，
+       类似 ResNet 里 skip 有助于训练稳定、防止梯度消失。
+    3. ReLU → GELU
+       GELU 在零点附近的平滑梯度对小样本（64条 general）更友好，
+       避免 ReLU 的"死神经元"问题导致 general 方向的梯度永久消失。
+
+    总参数量约 2.2M（input_dim=4096 时，略多于原 2.1M）
 
     使用示例：
         router = RouterMLP()
@@ -75,10 +157,10 @@ class RouterMLP:
         self,
         input_dim: int = 4096,
         hidden1: int = 512,
-        hidden2: int = 128,
+        hidden2: int = 256,
         num_classes: int = 4,
-        dropout1: float = 0.1,
-        dropout2: float = 0.05,
+        dropout1: float = 0.15,
+        dropout2: float = 0.10,
     ):
         try:
             import torch
@@ -87,51 +169,78 @@ class RouterMLP:
             raise RuntimeError("RouterMLP 需要安装 PyTorch")
 
         self.input_dim = input_dim
+        self.hidden1 = hidden1
+        self.hidden2 = hidden2
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         class _MLP(nn.Module):
             def __init__(self):
                 super().__init__()
-                self.net = nn.Sequential(
+                # Block1：高维压缩，提取粗粒度域特征
+                self.block1 = nn.Sequential(
                     nn.Linear(input_dim, hidden1),
                     nn.LayerNorm(hidden1),
-                    nn.ReLU(),
+                    nn.GELU(),
                     nn.Dropout(dropout1),
+                )
+                # Block2：特征精炼，学习类间细粒度边界
+                self.block2 = nn.Sequential(
                     nn.Linear(hidden1, hidden2),
                     nn.LayerNorm(hidden2),
-                    nn.ReLU(),
+                    nn.GELU(),
                     nn.Dropout(dropout2),
-                    nn.Linear(hidden2, num_classes),
                 )
+                # Skip：残差跳跃投影，无 bias 避免额外偏置干扰 LayerNorm
+                # 梯度可绕过 Block2 直接回传，缓解 text-general 边界的梯度消失
+                self.skip = nn.Linear(hidden1, hidden2, bias=False)
+                # 分类头
+                self.head = nn.Linear(hidden2, num_classes)
 
             def forward(self, x):
-                return self.net(x)
+                h1 = self.block1(x)
+                # 残差融合：精炼特征 + 跳跃连接，共同送入分类头
+                h2 = self.block2(h1) + self.skip(h1)
+                return self.head(h2)
 
         self.model = _MLP().to(self.device)
         total_params = sum(p.numel() for p in self.model.parameters())
-        logger.info(f"RouterMLP 初始化完成 | 参数量: {total_params:,} | 设备: {self.device}")
+        logger.info(
+            f"RouterMLP 初始化完成 | 参数量: {total_params:,} | 设备: {self.device} | "
+            f"架构: {input_dim}→{hidden1}→(residual)→{hidden2}→{num_classes}"
+        )
 
     # ──────────────────────────────────────
     # 权重管理
     # ──────────────────────────────────────
 
     def save(self, path) -> None:
-        """保存模型权重（含 input_dim 元数据，供 load 时自动适配）"""
+        """保存模型权重（含架构元数据，供 load 时精确重建）"""
         import torch
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(
-            {'state_dict': self.model.state_dict(), 'input_dim': self.input_dim},
+            {
+                'state_dict': self.model.state_dict(),
+                'input_dim': self.input_dim,
+                'hidden1': self.hidden1,
+                'hidden2': self.hidden2,
+            },
             path,
         )
-        logger.info(f"Router 已保存: {path} (input_dim={self.input_dim})")
+        logger.info(
+            f"Router 已保存: {path} "
+            f"(input_dim={self.input_dim}, hidden1={self.hidden1}, hidden2={self.hidden2})"
+        )
 
     def load(self, path) -> bool:
         """
         加载模型权重
 
-        同时支持新格式（dict 含 state_dict + input_dim）和旧格式（裸 state_dict）。
-        当 checkpoint 中的 input_dim 与当前实例不一致时，自动重建 MLP 以匹配维度。
+        支持三种格式：
+          1. 新格式（含 input_dim + hidden1 + hidden2）：精确重建架构后加载
+          2. 中间格式（含 input_dim，不含 hidden1/hidden2）：
+             假设旧默认值 hidden1=512, hidden2=128 重建
+          3. 旧格式（裸 state_dict）：使用当前实例参数，并给出警告
 
         Returns:
             bool: 加载是否成功
@@ -142,32 +251,42 @@ class RouterMLP:
             logger.error(f"Router 权重文件不存在: {path}")
             return False
         try:
-            ckpt = torch.load(path, map_location=self.device)
+            ckpt = torch.load(path, map_location=self.device, weights_only=False)
 
-            # 区分新格式（dict with metadata）和旧格式（裸 state_dict）
             if isinstance(ckpt, dict) and 'state_dict' in ckpt:
                 state_dict = ckpt['state_dict']
                 ckpt_input_dim = ckpt.get('input_dim', self.input_dim)
+                ckpt_hidden1 = ckpt.get('hidden1', 512)   # 旧checkpoint默认值
+                ckpt_hidden2 = ckpt.get('hidden2', 128)   # 旧checkpoint默认值
             else:
-                # 旧格式兼容：直接是 state_dict
                 state_dict = ckpt
                 ckpt_input_dim = self.input_dim
+                ckpt_hidden1, ckpt_hidden2 = self.hidden1, self.hidden2
                 logger.warning(
-                    f"Router 权重为旧格式（不含 input_dim 元数据），"
-                    f"假设 input_dim={self.input_dim}"
+                    f"Router 权重为旧格式（裸 state_dict），"
+                    f"假设 input_dim={self.input_dim}, hidden1={self.hidden1}, hidden2={self.hidden2}"
                 )
 
-            # 若 input_dim 不符，重建 MLP 以匹配 checkpoint 维度
-            if ckpt_input_dim != self.input_dim:
+            # 若架构参数不匹配，重建 MLP
+            if (ckpt_input_dim != self.input_dim
+                    or ckpt_hidden1 != self.hidden1
+                    or ckpt_hidden2 != self.hidden2):
                 logger.warning(
-                    f"input_dim 不匹配（当前={self.input_dim}，"
-                    f"checkpoint={ckpt_input_dim}），重建 MLP..."
+                    f"架构不匹配（当前: {self.input_dim}/{self.hidden1}/{self.hidden2}，"
+                    f"checkpoint: {ckpt_input_dim}/{ckpt_hidden1}/{ckpt_hidden2}），重建 MLP..."
                 )
-                self.__init__(input_dim=ckpt_input_dim)
+                self.__init__(
+                    input_dim=ckpt_input_dim,
+                    hidden1=ckpt_hidden1,
+                    hidden2=ckpt_hidden2,
+                )
 
             self.model.load_state_dict(state_dict)
             self.model.eval()
-            logger.info(f"Router 已加载: {path} (input_dim={self.input_dim})")
+            logger.info(
+                f"Router 已加载: {path} "
+                f"(input_dim={self.input_dim}, hidden1={self.hidden1}, hidden2={self.hidden2})"
+            )
             return True
         except Exception as e:
             logger.error(f"Router 加载失败: {e}")
