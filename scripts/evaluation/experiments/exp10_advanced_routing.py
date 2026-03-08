@@ -219,31 +219,49 @@ def run_phase1(args, exp9_phase1):
     del lm, base_model, tokenizer
     _cleanup_gpu()
 
-    # ── 步骤3: 组合训练数据 ──
+    # ── 步骤3: 组合训练数据（分层混合验证集）──
     logger.info("\n--- 步骤3: 组合训练数据 ---")
 
-    train_X = np.concatenate([all_features[d] for d in SPECIALIZED_TYPES], axis=0)
-    train_y = np.concatenate([all_labels[d] for d in SPECIALIZED_TYPES], axis=0)
+    # 关键修复：验证集必须包含所有域的样本，而非只有 general 域。
+    # 原实现的问题：训练集以专化域为主，验证集全是 general 域，
+    # early stop 信号反映的是 general 域路由质量，而非专化域的学习进度。
+    # 后果：模型在专化域还未充分收敛时就因 general 域 val_acc 停滞而提前停止。
+    #
+    # 方案：专化域各取后20%作验证，前80%作训练；
+    #       general域前40%训练、40%-80%验证、后20%最终测试集（不参与训练/验证）。
+    val_parts_X, val_parts_y = [], []
+    train_parts_X, train_parts_y = [], []
 
-    # General 域：前 40% 加入训练（引入真实 'general' 标签样本），
-    #             40%~80% 作验证集，后 20% 作测试集
-    # 若不加入 general 域训练数据，'general' 类在训练集只有 ~2 条（0.4%），
-    # 导致 MLP 永远不预测 'general'，General 域路由准确率 0%。
+    for domain in SPECIALIZED_TYPES:
+        feats = all_features[domain]
+        lbls = all_labels[domain]
+        n = len(feats)
+        n_val = max(1, int(n * 0.2))
+        train_parts_X.append(feats[:-n_val])
+        train_parts_y.append(lbls[:-n_val])
+        val_parts_X.append(feats[-n_val:])
+        val_parts_y.append(lbls[-n_val:])
+
+    # General域
     n_total_general = len(general_features)
-    n_train_general = int(n_total_general * 0.4)   # ~199 条加入训练
-    n_val_end = int(n_total_general * 0.8)           # 验证集截止索引
+    n_train_general = int(n_total_general * 0.4)
+    n_val_end = int(n_total_general * 0.8)
 
-    train_X = np.concatenate([train_X, general_features[:n_train_general]], axis=0)
-    train_y = np.concatenate([train_y, np.array(general_labels[:n_train_general])], axis=0)
+    train_parts_X.append(general_features[:n_train_general])
+    train_parts_y.append(np.array(general_labels[:n_train_general]))
+    val_parts_X.append(general_features[n_train_general:n_val_end])
+    val_parts_y.append(np.array(general_labels[n_train_general:n_val_end]))
 
-    val_X = general_features[n_train_general:n_val_end]
-    val_y = np.array(general_labels[n_train_general:n_val_end])
+    train_X = np.concatenate(train_parts_X, axis=0)
+    train_y = np.concatenate(train_parts_y, axis=0)
+    val_X = np.concatenate(val_parts_X, axis=0)
+    val_y = np.concatenate(val_parts_y, axis=0)
     test_X = general_features[n_val_end:]
     test_y = np.array(general_labels[n_val_end:])
 
-    logger.info(f"  训练集: {len(train_X)} 条 (specialized + general前40%)")
-    logger.info(f"  验证集: {len(val_X)} 条 (general 40%~80%)")
-    logger.info(f"  测试集: {len(test_X)} 条 (general后20%)")
+    logger.info(f"  训练集: {len(train_X)} 条 (specialized前80% + general前40%)")
+    logger.info(f"  验证集: {len(val_X)} 条 (specialized后20% + general 40%~80%，混合域)")
+    logger.info(f"  测试集: {len(test_X)} 条 (general后20%，最终评估)")
 
     # 类别分布
     for i, name in IDX_TO_EXPERT.items():
@@ -437,10 +455,27 @@ def _rebuild_general_labels(test_data, args):
     return labels
 
 def _train_router(router, train_X, train_y, val_X, val_y, args):
-    """训练MLP路由器"""
+    """
+    训练MLP路由器
+
+    优化要点（对比原实现）：
+    1. 早停指标改为 macro-F1（原来是 accuracy）
+       - accuracy 在不均衡类别下会偏向多数类（text 最多），模型只要全预测 text
+         就能获得较高 accuracy，掩盖了少数类（image/general）完全没学到的事实
+       - macro-F1 对每个类别一视同仁，只要某类 recall=0 就会直接拉低指标
+    2. patience 5 → 15，max_epochs 50 → 100
+       - 原来 5 个 epoch 无提升就停止，等价于约 110 个梯度步，严重不足
+    3. 学习率 1e-4 → 5e-4
+       - 2.1M 参数 MLP 在 ~700 样本上收敛极快，更大 LR 可加速有效学习
+    4. 加入 label_smoothing=0.1
+       - Oracle 标签本身存在噪声（两个专家 ROUGE-L 相差很小时标签近似随机），
+         软标签可防止模型对噪声标签过拟合
+    """
     import torch
     import torch.nn as nn
+    import torch.nn.functional as F
     from torch.utils.data import DataLoader, TensorDataset
+    from sklearn.metrics import f1_score
 
     device = router.device
     X_t = torch.tensor(train_X, dtype=torch.float32)
@@ -451,28 +486,33 @@ def _train_router(router, train_X, train_y, val_X, val_y, args):
     dataset = TensorDataset(X_t, y_t)
     loader = DataLoader(dataset, batch_size=32, shuffle=True)
 
-    optimizer = torch.optim.AdamW(router.model.parameters(), lr=1e-4, weight_decay=1e-2)
+    optimizer = torch.optim.AdamW(
+        router.model.parameters(), lr=5e-4, weight_decay=1e-2
+    )
 
-    # 计算类别权重：即使加入了 general 域训练数据，各类样本数仍不均衡，
-    # 逆频率加权避免模型因为多数类数量优势而忽略少数类。
+    # 类别权重：逆频率加权，归一化为均值=1
     class_counts = np.bincount(train_y, minlength=4).astype(float)
     class_weights = np.where(class_counts > 0, 1.0 / class_counts, 0.0)
-    # 归一化为均值 = 1，数值更稳定
     class_weights = class_weights / (class_weights.mean() + 1e-9)
     logger.info(f"  类别样本数: {dict(zip(['text','image','uml','general'], class_counts.astype(int)))}")
     logger.info(f"  类别权重:   {dict(zip(['text','image','uml','general'], class_weights.round(3)))}")
+
     criterion = nn.CrossEntropyLoss(
-        weight=torch.tensor(class_weights, dtype=torch.float32).to(device)
-    )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=50, eta_min=1e-6
+        weight=torch.tensor(class_weights, dtype=torch.float32).to(device),
+        label_smoothing=0.1,   # 防止对噪声 Oracle 标签过拟合
     )
 
-    max_epochs = 10 if args.test_mode else 50
-    patience = 5
-    best_val_acc = 0.0
+    # CosineAnnealingWarmRestarts：T_0=20 个 epoch 后重启一次
+    # 比 CosineAnnealingLR 更不容易陷入局部最优
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=20, T_mult=2, eta_min=1e-6
+    )
+
+    max_epochs = 10 if args.test_mode else 100
+    patience = 5 if args.test_mode else 15
+    best_val_f1 = 0.0
     no_improve = 0
-    history = {'train_loss': [], 'val_acc': []}
+    history = {'train_loss': [], 'val_acc': [], 'val_macro_f1': []}
 
     for epoch in range(max_epochs):
         router.model.train()
@@ -488,34 +528,44 @@ def _train_router(router, train_X, train_y, val_X, val_y, args):
             epoch_loss += loss.item()
         scheduler.step()
 
-        # 验证
+        # 验证：同时记录 accuracy 和 macro-F1，以 macro-F1 为早停依据
         router.model.eval()
         with torch.no_grad():
             val_logits = router.model(X_v)
-            val_pred = val_logits.argmax(dim=1)
-            val_acc = (val_pred == y_v).float().mean().item()
+            val_pred = val_logits.argmax(dim=1).cpu().numpy()
+        y_v_np = y_v.cpu().numpy()
+        val_acc = float((val_pred == y_v_np).mean())
+        val_f1 = float(f1_score(y_v_np, val_pred, average='macro', zero_division=0))
 
         avg_loss = epoch_loss / len(loader)
         history['train_loss'].append(avg_loss)
         history['val_acc'].append(val_acc)
+        history['val_macro_f1'].append(val_f1)
 
-        if (epoch + 1) % 5 == 0 or epoch == 0:
-            logger.info(f"  Epoch {epoch+1}/{max_epochs}: loss={avg_loss:.4f}, val_acc={val_acc:.4f}")
+        if (epoch + 1) % 10 == 0 or epoch == 0:
+            logger.info(
+                f"  Epoch {epoch+1}/{max_epochs}: "
+                f"loss={avg_loss:.4f}, val_acc={val_acc:.4f}, val_macro_F1={val_f1:.4f}"
+            )
 
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
+        # 早停：以 macro-F1 为准，而非 accuracy
+        if val_f1 > best_val_f1:
+            best_val_f1 = val_f1
             no_improve = 0
             router.save(ROUTER_CKPT_DIR / 'router_mlp_best.pt')
         else:
             no_improve += 1
             if no_improve >= patience:
-                logger.info(f"  Early stop at epoch {epoch+1}, best val_acc={best_val_acc:.4f}")
+                logger.info(
+                    f"  Early stop at epoch {epoch+1}, "
+                    f"best val_macro_F1={best_val_f1:.4f}"
+                )
                 break
 
-    # 加载最优checkpoint
+    # 加载最优 checkpoint
     router.load(ROUTER_CKPT_DIR / 'router_mlp_best.pt')
-    logger.info(f"训练完成，最优验证准确率: {best_val_acc:.4f}")
-    history['best_val_acc'] = best_val_acc
+    logger.info(f"训练完成，最优验证 macro-F1: {best_val_f1:.4f}")
+    history['best_val_f1'] = best_val_f1
     return history
 
 
@@ -815,29 +865,62 @@ def _run_output_ensemble(router, features, general_test, args):
 def _logit_ensemble_generate(model_with_adapters, tokenizer,
                               input_text, expert1, expert2, w1, w2, args):
     """
-    核心：两专家同步自回归logit加权融合生成
+    核心：两专家同步自回归 **对数空间** 加权融合生成（Product of Experts）
 
-    正确实现：每一步 t，两个专家共享相同的 current_ids（已生成序列），
-    分别前向推理得到下一步 logit，加权融合后贪婪解码，再将融合结果追加到
-    current_ids 进入下一步。
+    ── Bug修复说明 ────────────────────────────────────────────────────────────
+    原实现在「概率空间」做算术平均（Mixture of Experts）：
+        p_fused = w1 * softmax(logits1) + w2 * softmax(logits2)
 
-    原错误实现是两个专家各自独立完成完整序列，导致步骤 t 的 conditioning
-    context 完全不同，加权平均在语义上无意义。
+    这会导致「概率混合分布坍缩」：
+      - 两个独立微调专家各自有尖峰分布（熵低），
+        算术平均后峰值被稀释，整体分布变平坦（熵增大）
+      - 平坦分布中 EOS 等低频 token 被相对放大，导致提前截断
+      - 实测：输出字符数从 392.5 降至 300.8（-23%），ROUGE-L 0.5921→0.4419
 
-    使用 set_adapter 切换专家，避免反复 from_pretrained 的性能开销。
+    ── 修复1: 融合空间 ────────────────────────────────────────────────────────
+    在「logit 空间（对数概率空间）」做加权线性组合，即 Product of Experts（PoE）：
+
+        logits_fused = w1 * logits1 + w2 * logits2
+
+    数学等价性：
+        argmax(w1*logits1 + w2*logits2)
+        ≡ argmax(w1*log_softmax(logits1) + w2*log_softmax(logits2))  # 常数不影响argmax
+        ≡ argmax(log(p1^w1 · p2^w2))   # Product of Experts的定义
+
+    为什么不坍缩：
+        PoE 分布满足 H(p_fused) ≤ min(H(p1), H(p2))
+        即融合后比单个专家更尖锐（熵更低），不会出现分布平坦化问题。
+        语义：只有在「两个专家都认可」的 token 才能胜出，而非任一专家喜欢就通过。
+
+    ── 修复2: stop_ids ──────────────────────────────────────────────────────
+    原实现 stop_ids = {eos_token_id, pad_token_id} 存在风险：
+      - Qwen3-8B 的 pad_token_id 可能 == eos_token_id（无害但冗余）
+      - 也可能被设为 0（合法内容 token），无条件加入会导致误截断
+      - 修复：只在 pad_token_id 明确是特殊符（id>3）且与 eos 不同时才加入
+
+    ── 正确性保证 ────────────────────────────────────────────────────────────
+    每一步 t，两个专家共享相同的 current_ids（已生成序列），
+    保证 conditioning context 完全一致，logit 融合在语义上有意义。
     """
     import torch
-    import torch.nn.functional as F
     from models.prompt_templates.general_template import GeneralInstructionTemplate
 
     max_new_tokens = 512
-    stop_ids = {tokenizer.eos_token_id, tokenizer.pad_token_id}
+
+    # 修复2：stop_ids 只包含确定的终止符，避免 pad_token_id 误触提前截断
+    stop_ids = {tokenizer.eos_token_id}
+    if (tokenizer.pad_token_id is not None
+            and tokenizer.pad_token_id != tokenizer.eos_token_id
+            and tokenizer.pad_token_id > 3):
+        stop_ids.add(tokenizer.pad_token_id)
 
     prompt = GeneralInstructionTemplate.build_prompt(input_text)
-    current_ids = tokenizer(prompt, return_tensors='pt').input_ids.to(
+    device = (
         model_with_adapters.base_model.model.device
-        if hasattr(model_with_adapters, 'base_model') else next(model_with_adapters.parameters()).device
+        if hasattr(model_with_adapters, 'base_model')
+        else next(model_with_adapters.parameters()).device
     )
+    current_ids = tokenizer(prompt, return_tensors='pt').input_ids.to(device)
 
     fused_tokens = []
 
@@ -852,7 +935,7 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
         except Exception as e:
             logger.warning(f"  step={step} expert1={expert1} 推理失败: {e}")
 
-        # ── Expert 2 前向（相同 current_ids）──
+        # ── Expert 2 前向（相同 current_ids，保证 conditioning context 一致）──
         logits2 = None
         try:
             model_with_adapters.set_adapter(expert2)
@@ -862,19 +945,27 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
         except Exception as e:
             logger.warning(f"  step={step} expert2={expert2} 推理失败: {e}")
 
-        # ── 融合 ──
+        # ── 修复1: logit 空间加权融合（Product of Experts）──
+        #
+        # 原代码（有 bug）：
+        #   p1 = F.softmax(logits1, dim=-1)
+        #   p2 = F.softmax(logits2, dim=-1)
+        #   p_fused = w1 * p1 + w2 * p2        # ← 概率空间算术混合，分布坍缩
+        #
+        # 修复后：直接在 logit 空间加权，等价于 Product of Experts
+        #   logits_fused = w1 * logits1 + w2 * logits2
+        #
+        # 注意：对单专家回退情形，直接用原始 logits 做 argmax，语义等价于原实现。
         if logits1 is None and logits2 is None:
             break
         elif logits1 is None:
-            p_fused = F.softmax(logits2, dim=-1)
+            logits_fused = logits2
         elif logits2 is None:
-            p_fused = F.softmax(logits1, dim=-1)
+            logits_fused = logits1
         else:
-            p1 = F.softmax(logits1, dim=-1)
-            p2 = F.softmax(logits2, dim=-1)
-            p_fused = w1 * p1 + w2 * p2
+            logits_fused = w1 * logits1 + w2 * logits2  # ← 核心修复：logit空间加权
 
-        next_token = p_fused.argmax(dim=-1, keepdim=True)  # (1, 1)
+        next_token = logits_fused.argmax(dim=-1, keepdim=True)  # (1, 1)
         if next_token.item() in stop_ids:
             break
 

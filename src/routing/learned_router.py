@@ -77,8 +77,8 @@ class RouterMLP:
         hidden1: int = 512,
         hidden2: int = 128,
         num_classes: int = 4,
-        dropout1: float = 0.2,
-        dropout2: float = 0.1,
+        dropout1: float = 0.1,
+        dropout2: float = 0.05,
     ):
         try:
             import torch
@@ -355,11 +355,14 @@ class HiddenStateExtractor:
                 # 最后一层 hidden state: (B, seq_len, hidden_size)
                 last_hidden = outputs.hidden_states[-1]
 
-                # 每条序列最后一个有效 token 的索引
-                seq_lens = attention_mask.sum(dim=1) - 1  # (B,)
-                batch_features = last_hidden[
-                    torch.arange(len(batch)), seq_lens, :
-                ].cpu().float().numpy()   # (B, hidden_size)
+                # 加权平均池化（attention mask 作权重）
+                # 优于单取最后一个 token：最后 token 的表示受位置偏置影响大，
+                # 而平均池化利用了整条序列的信息，对变长输入更鲁棒。
+                # 这也是文本分类任务中最常用的句向量提取方式。
+                mask = attention_mask.unsqueeze(-1).float()      # (B, seq_len, 1)
+                sum_hidden = (last_hidden * mask).sum(dim=1)     # (B, hidden_size)
+                sum_mask = mask.sum(dim=1).clamp(min=1e-9)       # (B, 1)
+                batch_features = (sum_hidden / sum_mask).cpu().float().numpy()  # (B, hidden_size)
 
             return batch_features
 
