@@ -881,16 +881,27 @@ def _run_output_ensemble(router, features, general_test, args):
     # ensemble_groups: 按 (expert1, expert2) 分组，后续批量 GPU 推理
     # sample_meta    : 保存每条样本的路由元信息，供最终重新排序（reassemble）用
     #
-    # ── v6 核心修复：UML 专家角色降级 ────────────────────────────────────────
-    # 实证数据：text+uml (UML 作 secondary, T=2.0) → ROUGE-L=0.7145, format_ok=100%
-    #           uml+general (UML 作 primary, T=2.0) → ROUGE-L=0.2049, format_ok=14%
-    # 根因：UML 专家训练在 avg=1063 token 的长序列上，其生成风格（长篇结构化输出）
-    #       在主导融合时摧毁三段式指令格式。作为辅助专家时，它的领域知识可以通过
-    #       温度缩放（T=2.0）平滑地融入，不干扰主专家的格式控制。
-    # 修复：①当 UML 为 top-1 时，交换 expert1/expert2（UML 降级为辅助）
-    #       ②对 UML 作为 expert2 的权重加上上限（≤50%），防止其仍通过高权重主导
-    _UML_WEIGHT_CAP = 0.50  # UML 在 ensemble 中的最大权重
-    uml_demotions = 0
+    # ── v7 核心修复：UML 必须搭配 text 作为 primary ──────────────────────────
+    # v6 实证数据（UML 统一降级为 secondary，T=2.0）：
+    #   text+uml   (3条)  → avg_len=252,  format_ok=100%, ROUGE-L=0.7330 ← 唯一成功
+    #   image+uml  (122条) → avg_len=1180, format_ok=8%,  ROUGE-L=0.1926 ← 惨败
+    #   general+uml (14条) → avg_len=1207, format_ok=14%, ROUGE-L=0.1843 ← 惨败
+    #
+    # 根因分析：融合质量取决于 primary expert 是否能在该域输入上产生有意义的 logits。
+    #   - text 专家：训练在软件需求文本上，与 UML 描述有高度词汇重叠（actors, use_cases,
+    #     relationships 等），能为 UML 输入产生合理的 token 分布 → 格式良好
+    #   - image 专家：仅训练在图像 JSON 描述上，对 UML JSON 完全 OOD，
+    #     logits 近乎均匀分布 → UML secondary 实质主导，回到 UML-primary 失败模式
+    #   - general 专家：虽然训练集包含 UML 数据，但也学到了 UML 的长输出风格，
+    #     format control 弱 → 两个专家都偏向长输出，EOS 信号更弱
+    #
+    # 修复策略（基于 text+uml 成功的唯一解释——"格式控制多样性"）：
+    #   ① 任何包含 UML 的 ensemble pair，primary 强制为 text（最强格式控制器）
+    #   ② UML 权重上限 40%（text 主导 ≥60%，确保格式控制权）
+    #   ③ 若 top-2 本来就是 text+uml，保持 router 原始权重（但仍受上限约束）
+    _UML_WEIGHT_CAP = 0.40  # UML 在 ensemble 中的最大权重（v6 是 0.50，仍不够）
+    _TEXT_MIN_WEIGHT = 0.60  # text 作为 UML pair 的 primary 时最低权重
+    uml_text_anchored = 0  # 统计被重路由到 text+uml 的样本数
 
     sample_meta = []          # [(i, expert1, expert2, w1, w2, w1_raw, template_name), ...]
     cache_results = {}        # {i: pred_str}
@@ -919,26 +930,34 @@ def _run_output_ensemble(router, features, general_test, args):
                 expert1, 'general', i, preloaded_caches
             )
         else:
-            # ── v6: UML 角色降级 + 权重上限 ────────────────────────────────
-            # Step A: 若 UML 为 top-1，交换到 expert2 位置
-            if expert1 == 'uml':
-                expert1, expert2 = expert2, expert1
-                w1, w2 = w2, w1
-                uml_demotions += 1
-
-            # Step B: 若 UML 为 expert2 且权重超过上限，重新分配
-            if expert2 == 'uml' and w2 > _UML_WEIGHT_CAP:
+            # ── v7: UML 参与的 ensemble → 强制 text+uml ────────────────────
+            has_uml = (expert1 == 'uml' or expert2 == 'uml')
+            if has_uml:
+                # 强制 primary=text, secondary=uml
+                expert1 = 'text'
+                expert2 = 'uml'
+                w1 = _TEXT_MIN_WEIGHT
                 w2 = _UML_WEIGHT_CAP
-                w1 = 1.0 - w2
+                uml_text_anchored += 1
+            # 非 UML pair 保持 router 原始决策，不做干预
 
             sample_meta.append((i, expert1, expert2, w1, w2, w1_raw, tpl_name))
             ensemble_groups[(expert1, expert2)].append((i, prompt_str, w1, w2))
 
     logger.info(f"  [DEBUG] 模板使用分布: {dict(template_usage)}")
-    logger.info(f"  [v6] UML角色降级: {uml_demotions}条 (UML从primary→secondary)")
+    logger.info(f"  [v7] UML→text+uml 锚定: {uml_text_anchored}条")
 
     n_cache = len(cache_results)
     n_ensemble = sum(len(v) for v in ensemble_groups.values())
+    # [DEBUG] per-group size breakdown
+    for (e1, e2), items in sorted(ensemble_groups.items(), key=lambda x: -len(x[1])):
+        # 统计该组的平均权重
+        avg_w1 = np.mean([w1 for (_, _, w1, _) in items])
+        avg_w2 = np.mean([w2 for (_, _, _, w2) in items])
+        logger.info(
+            f"    [v7 组] {e1}+{e2}: {len(items)}条, "
+            f"avg_w1={avg_w1:.2f}, avg_w2={avg_w2:.2f}"
+        )
     logger.info(
         f"  样本分类: cache(w1>=0.85)={n_cache}, "
         f"ensemble={n_ensemble}, 组数={len(ensemble_groups)}"
@@ -1223,29 +1242,20 @@ def _process_minibatch(
     """
     RTX 4090 优化核心：批量 prefill + 批量 decode（B×1 token/step × 2 experts）
 
-    v6 修复（UML 专家角色降级，解决 UML 组 ROUGE-L=0.20 的根本问题）
+    v7: text-anchored UML ensemble（在 Stage 1 已完成路由重映射）
 
-    ── v5 残留问题 ────────────────────────────────────────────────────────────
-    v5 用温度 T=2.0 + 权重上限 + 质量门控，仍未解决 UML 组崩溃：
-      uml+general: avg_len=1161, format_ok=14%, ROUGE-L=0.2049
-      uml+image:   avg_len=1181, format_ok=5%,  ROUGE-L=0.1655
-    但 text+uml（UML 作 secondary）: avg_len=237, format_ok=100%, ROUGE-L=0.7145
+    ── 核心发现（v6 实验验证）──────────────────────────────────────────────────
+    融合质量取决于 primary expert 对输入域的 **competence**（而非温度/权重）：
+      text+uml   → ROUGE=0.73 (text 训练在软件需求上，与 UML 词汇重叠)
+      image+uml  → ROUGE=0.19 (image 对 UML 完全 OOD，logits 近均匀)
+      general+uml → ROUGE=0.18 (general 学过 UML 长输出风格，EOS 信号弱)
 
-    ── v6 修复：UML 角色降级 ──────────────────────────────────────────────────
-    在 _run_output_ensemble Stage 1 分类阶段已完成：
-    ① UML 为 router top-1 时，交换到 expert2 位置（UML 永不主导生成）
-    ② UML 作为 expert2 的权重上限 50%（防止高权重仍然主导）
-    此处 _process_minibatch 无需特殊处理，因为 UML 已确保是 expert2。
+    当 primary expert 对输入 OOD 时，其 logits 近乎均匀分布，
+    secondary expert（UML, T=2.0）的 focused distribution 仍然主导每步选择，
+    导致温度/权重等参数级修复全部无效。
 
-    温度缩放 _EXPERT_TEMPERATURE 仍保留（UML T=2.0），作为补充防御层。
-
-    ── 其他优化（v2-v5 保留）────────────────────────────────────────────────
-    ① 预分配 output_ids (B, max_new_tokens) on GPU
-    ② 预分配 attn_mask_buf, decode 用 narrow view
-    ③ 每 DONE_CHECK_INTERVAL 步 sync 一次 done.all()
-    ④ 向量化 done 更新
-    ⑤ eval() 在 prefill 前统一调用一次
-    ⑥ 调用方预构建 prompt（按样本 data_type 选模板）
+    Stage 1 修复：所有含 UML 的 pair → 强制 text(0.6)+uml(0.4)。
+    此处 _process_minibatch 无需特殊处理。
     """
     import torch
     import torch.nn.functional as F
@@ -1516,13 +1526,10 @@ def _process_minibatch(
 def _logit_ensemble_generate(model_with_adapters, tokenizer,
                               prompt_str, expert1, expert2, w1, w2, args):
     """
-    核心：两专家同步自回归 **概率空间** 加权混合生成（Mixture of Experts）
+    单条双专家同步自回归概率空间加权混合生成（OOM 回退路径）
 
-    v6: UML 角色降级已在调用方完成（UML 永远是 expert2，权重 ≤50%）
-    温度缩放：UML T=2.0（作为 secondary 的最优温度，text+uml → ROUGE=0.7145）
-    EOS 长度惩罚：rate=0.15，soft_limit=50%
-
-    性能优化: KV Cache + O(n) decode 复杂度
+    v7: text-anchored UML ensemble 已在调用方完成路由重映射。
+    温度缩放：UML T=2.0 | EOS 长度惩罚：rate=0.15, limit=50%
     """
     import torch
     import torch.nn.functional as F
