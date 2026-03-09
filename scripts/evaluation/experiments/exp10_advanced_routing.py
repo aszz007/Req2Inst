@@ -880,9 +880,18 @@ def _run_output_ensemble(router, features, general_test, args):
     # cache_results  : top-1 prob >= 0.85，直接从磁盘缓存取，零 GPU 开销
     # ensemble_groups: 按 (expert1, expert2) 分组，后续批量 GPU 推理
     # sample_meta    : 保存每条样本的路由元信息，供最终重新排序（reassemble）用
-    # 重要修复：pre-build prompt 时按每个样本 data_type 选择对应模板，
-    #   确保两个专家收到格式一致且与其训练分布匹配的 prompt，
-    #   避免 GeneralTemplate 一刀切导致格式崩溃和输出失控。
+    #
+    # ── v6 核心修复：UML 专家角色降级 ────────────────────────────────────────
+    # 实证数据：text+uml (UML 作 secondary, T=2.0) → ROUGE-L=0.7145, format_ok=100%
+    #           uml+general (UML 作 primary, T=2.0) → ROUGE-L=0.2049, format_ok=14%
+    # 根因：UML 专家训练在 avg=1063 token 的长序列上，其生成风格（长篇结构化输出）
+    #       在主导融合时摧毁三段式指令格式。作为辅助专家时，它的领域知识可以通过
+    #       温度缩放（T=2.0）平滑地融入，不干扰主专家的格式控制。
+    # 修复：①当 UML 为 top-1 时，交换 expert1/expert2（UML 降级为辅助）
+    #       ②对 UML 作为 expert2 的权重加上上限（≤50%），防止其仍通过高权重主导
+    _UML_WEIGHT_CAP = 0.50  # UML 在 ensemble 中的最大权重
+    uml_demotions = 0
+
     sample_meta = []          # [(i, expert1, expert2, w1, w2, w1_raw, template_name), ...]
     cache_results = {}        # {i: pred_str}
     ensemble_groups = defaultdict(list)   # {(e1, e2): [(i, prompt_str, w1, w2), ...]}
@@ -902,18 +911,31 @@ def _run_output_ensemble(router, features, general_test, args):
         # 核心修复：每个样本独立选模板，两个专家用同一个 prompt
         prompt_str, tpl_name = _build_prompt_for_sample(sample)
         template_usage[tpl_name] += 1
-        sample_meta.append((i, expert1, expert2, w1, w2, w1_raw, tpl_name))
 
         if w1_raw >= 0.85:
             # 退化为单专家：直接从缓存取，不占 GPU
+            sample_meta.append((i, expert1, expert2, w1, w2, w1_raw, tpl_name))
             cache_results[i] = _single_expert_from_cache(
                 expert1, 'general', i, preloaded_caches
             )
         else:
-            # 传入 prompt_str 而非 sample dict，保证模板选择已固定
+            # ── v6: UML 角色降级 + 权重上限 ────────────────────────────────
+            # Step A: 若 UML 为 top-1，交换到 expert2 位置
+            if expert1 == 'uml':
+                expert1, expert2 = expert2, expert1
+                w1, w2 = w2, w1
+                uml_demotions += 1
+
+            # Step B: 若 UML 为 expert2 且权重超过上限，重新分配
+            if expert2 == 'uml' and w2 > _UML_WEIGHT_CAP:
+                w2 = _UML_WEIGHT_CAP
+                w1 = 1.0 - w2
+
+            sample_meta.append((i, expert1, expert2, w1, w2, w1_raw, tpl_name))
             ensemble_groups[(expert1, expert2)].append((i, prompt_str, w1, w2))
 
     logger.info(f"  [DEBUG] 模板使用分布: {dict(template_usage)}")
+    logger.info(f"  [v6] UML角色降级: {uml_demotions}条 (UML从primary→secondary)")
 
     n_cache = len(cache_results)
     n_ensemble = sum(len(v) for v in ensemble_groups.values())
@@ -987,7 +1009,7 @@ def _run_output_ensemble(router, features, general_test, args):
     #          确保 ensemble 只能帮忙、不能帮倒忙（monotonic improvement guarantee）。
     _FORMAT_KEYWORDS = {'Definition', 'Emphasis', 'Things to Avoid',
                         'definition', 'emphasis', 'things to avoid'}
-    _MAX_CHAR_LEN = 800   # 参考输出 avg=392 chars，超过 2x 视为失控
+    _MAX_CHAR_LEN = 1000   # 参考输出: text~300, image~400, uml~600; 1000 = ~1.5x 最长参考
 
     def _passes_quality_gate(pred_text: str) -> bool:
         """快速质量检查：格式三段式 + 长度合理"""
@@ -1201,29 +1223,23 @@ def _process_minibatch(
     """
     RTX 4090 优化核心：批量 prefill + 批量 decode（B×1 token/step × 2 experts）
 
-    v5 修复（三层防御，解决 UML 专家主导 + 非文本组退化问题）
+    v6 修复（UML 专家角色降级，解决 UML 组 ROUGE-L=0.20 的根本问题）
 
-    ── v4 残留问题 ────────────────────────────────────────────────────────────
-    v4 MoE 将 PoE 改为概率空间加权平均，UML 组从 avg_len=2000 降至 1560，
-    但仍然过长（format_ok=6%，ROUGE-L=0.22）。根因：UML 专家 softmax 分布
-    极其尖锐，即使概率空间平均，UML 仍主导每步 token 选择。
+    ── v5 残留问题 ────────────────────────────────────────────────────────────
+    v5 用温度 T=2.0 + 权重上限 + 质量门控，仍未解决 UML 组崩溃：
+      uml+general: avg_len=1161, format_ok=14%, ROUGE-L=0.2049
+      uml+image:   avg_len=1181, format_ok=5%,  ROUGE-L=0.1655
+    但 text+uml（UML 作 secondary）: avg_len=237, format_ok=100%, ROUGE-L=0.7145
 
-    ── v5 三层防御 ────────────────────────────────────────────────────────────
-    Layer 1: 专家温度缩放 _EXPERT_TEMPERATURE
-      UML 专家 T=2.0，softmax 前除以温度，拉平其极端分布
-      P_uml(specialized_tok) 从 ~0.6 降至 ~0.3，次要专家有更多话语权
-      P_uml(EOS) 从 ~0.001 升至 ~0.01，EOS 信号不再被碾压
+    ── v6 修复：UML 角色降级 ──────────────────────────────────────────────────
+    在 _run_output_ensemble Stage 1 分类阶段已完成：
+    ① UML 为 router top-1 时，交换到 expert2 位置（UML 永不主导生成）
+    ② UML 作为 expert2 的权重上限 50%（防止高权重仍然主导）
+    此处 _process_minibatch 无需特殊处理，因为 UML 已确保是 expert2。
 
-    Layer 2: 更紧凑的长度上限 + 更激进的 EOS boost
-      max_new_tokens: text/general=200, image=200, uml=250（v4 是 256-400）
-      EOS boost rate: 0.15（v4 是 0.03），soft_limit=50%（v4 是 60%）
-      100 步时 boost = 0.15 × 75 = 11.25，足以将 EOS 推到 argmax 位置
+    温度缩放 _EXPERT_TEMPERATURE 仍保留（UML T=2.0），作为补充防御层。
 
-    Layer 3: 质量门控（在 _run_output_ensemble reassembly 阶段实现）
-      检测格式和长度，不合格回退到缓存单专家预测
-      确保 ensemble ≥ single expert（单调改进保证）
-
-    ── 其他优化（v2/v3/v4 保留）────────────────────────────────────────────
+    ── 其他优化（v2-v5 保留）────────────────────────────────────────────────
     ① 预分配 output_ids (B, max_new_tokens) on GPU
     ② 预分配 attn_mask_buf, decode 用 narrow view
     ③ 每 DONE_CHECK_INTERVAL 步 sync 一次 done.all()
@@ -1502,11 +1518,9 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
     """
     核心：两专家同步自回归 **概率空间** 加权混合生成（Mixture of Experts）
 
-    v5 修复：
-    修复1: 专家温度缩放（UML T=2.0，拉平其极端分布）
-    修复2: 更紧凑的 max_new_tokens + 更激进的 EOS 长度惩罚
-    修复3: stop_ids 安全过滤
-    修复4: 接受预构建的 prompt_str，由调用方选择正确模板
+    v6: UML 角色降级已在调用方完成（UML 永远是 expert2，权重 ≤50%）
+    温度缩放：UML T=2.0（作为 secondary 的最优温度，text+uml → ROUGE=0.7145）
+    EOS 长度惩罚：rate=0.15，soft_limit=50%
 
     性能优化: KV Cache + O(n) decode 复杂度
     """
