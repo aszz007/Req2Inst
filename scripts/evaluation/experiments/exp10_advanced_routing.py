@@ -877,31 +877,30 @@ def _run_output_ensemble(router, features, general_test, args):
         logger.info(f"  [DEBUG] 样本0 使用模板: {tpl0}, prompt前80字符: {prompt0[:80]!r}")
 
     # ── Stage 1: 分类样本（纯 CPU，O(N)）──────────────────────────────────────
-    # cache_results  : top-1 prob >= 0.85，直接从磁盘缓存取，零 GPU 开销
+    # cache_results  : top-1 prob >= 0.85 OR UML-domain → 从磁盘缓存取
     # ensemble_groups: 按 (expert1, expert2) 分组，后续批量 GPU 推理
     # sample_meta    : 保存每条样本的路由元信息，供最终重新排序（reassemble）用
     #
-    # ── v7 核心修复：UML 必须搭配 text 作为 primary ──────────────────────────
-    # v6 实证数据（UML 统一降级为 secondary，T=2.0）：
-    #   text+uml   (3条)  → avg_len=252,  format_ok=100%, ROUGE-L=0.7330 ← 唯一成功
-    #   image+uml  (122条) → avg_len=1180, format_ok=8%,  ROUGE-L=0.1926 ← 惨败
-    #   general+uml (14条) → avg_len=1207, format_ok=14%, ROUGE-L=0.1843 ← 惨败
+    # ── v8 核心修复：UML 域样本跳过 ensemble，使用缓存单专家 ────────────────
+    # v4-v7 全部迭代的根因分析总结（6次实验验证）：
     #
-    # 根因分析：融合质量取决于 primary expert 是否能在该域输入上产生有意义的 logits。
-    #   - text 专家：训练在软件需求文本上，与 UML 描述有高度词汇重叠（actors, use_cases,
-    #     relationships 等），能为 UML 输入产生合理的 token 分布 → 格式良好
-    #   - image 专家：仅训练在图像 JSON 描述上，对 UML JSON 完全 OOD，
-    #     logits 近乎均匀分布 → UML secondary 实质主导，回到 UML-primary 失败模式
-    #   - general 专家：虽然训练集包含 UML 数据，但也学到了 UML 的长输出风格，
-    #     format control 弱 → 两个专家都偏向长输出，EOS 信号更弱
+    #   ensemble 要求 primary expert 必须对当前 prompt 模板 **in-distribution**：
+    #   - text_template 输入 → text/general 可做 primary → ensemble 有效
+    #   - image_template 输入 → image/general 可做 primary → ensemble 有效
+    #   - uml_template 输入 → 只有 uml/general 可做 primary，但：
+    #     * uml 作 primary → 长输出风格摧毁三段式格式（v3-v5 验证）
+    #     * general 作 primary → 也学过 UML 长风格，EOS 信号弱（v5 验证）
+    #     * text 作 primary → 对 uml_template OOD，logits 近均匀（v7 验证）
+    #     * image 作 primary → 对 uml_template OOD（v6 验证）
+    #   结论：UML 域不存在有效的双专家融合 pair。
     #
-    # 修复策略（基于 text+uml 成功的唯一解释——"格式控制多样性"）：
-    #   ① 任何包含 UML 的 ensemble pair，primary 强制为 text（最强格式控制器）
-    #   ② UML 权重上限 40%（text 主导 ≥60%，确保格式控制权）
-    #   ③ 若 top-2 本来就是 text+uml，保持 router 原始权重（但仍受上限约束）
-    _UML_WEIGHT_CAP = 0.40  # UML 在 ensemble 中的最大权重（v6 是 0.50，仍不够）
-    _TEXT_MIN_WEIGHT = 0.60  # text 作为 UML pair 的 primary 时最低权重
-    uml_text_anchored = 0  # 统计被重路由到 text+uml 的样本数
+    #   v5 中 text+uml 的 ROUGE=0.73 实为 text 域样本（text_template），
+    #   text 专家 in-distribution → UML 只起辅助作用 → 效果好。
+    #   这不适用于 UML 域样本（uml_template）。
+    #
+    # 修复：UML 域样本直接走 router top-1 缓存（与 Learned Router 方案B 等价），
+    #        text/image 域样本正常 ensemble，保留加权创新点。
+    uml_skipped = 0
 
     sample_meta = []          # [(i, expert1, expert2, w1, w2, w1_raw, template_name), ...]
     cache_results = {}        # {i: pred_str}
@@ -923,45 +922,61 @@ def _run_output_ensemble(router, features, general_test, args):
         prompt_str, tpl_name = _build_prompt_for_sample(sample)
         template_usage[tpl_name] += 1
 
+        data_type = _detect_datatype(sample)
+
+        # 判断是否跳过 ensemble
+        skip_ensemble = False
         if w1_raw >= 0.85:
-            # 退化为单专家：直接从缓存取，不占 GPU
+            skip_ensemble = True
+        elif data_type == 'uml':
+            # v8: UML 域样本不适合 ensemble（无有效 primary expert）
+            skip_ensemble = True
+            uml_skipped += 1
+
+        if skip_ensemble:
             sample_meta.append((i, expert1, expert2, w1, w2, w1_raw, tpl_name))
             cache_results[i] = _single_expert_from_cache(
                 expert1, 'general', i, preloaded_caches
             )
         else:
-            # ── v7: UML 参与的 ensemble → 强制 text+uml ────────────────────
-            has_uml = (expert1 == 'uml' or expert2 == 'uml')
-            if has_uml:
-                # 强制 primary=text, secondary=uml
-                expert1 = 'text'
-                expert2 = 'uml'
-                w1 = _TEXT_MIN_WEIGHT
-                w2 = _UML_WEIGHT_CAP
-                uml_text_anchored += 1
-            # 非 UML pair 保持 router 原始决策，不做干预
-
+            # text/image 域：正常 ensemble，保留加权创新
             sample_meta.append((i, expert1, expert2, w1, w2, w1_raw, tpl_name))
             ensemble_groups[(expert1, expert2)].append((i, prompt_str, w1, w2))
 
     logger.info(f"  [DEBUG] 模板使用分布: {dict(template_usage)}")
-    logger.info(f"  [v7] UML→text+uml 锚定: {uml_text_anchored}条")
+    logger.info(f"  [v8] UML域跳过ensemble: {uml_skipped}条 (使用router top-1缓存)")
 
     n_cache = len(cache_results)
     n_ensemble = sum(len(v) for v in ensemble_groups.values())
     # [DEBUG] per-group size breakdown
     for (e1, e2), items in sorted(ensemble_groups.items(), key=lambda x: -len(x[1])):
-        # 统计该组的平均权重
         avg_w1 = np.mean([w1 for (_, _, w1, _) in items])
         avg_w2 = np.mean([w2 for (_, _, _, w2) in items])
         logger.info(
-            f"    [v7 组] {e1}+{e2}: {len(items)}条, "
+            f"    [v8 组] {e1}+{e2}: {len(items)}条, "
             f"avg_w1={avg_w1:.2f}, avg_w2={avg_w2:.2f}"
         )
     logger.info(
-        f"  样本分类: cache(w1>=0.85)={n_cache}, "
-        f"ensemble={n_ensemble}, 组数={len(ensemble_groups)}"
+        f"  样本分类: cache(w1>=0.85 或 UML域)={n_cache}, "
+        f"ensemble(text/image域)={n_ensemble}, 组数={len(ensemble_groups)}"
     )
+
+    # ── quick-ensemble 模式：每组仅采样 N 条，快速估算质量 ────────────────
+    if hasattr(args, 'quick_ensemble') and args.quick_ensemble and args.quick_ensemble > 0:
+        quick_n = args.quick_ensemble
+        logger.info(f"  [快速测试] quick_ensemble={quick_n}，每组最多采样{quick_n}条")
+        trimmed_groups = {}
+        for key, items in ensemble_groups.items():
+            if len(items) > quick_n:
+                # 均匀采样而非截取前 N 条，避免数据分布偏差
+                step = max(1, len(items) // quick_n)
+                trimmed_groups[key] = items[::step][:quick_n]
+            else:
+                trimmed_groups[key] = items
+        total_before = sum(len(v) for v in ensemble_groups.values())
+        total_after = sum(len(v) for v in trimmed_groups.values())
+        logger.info(f"  [快速测试] 采样前={total_before}条, 采样后={total_after}条")
+        ensemble_groups = trimmed_groups
 
     # ── Stage 2: 按 (expert1, expert2) 组批量 GPU 推理 ──────────────────────
     # 同一组内的样本共享两次 prefill（而非每条样本各自 prefill），
@@ -1021,37 +1036,37 @@ def _run_output_ensemble(router, features, general_test, args):
                 f"ROUGE-L={group_rougeL:.4f}"
             )
 
-    # ── Stage 3: 按原始顺序 reassemble + 质量门控（v5 核心修复）─────────────
-    # v4 问题：ensemble 输出可能比 single expert 更差（uml+general 组 ROUGE-L=0.22），
-    #          但 v4 无条件使用 ensemble 输出，导致整体 ROUGE-L 被 UML 组拖垮。
-    # v5 修复：对每条 ensemble 样本做快速质量检查，不合格则回退到 cached 单专家输出。
-    #          确保 ensemble 只能帮忙、不能帮倒忙（monotonic improvement guarantee）。
+    # ── Stage 3: 按原始顺序 reassemble + 质量门控 ─────────────────────────────
     _FORMAT_KEYWORDS = {'Definition', 'Emphasis', 'Things to Avoid',
                         'definition', 'emphasis', 'things to avoid'}
-    _MAX_CHAR_LEN = 1000   # 参考输出: text~300, image~400, uml~600; 1000 = ~1.5x 最长参考
+    _MAX_CHAR_LEN = 1000
 
     def _passes_quality_gate(pred_text: str) -> bool:
-        """快速质量检查：格式三段式 + 长度合理"""
         if not pred_text or not pred_text.strip():
             return False
-        # 格式检查：至少包含一个三段式关键词
         if not any(kw in pred_text for kw in _FORMAT_KEYWORDS):
             return False
-        # 长度检查：超过阈值视为失控
         if len(pred_text) > _MAX_CHAR_LEN:
             return False
         return True
 
+    is_quick = hasattr(args, 'quick_ensemble') and args.quick_ensemble and args.quick_ensemble > 0
+
     samples = []
-    fallback_stats = {'total': 0, 'passed': 0, 'fallback': 0, 'fallback_improved': 0}
+    fallback_stats = {'total': 0, 'passed': 0, 'fallback': 0, 'fallback_improved': 0,
+                      'quick_no_result': 0}
     for (i, expert1, expert2, w1, w2, _w1_raw, tpl_name) in sample_meta:
         sample = general_test[i]
         ensemble_pred = ensemble_results.get(i, '')
         cache_pred = cache_results.get(i, '')
 
         if cache_pred:
-            # 已缓存的单专家结果（w1>=0.85），直接使用，无需质量检查
+            # 缓存结果（w1>=0.85 或 UML域），直接使用
             pred = cache_pred
+        elif not ensemble_pred and is_quick:
+            # quick-ensemble 模式：未被采样的 ensemble 样本 → 用 top-1 缓存
+            pred = _single_expert_from_cache(expert1, 'general', i, preloaded_caches)
+            fallback_stats['quick_no_result'] += 1
         else:
             # ensemble 结果，执行质量门控
             fallback_stats['total'] += 1
@@ -1059,13 +1074,11 @@ def _run_output_ensemble(router, features, general_test, args):
                 pred = ensemble_pred
                 fallback_stats['passed'] += 1
             else:
-                # 质量不合格 → 回退到主专家的 cached 预测
                 fallback_pred = _single_expert_from_cache(
                     expert1, 'general', i, preloaded_caches
                 )
                 fallback_stats['fallback'] += 1
 
-                # [DEBUG] 回退时比较 ensemble vs cached 的 ROUGE-L
                 ref = sample.get('output', '')
                 if ref and fallback_pred and ensemble_pred:
                     from rouge_score import rouge_scorer as rs_mod
@@ -1075,19 +1088,11 @@ def _run_output_ensemble(router, features, general_test, args):
                         fb_r = _scorer.score(ref, fallback_pred)['rougeL'].fmeasure
                         if fb_r > ens_r:
                             fallback_stats['fallback_improved'] += 1
-                        if i < 10 or (i % 50 == 0):
-                            logger.debug(
-                                f"    [fallback] i={i}, expert={expert1}+{expert2}, "
-                                f"ens_len={len(ensemble_pred)}, fb_len={len(fallback_pred)}, "
-                                f"ens_ROUGE={ens_r:.3f}, fb_ROUGE={fb_r:.3f}, "
-                                f"improved={'✓' if fb_r > ens_r else '✗'}"
-                            )
                     except Exception:
                         pass
 
                 pred = fallback_pred if fallback_pred else ensemble_pred
 
-        # [DEBUG] 记录前5个样本的生成详情
         if i < 5:
             logger.info(
                 f"  [DEBUG] 样本{i}: expert={expert1}+{expert2}, tpl={tpl_name}, "
@@ -1113,6 +1118,10 @@ def _run_output_ensemble(router, features, general_test, args):
         f"回退={fallback_stats['fallback']}, "
         f"回退更优={fallback_stats['fallback_improved']}"
     )
+    if is_quick:
+        logger.info(
+            f"  [快速测试] 未采样直接用缓存={fallback_stats['quick_no_result']}条"
+        )
 
     del lm, model_with_adapters, tokenizer
     _cleanup_gpu()
@@ -1240,22 +1249,10 @@ def _process_minibatch(
     expert1, expert2, batch_items, args,
 ):
     """
-    RTX 4090 优化核心：批量 prefill + 批量 decode（B×1 token/step × 2 experts）
+    批量 prefill + 批量 decode（B×1 token/step × 2 experts）
 
-    v7: text-anchored UML ensemble（在 Stage 1 已完成路由重映射）
-
-    ── 核心发现（v6 实验验证）──────────────────────────────────────────────────
-    融合质量取决于 primary expert 对输入域的 **competence**（而非温度/权重）：
-      text+uml   → ROUGE=0.73 (text 训练在软件需求上，与 UML 词汇重叠)
-      image+uml  → ROUGE=0.19 (image 对 UML 完全 OOD，logits 近均匀)
-      general+uml → ROUGE=0.18 (general 学过 UML 长输出风格，EOS 信号弱)
-
-    当 primary expert 对输入 OOD 时，其 logits 近乎均匀分布，
-    secondary expert（UML, T=2.0）的 focused distribution 仍然主导每步选择，
-    导致温度/权重等参数级修复全部无效。
-
-    Stage 1 修复：所有含 UML 的 pair → 强制 text(0.6)+uml(0.4)。
-    此处 _process_minibatch 无需特殊处理。
+    v8: UML 域样本已在 Stage 1 跳过 ensemble，此处只处理 text/image 域。
+    MoE 概率空间加权 + 温度缩放 + EOS 长度惩罚。
     """
     import torch
     import torch.nn.functional as F
@@ -1526,10 +1523,8 @@ def _process_minibatch(
 def _logit_ensemble_generate(model_with_adapters, tokenizer,
                               prompt_str, expert1, expert2, w1, w2, args):
     """
-    单条双专家同步自回归概率空间加权混合生成（OOM 回退路径）
-
-    v7: text-anchored UML ensemble 已在调用方完成路由重映射。
-    温度缩放：UML T=2.0 | EOS 长度惩罚：rate=0.15, limit=50%
+    单条双专家 MoE 概率空间加权混合（OOM 回退路径）
+    v8: 仅处理 text/image 域，UML 域已在 Stage 1 跳过。
     """
     import torch
     import torch.nn.functional as F
@@ -2266,12 +2261,16 @@ def main():
                         help='跳过BERTScore计算（加速）')
     parser.add_argument('--test-mode', action='store_true',
                         help='测试模式（每域仅10条）')
+    parser.add_argument('--quick-ensemble', type=int, default=0, metavar='N',
+                        help='快速测试：每个ensemble组仅采样N条（推荐5-8），'
+                             '~3分钟完成，用于调参。设0或不设则全量运行。'
+                             '用法: --phase 2 --force-regenerate --quick-ensemble 5')
     args = parser.parse_args()
 
     logger.info("=" * 80)
     logger.info("实验10：高级路由策略 — 学习路由器 vs 输出集成")
     logger.info(f"开始时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info(f"参数: phase={args.phase}, all={args.all}, test_mode={args.test_mode}")
+    logger.info(f"参数: phase={args.phase}, all={args.all}, test_mode={args.test_mode}, quick_ensemble={args.quick_ensemble}")
     logger.info("=" * 80)
 
     # 加载Exp9结果（必须存在）
