@@ -55,7 +55,6 @@ from src.utils.logger import get_logger
 from src.routing.learned_router import (
     RouterMLP, HiddenStateExtractor,
     EXPERT_TO_IDX, IDX_TO_EXPERT,
-    FocalLoss,
 )
 
 logger = get_logger('experiments.exp10')
@@ -455,210 +454,65 @@ def _rebuild_general_labels(test_data, args):
 
     return labels
 
-def _calibrate_class_offsets(router, val_X, val_y, n_rounds: int = 3):
-    """
-    后处理 per-class logit 偏置校准（坐标下降法）
-
-    原理：
-      训练好的 MLP 在各类上存在系统性偏移（precision/recall 不平衡）。
-      对每个类别 c 添加标量偏置 b_c（logit_c += b_c），相当于调整该类的决策阈值：
-        b_c > 0 → 更容易预测 c（recall ↑, precision ↓）
-        b_c < 0 → 更难预测 c（precision ↑, recall ↓）
-
-    算法（坐标下降）：
-      每轮依次优化每个类别的偏置，搜索范围 [-4.0, +4.0]，步长 0.1，
-      共 4 × 80 = 320 次 numpy 向量运算（无 GPU 调用），< 0.5 秒完成。
-      多轮迭代（默认 3 轮）使各类偏置互相适应，收敛到局部最优。
-
-    目标函数：
-      maximize  monitor_score = 0.4 × macro-F1 + 0.6 × min(per_class_F1)
-      与训练阶段的早停准则保持一致，确保校准不破坏训练目标。
-
-    Args:
-        router:  已加载最优权重的 RouterMLP 实例
-        val_X:   验证集特征, shape (N, D)
-        val_y:   验证集标签, shape (N,)
-        n_rounds: 坐标下降轮数（默认3轮已足够收敛）
-
-    Returns:
-        offsets: np.ndarray, shape (4,)，每类的最优 logit 偏置
-        best_score: float，校准后的 monitor_score
-    """
-    import torch
-    from sklearn.metrics import f1_score
-
-    device = router.device
-    X_t = torch.tensor(val_X, dtype=torch.float32).to(device)
-    router.model.eval()
-    with torch.no_grad():
-        logits_np = router.model(X_t).cpu().numpy()   # (N, 4)
-
-    def _score(offsets):
-        preds = (logits_np + offsets).argmax(axis=1)
-        macro = f1_score(val_y, preds, average='macro', zero_division=0)
-        per = f1_score(val_y, preds, average=None, zero_division=0, labels=[0, 1, 2, 3])
-        return 0.4 * macro + 0.6 * float(min(per)), macro
-
-    offsets = np.zeros(4, dtype=np.float32)
-    best_score, _ = _score(offsets)
-
-    for _round in range(n_rounds):
-        for cls in range(4):
-            best_off_for_cls = float(offsets[cls])
-            for off in np.arange(-4.0, 4.1, 0.1):
-                trial = offsets.copy()
-                trial[cls] = off
-                s, _ = _score(trial)
-                if s > best_score:
-                    best_score = s
-                    best_off_for_cls = float(off)
-            offsets[cls] = best_off_for_cls
-
-    _, final_macro = _score(offsets)
-    logger.info(
-        f"  [校准] 搜索完成 | 偏置: "
-        f"text={offsets[0]:+.2f}, image={offsets[1]:+.2f}, "
-        f"uml={offsets[2]:+.2f}, general={offsets[3]:+.2f} | "
-        f"校准后 macro-F1={final_macro:.4f}"
-    )
-    return offsets, final_macro
-
-
 def _train_router(router, train_X, train_y, val_X, val_y, args):
     """
     训练MLP路由器
 
-    相比上一版本的优化（本次针对 text/general 召回率低的专项改进）：
-
-    ── 问题诊断 ─────────────────────────────────────────────────────────────
-    上版结果: text=79.4%, general=71.5%（global routing acc）
-    分类报告: general recall=0.38（严重偏低），text recall=0.87（尚可）
-    根因分析：
-    1. CrossEntropyLoss + 类权重：对"以中等置信度误分 general→text"的惩罚不足
-       CE 损失平等对待"p_t=0.3 误分"和"p_t=0.01 误分"，梯度信号弱
-    2. CosineAnnealingWarmRestarts（T_0=20）：T_0 处 LR 重启，
-       Epoch 20 时 val_F1 从 0.63 掉回 0.61，最优 checkpoint 在重启前被错过
-    3. 64 条 general 训练样本：模型在训练集中几乎没见过 general 样本，
-       决策边界完全偏向 text 侧
-
-    ── 本次四项优化 ─────────────────────────────────────────────────────────
-    1. Focal Loss（gamma=2）
-       FL = -alpha_t · (1-p_t)^gamma · CE
-       p_t 越低（越难分），(1-p_t)^2 越大，梯度惩罚越强。
-       general 样本被误判为 text 时 p_t 约 0.2~0.4，focal weight 约 0.36~0.64，
-       有效放大梯度信号，迫使模型专注学习 text-general 边界。
-       gamma=0 时退化为加权 CE，可对比验证。
-
-    2. 少数类噪声增强（general × 4份 + text × 1份）
-       在 L2归一化特征空间加入 std=0.005 的高斯噪声（相当于 0.5% 量级扰动）：
-         general: 64 → 64 + 4×64 = 320 条（增加 5 倍训练信号）
-         text:   244 → 244 + 244 = 488 条（缩小训练量差距，防止 text 过度压制 general）
-       噪声强度刻意很小：不改变特征语义方向，仅防止模型对稀疏 general 样本记忆式过拟合。
-       增强后重新计算逆频率类权重（general 权重适当下降，由 Focal Loss 补偿）。
-
-    3. ReduceLROnPlateau（替代 CosineAnnealingWarmRestarts）
-       mode='max', patience=8, factor=0.5：连续 8 个 epoch val_F1 无改善则 LR 减半。
-       消除 WarmRestarts 的 LR 重启，避免已找到的好点被高 LR 破坏；
-       plateau 检测让 LR 下降时机与验证集性能直接挂钩，更自适应。
-
-    4. patience 15 → 20 + per-class F1 监控
-       给模型更多时间在低 LR 区域精调 text-general 决策面；
-       每 10 epoch 打印各类别独立 F1，便于诊断哪类仍在改善。
+    优化要点（对比原实现）：
+    1. 早停指标改为 macro-F1（原来是 accuracy）
+       - accuracy 在不均衡类别下会偏向多数类（text 最多），模型只要全预测 text
+         就能获得较高 accuracy，掩盖了少数类（image/general）完全没学到的事实
+       - macro-F1 对每个类别一视同仁，只要某类 recall=0 就会直接拉低指标
+    2. patience 5 → 15，max_epochs 50 → 100
+       - 原来 5 个 epoch 无提升就停止，等价于约 110 个梯度步，严重不足
+    3. 学习率 1e-4 → 5e-4
+       - 2.1M 参数 MLP 在 ~700 样本上收敛极快，更大 LR 可加速有效学习
+    4. 加入 label_smoothing=0.1
+       - Oracle 标签本身存在噪声（两个专家 ROUGE-L 相差很小时标签近似随机），
+         软标签可防止模型对噪声标签过拟合
     """
     import torch
     import torch.nn as nn
+    import torch.nn.functional as F
     from torch.utils.data import DataLoader, TensorDataset
     from sklearn.metrics import f1_score
 
     device = router.device
-
-    # ── 优化2：少数类噪声增强（增强前先复制，不修改原始数组）──
-    # 本次调整原因（相比上版本）：
-    #   上版 general×4 → general有320/1098=29%训练占比，但测试集中仅16%，
-    #   导致 general precision=0.31（模型过度预测general）。
-    #   上版 text×1 → text recall=0.51，模型对text样本不够敏感。
-    #   uml未增强 → uml recall=0.97（特征天然distinctive），但在决策边界处"吞噬"text样本。
-    #
-    # 新策略：
-    #   general: 64 → 128 (×1副本, 9.5% 训练占比 ≈ 测试集16%更合理)
-    #   text:   244 → 732 (×2副本, 提升text信号密度, 帮助学到更宽的text特征范围)
-    #   uml:   158 → 316 (×1副本, 稍扩充uml信号, 减轻其在边界区域的over-dominance)
-    #   image: 不变 (image recall=0.84已经不错, 不干扰)
-    rng = np.random.default_rng(42)
-    noise_std = 0.005  # L2归一化空间：0.5% 量级，不改变语义方向
-
-    aug_X_parts = [train_X]
-    aug_y_parts = [train_y]
-
-    general_mask = (train_y == 3)
-    if general_mask.sum() > 0:
-        gX = train_X[general_mask]
-        # ×1副本（原×4）：减少general过度预测，恢复precision
-        aug_X_parts.append(gX + rng.standard_normal(gX.shape).astype(np.float32) * noise_std)
-        aug_y_parts.append(np.full(len(gX), 3, dtype=np.int64))
-        logger.info(f"  [增强] general: {general_mask.sum()} → {general_mask.sum()*2} 条 (×1副本, 原×4)")
-
-    text_mask = (train_y == 0)
-    if text_mask.sum() > 0:
-        tX = train_X[text_mask]
-        # ×2副本（原×1）：提升text recall（原=0.51），让模型在更大范围预测text
-        for _ in range(2):
-            aug_X_parts.append(tX + rng.standard_normal(tX.shape).astype(np.float32) * noise_std)
-            aug_y_parts.append(np.zeros(len(tX), dtype=np.int64))
-        logger.info(f"  [增强] text: {text_mask.sum()} → {text_mask.sum()*3} 条 (×2副本, 原×1)")
-
-    uml_mask = (train_y == 2)
-    if uml_mask.sum() > 0:
-        uX = train_X[uml_mask]
-        # ×1副本（新增）：uml未增强时recall=0.97但侵占text边界，适度扩充使决策边界更稳定
-        aug_X_parts.append(uX + rng.standard_normal(uX.shape).astype(np.float32) * noise_std)
-        aug_y_parts.append(np.full(len(uX), 2, dtype=np.int64))
-        logger.info(f"  [增强] uml: {uml_mask.sum()} → {uml_mask.sum()*2} 条 (×1副本, 新增)")
-
-    train_X_aug = np.concatenate(aug_X_parts, axis=0)
-    train_y_aug = np.concatenate(aug_y_parts, axis=0).astype(np.int64)
-    logger.info(f"  增强后训练集: {len(train_X_aug)} 条 (原 {len(train_X)} 条)")
-
-    # 增强后重新计算类权重
-    class_counts = np.bincount(train_y_aug, minlength=4).astype(float)
-    class_weights = np.where(class_counts > 0, 1.0 / class_counts, 0.0)
-    class_weights = class_weights / (class_weights.mean() + 1e-9)
-    logger.info(f"  类别样本数(增强后): {dict(zip(['text','image','uml','general'], class_counts.astype(int)))}")
-    logger.info(f"  类别权重(增强后):   {dict(zip(['text','image','uml','general'], class_weights.round(3)))}")
-
-    X_t = torch.tensor(train_X_aug, dtype=torch.float32)
-    y_t = torch.tensor(train_y_aug, dtype=torch.long)
+    X_t = torch.tensor(train_X, dtype=torch.float32)
+    y_t = torch.tensor(train_y, dtype=torch.long)
     X_v = torch.tensor(val_X, dtype=torch.float32).to(device)
     y_v = torch.tensor(val_y, dtype=torch.long).to(device)
 
     dataset = TensorDataset(X_t, y_t)
-    # batch_size 维持32，但训练集更大，每 epoch 步数更多
-    loader = DataLoader(dataset, batch_size=32, shuffle=True, drop_last=False)
+    loader = DataLoader(dataset, batch_size=32, shuffle=True)
 
     optimizer = torch.optim.AdamW(
         router.model.parameters(), lr=5e-4, weight_decay=1e-2
     )
 
-    # ── 优化1：Focal Loss（gamma=2，含逆频率类权重）──
-    alpha_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
-    criterion = FocalLoss(alpha=alpha_tensor, gamma=2.0)
+    # 类别权重：逆频率加权，归一化为均值=1
+    class_counts = np.bincount(train_y, minlength=4).astype(float)
+    class_weights = np.where(class_counts > 0, 1.0 / class_counts, 0.0)
+    class_weights = class_weights / (class_weights.mean() + 1e-9)
+    logger.info(f"  类别样本数: {dict(zip(['text','image','uml','general'], class_counts.astype(int)))}")
+    logger.info(f"  类别权重:   {dict(zip(['text','image','uml','general'], class_weights.round(3)))}")
 
-    # ── 优化3：ReduceLROnPlateau（替代 CosineAnnealingWarmRestarts）──
-    # mode='max': val_macro_F1 越高越好
-    # patience=8: 连续 8 epoch 无改善才降 LR（与 early_stop_patience=20 配合）
-    # factor=0.5: 每次降为当前 LR 的一半
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='max', factor=0.5, patience=8, min_lr=1e-6
+    criterion = nn.CrossEntropyLoss(
+        weight=torch.tensor(class_weights, dtype=torch.float32).to(device),
+        label_smoothing=0.1,   # 防止对噪声 Oracle 标签过拟合
     )
 
-    max_epochs = 10 if args.test_mode else 120   # 稍微放宽上限
-    patience = 5 if args.test_mode else 20        # ── 优化4：patience 15→20 ──
+    # CosineAnnealingWarmRestarts：T_0=20 个 epoch 后重启一次
+    # 比 CosineAnnealingLR 更不容易陷入局部最优
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=20, T_mult=2, eta_min=1e-6
+    )
+
+    max_epochs = 10 if args.test_mode else 100
+    patience = 5 if args.test_mode else 15
     best_val_f1 = 0.0
     no_improve = 0
-    history = {'train_loss': [], 'val_acc': [], 'val_macro_f1': [],
-               'per_class_f1': [], 'lr': []}
-
-    y_v_np = y_v.cpu().numpy()
+    history = {'train_loss': [], 'val_acc': [], 'val_macro_f1': []}
 
     for epoch in range(max_epochs):
         router.model.train()
@@ -672,53 +526,31 @@ def _train_router(router, train_X, train_y, val_X, val_y, args):
             torch.nn.utils.clip_grad_norm_(router.model.parameters(), 1.0)
             optimizer.step()
             epoch_loss += loss.item()
+        scheduler.step()
 
-        # 验证
+        # 验证：同时记录 accuracy 和 macro-F1，以 macro-F1 为早停依据
         router.model.eval()
         with torch.no_grad():
             val_logits = router.model(X_v)
             val_pred = val_logits.argmax(dim=1).cpu().numpy()
-
+        y_v_np = y_v.cpu().numpy()
         val_acc = float((val_pred == y_v_np).mean())
         val_f1 = float(f1_score(y_v_np, val_pred, average='macro', zero_division=0))
-        # ── 优化4：per-class F1（text=0, image=1, uml=2, general=3）──
-        per_class = f1_score(y_v_np, val_pred, average=None,
-                             zero_division=0, labels=[0, 1, 2, 3]).tolist()
-
-        # ── 优化5：平衡监控分数 ─────────────────────────────────────────────
-        # 问题：纯 macro-F1 早停会在最差类（text）未充分收敛时就停止，
-        #       因为 uml/image 很早拉高 macro-F1，掩盖了 text recall 仍在改善。
-        # 解决：monitor = 0.4×macro_F1 + 0.6×min(per_class_F1)
-        #   - min(per_class_F1) 对最差类最敏感，强迫模型持续改善最差类
-        #   - 0.6 权重确保最差类F1停滞时（即使macro还在微涨）尽早触发早停
-        #   - macro_F1 作为锚点防止模型为提升最差类而牺牲其他类
-        worst_class_f1 = float(min(per_class))
-        monitor_score = 0.4 * val_f1 + 0.6 * worst_class_f1
 
         avg_loss = epoch_loss / len(loader)
-        current_lr = optimizer.param_groups[0]['lr']
         history['train_loss'].append(avg_loss)
         history['val_acc'].append(val_acc)
         history['val_macro_f1'].append(val_f1)
-        history['per_class_f1'].append(per_class)
-        history['lr'].append(current_lr)
 
-        # 打印：epoch 1 + 每 10 epoch + 最终 epoch
         if (epoch + 1) % 10 == 0 or epoch == 0:
             logger.info(
                 f"  Epoch {epoch+1}/{max_epochs}: "
-                f"loss={avg_loss:.4f}, val_acc={val_acc:.4f}, val_macro_F1={val_f1:.4f}, "
-                f"monitor={monitor_score:.4f} | "
-                f"per-class F1: text={per_class[0]:.3f} img={per_class[1]:.3f} "
-                f"uml={per_class[2]:.3f} gen={per_class[3]:.3f} | lr={current_lr:.2e}"
+                f"loss={avg_loss:.4f}, val_acc={val_acc:.4f}, val_macro_F1={val_f1:.4f}"
             )
 
-        # ── 优化3：ReduceLROnPlateau 步进（传入 monitor_score，与早停信号一致）──
-        scheduler.step(monitor_score)
-
-        # 早停：以 monitor_score（macro_F1 + 最差类惩罚）为准
-        if monitor_score > best_val_f1:
-            best_val_f1 = monitor_score
+        # 早停：以 macro-F1 为准，而非 accuracy
+        if val_f1 > best_val_f1:
+            best_val_f1 = val_f1
             no_improve = 0
             router.save(ROUTER_CKPT_DIR / 'router_mlp_best.pt')
         else:
@@ -726,33 +558,14 @@ def _train_router(router, train_X, train_y, val_X, val_y, args):
             if no_improve >= patience:
                 logger.info(
                     f"  Early stop at epoch {epoch+1}, "
-                    f"best monitor_score={best_val_f1:.4f}"
+                    f"best val_macro_F1={best_val_f1:.4f}"
                 )
                 break
 
     # 加载最优 checkpoint
     router.load(ROUTER_CKPT_DIR / 'router_mlp_best.pt')
-
-    # ── 优化6：后处理 per-class logit 校准 ────────────────────────────────────
-    # 问题：MLP 在训练集分布上学到的决策边界在测试集上存在系统性偏移：
-    #   text precision=0.85 但 recall=0.51 → 预测 text 的阈值过高（过于保守）
-    #   general precision=0.31 → 预测 general 的阈值过低（过于激进）
-    # 解决：在验证集上通过坐标下降搜索每个类别的 logit 偏置（bias shift），
-    #   使 monitor_score 最大化，无需重新训练，几秒内完成。
-    #   正偏置 → 降低实际预测阈值（提升 recall），负偏置 → 提高阈值（提升 precision）
-    logger.info("\n--- 步骤4b: 后处理 per-class 校准 ---")
-    offsets, cal_f1 = _calibrate_class_offsets(router, val_X, val_y)
-    logger.info(
-        f"  校准前 monitor_score={best_val_f1:.4f}  →  校准后 macro-F1={cal_f1:.4f}"
-    )
-    router.set_calibration_offsets(offsets)
-    # 重新保存含校准偏置的最优 checkpoint（覆盖原文件，保持接口一致）
-    router.save(ROUTER_CKPT_DIR / 'router_mlp_best.pt')
-
-    logger.info(f"训练完成，最优 monitor_score={best_val_f1:.4f}, 校准后 macro-F1={cal_f1:.4f}")
+    logger.info(f"训练完成，最优验证 macro-F1: {best_val_f1:.4f}")
     history['best_val_f1'] = best_val_f1
-    history['calibration_offsets'] = offsets.tolist()
-    history['calibrated_macro_f1'] = cal_f1
     return history
 
 
@@ -984,22 +797,17 @@ def _run_output_ensemble(router, features, general_test, args):
             logger.warning(f"    adapter 加载失败 {et}: {e}")
     model_with_adapters.eval()
 
-    # 预加载所有专家在 general 域的缓存
+    routing_stats = defaultdict(int)
     preloaded_caches = _load_all_expert_caches_for_general()
     logger.info(f"  已预加载专家缓存: {list(preloaded_caches.keys())}")
 
-    # ── 优化：将样本按(expert1, expert2)分组，批量推理大幅提升GPU利用率 ──
-    # 原实现逐条处理（1 sample × 1 token × 2 adapter switches/step ≈ 1022 tiny kernels/sample）
-    # GPU利用率仅10%，CPU成为瓶颈（Python循环开销 + CUDA kernel launch overhead）
-    # 批量推理：同组8条样本合并一次 forward，GPU利用率从10%提升至70%+
-    ENSEMBLE_BATCH_SIZE = 8  # RTX 4090 24GB: 模型~5GB + KV Cache 2专家~1.7GB，batch=8 安全
-
-    routing_stats = defaultdict(int)
-
-    # 第一遍：路由分派 ——  高置信度样本走缓存，其余入分组队列
-    samples = [None] * len(general_test)
-    # {(expert1, expert2): [(global_idx, input_text, w1, w2), ...]}
-    ensemble_groups = defaultdict(list)
+    # ── Stage 1: 分类样本（纯 CPU，O(N)）──────────────────────────────────────
+    # cache_results  : top-1 prob >= 0.85，直接从磁盘缓存取，零 GPU 开销
+    # ensemble_groups: 按 (expert1, expert2) 分组，后续批量 GPU 推理
+    # sample_meta    : 保存每条样本的路由元信息，供最终重新排序（reassemble）用
+    sample_meta = []          # [(i, expert1, expert2, w1, w2, w1_raw), ...]
+    cache_results = {}        # {i: pred_str}
+    ensemble_groups = defaultdict(list)   # {(e1, e2): [(i, sample, w1, w2), ...]}
 
     for i, (sample, prob) in enumerate(zip(general_test, probs)):
         top2_idxs = np.argsort(prob)[::-1][:2]
@@ -1007,82 +815,59 @@ def _run_output_ensemble(router, features, general_test, args):
         expert2 = IDX_TO_EXPERT[top2_idxs[1]]
         w1_raw = float(prob[top2_idxs[0]])
         w2_raw = float(prob[top2_idxs[1]])
-        w_sum = w1_raw + w2_raw
+        w_sum   = w1_raw + w2_raw
         w1 = w1_raw / w_sum
         w2 = w2_raw / w_sum
-
         routing_stats[f"{expert1}+{expert2}"] += 1
+        sample_meta.append((i, expert1, expert2, w1, w2, w1_raw))
 
         if w1_raw >= 0.85:
-            # 高置信度：直接从缓存取，不占GPU
-            pred = _single_expert_from_cache(expert1, 'general', i, preloaded_caches)
-            samples[i] = {
-                'index': i,
-                'input': sample['input'],
-                'prediction': pred,
-                'reference': sample['output'],
-                'expert1': expert1,
-                'expert2': expert2,
-                'w1': w1,
-                'w2': w2,
-            }
+            # 退化为单专家：直接从缓存取，不占 GPU
+            cache_results[i] = _single_expert_from_cache(
+                expert1, 'general', i, preloaded_caches
+            )
         else:
-            ensemble_groups[(expert1, expert2)].append((i, sample['input'], sample['output'], w1, w2))
+            ensemble_groups[(expert1, expert2)].append((i, sample, w1, w2))
 
-    # 第二遍：按组批量推理（GPU密集）
-    total_ensemble = sum(len(v) for v in ensemble_groups.values())
-    done = 0
-    logger.info(f"  分组批量推理: {total_ensemble} 条需融合样本, {len(ensemble_groups)} 组, batch={ENSEMBLE_BATCH_SIZE}")
+    n_cache = len(cache_results)
+    n_ensemble = sum(len(v) for v in ensemble_groups.values())
+    logger.info(
+        f"  样本分类: cache(w1>=0.85)={n_cache}, "
+        f"ensemble={n_ensemble}, 组数={len(ensemble_groups)}"
+    )
 
-    for (expert1, expert2), group_items in ensemble_groups.items():
-        logger.info(f"  [组] {expert1}+{expert2}: {len(group_items)} 条")
-        for batch_start in range(0, len(group_items), ENSEMBLE_BATCH_SIZE):
-            batch = group_items[batch_start: batch_start + ENSEMBLE_BATCH_SIZE]
-            batch_inputs = [(inp, w1, w2) for (_, inp, _, w1, w2) in batch]
+    # ── Stage 2: 按 (expert1, expert2) 组批量 GPU 推理 ──────────────────────
+    # 同一组内的样本共享两次 prefill（而非每条样本各自 prefill），
+    # decode 阶段每步两次 (B,1) forward 替代原来 B×2 次 (1,1) forward，
+    # GPU 利用率从 ~10% 提升至 ~60%+。
+    ensemble_results = {}   # {i: pred_str}
+    for group_idx, ((expert1, expert2), group_items) in enumerate(ensemble_groups.items()):
+        logger.info(
+            f"  Ensemble组 {group_idx+1}/{len(ensemble_groups)}: "
+            f"{expert1}+{expert2}, {len(group_items)} 条"
+        )
+        preds = _logit_ensemble_generate_batched(
+            model_with_adapters, tokenizer,
+            expert1, expert2, group_items, args
+        )
+        for (i_s, _s, _w1, _w2), pred in zip(group_items, preds):
+            ensemble_results[i_s] = pred
 
-            try:
-                preds = _batch_logit_ensemble_generate(
-                    model_with_adapters, tokenizer,
-                    batch_inputs, expert1, expert2, args,
-                )
-            except Exception as e:
-                logger.warning(f"  批量ensemble失败({expert1}+{expert2} batch_start={batch_start}): {e}，回退单条")
-                preds = []
-                for (_, inp, _, w1, w2) in batch:
-                    try:
-                        p = _logit_ensemble_generate(
-                            model_with_adapters, tokenizer,
-                            inp, expert1, expert2, w1, w2, args
-                        )
-                    except Exception:
-                        p = ''
-                    preds.append(p)
-
-            for (global_idx, inp, ref, w1, w2), pred in zip(batch, preds):
-                samples[global_idx] = {
-                    'index': global_idx,
-                    'input': inp,
-                    'prediction': pred,
-                    'reference': ref,
-                    'expert1': expert1,
-                    'expert2': expert2,
-                    'w1': w1,
-                    'w2': w2,
-                }
-
-            done += len(batch)
-            if done % 50 < ENSEMBLE_BATCH_SIZE or done == total_ensemble:
-                logger.info(f"  Ensemble进度: {done}/{total_ensemble}")
-
-    # 填补极少数仍为 None 的槽（理论上不应出现）
-    for i, s in enumerate(samples):
-        if s is None:
-            logger.warning(f"  样本 {i} 未被处理，使用空预测")
-            samples[i] = {
-                'index': i, 'input': general_test[i]['input'],
-                'prediction': '', 'reference': general_test[i]['output'],
-                'expert1': 'general', 'expert2': 'general', 'w1': 1.0, 'w2': 0.0,
-            }
+    # ── Stage 3: 按原始顺序 reassemble ──────────────────────────────────────
+    samples = []
+    for (i, expert1, expert2, w1, w2, _w1_raw) in sample_meta:
+        sample = general_test[i]
+        pred = cache_results.get(i) or ensemble_results.get(i, '')
+        samples.append({
+            'index': i,
+            'input': sample['input'],
+            'prediction': pred,
+            'reference': sample['output'],
+            'expert1': expert1,
+            'expert2': expert2,
+            'w1': w1,
+            'w2': w2,
+        })
 
     del lm, model_with_adapters, tokenizer
     _cleanup_gpu()
@@ -1103,197 +888,303 @@ def _run_output_ensemble(router, features, general_test, args):
     return {'rougeL': rougeL, 'top2_rate': top2_rate, 'routing_stats': dict(routing_stats)}
 
 
-def _batch_logit_ensemble_generate(
+_ENSEMBLE_BATCH_SIZE = 12  # RTX 4090 24 GB: batch=12 → KV Cache 约 2.5 GB，仍远低于预算
+# 说明：4090 24GB = 基础模型4bit ~10GB + 2专家KV Cache(B=12, seq≈1024) ~3GB → 峰值约13GB，安全
+
+
+def _logit_ensemble_generate_batched(
     model_with_adapters, tokenizer,
-    batch_inputs,   # list of (input_text, w1, w2) — 同一 (expert1, expert2) 组
-    expert1, expert2, args,
+    expert1, expert2, group_items, args,
+    batch_size=_ENSEMBLE_BATCH_SIZE,
 ):
     """
-    批量 logit-space Product-of-Experts 生成
+    批量版 logit-space 双专家融合生成
 
-    ── 为什么能提升GPU利用率 ─────────────────────────────────────────────────
-    原始单条实现：每步 2 次 set_adapter + forward，每次 GPU 仅处理 1 token × 1 sample。
-    CUDA kernel launch overhead 占主导，GPU 真实计算比例 <10%。
+    将同一 (expert1, expert2) 组的样本按 batch_size 分批，
+    每批调用 _process_minibatch 完成：
+      - 一次批量 prefill（B 条同时过 expert1 / expert2）
+      - 每个 decode 步：两次 (B, 1) forward（而非 B×2 次 (1, 1) forward）
 
-    本函数将同一 (expert1, expert2) 组的 B 条样本合并为一个 batch：
-      - Prefill  : 2 次 forward，每次处理 B 条 prompt（GPU 处理 B×L token）
-      - Decode   : 每步 2 次 forward，每次处理 B×1 token（GPU 处理 B token）
-    batch=8 时，GPU 计算密度从 ~10% 提升至 ~70%，总推理时间减少 60-70%。
+    OOM fallback: 某批次显存溢出时，自动降级为逐条 _logit_ensemble_generate。
 
-    ── KV Cache 正确性保证 ───────────────────────────────────────────────────
-    每个专家的 KV Cache 用完全相同的 token 序列（prompt + fused_tokens[:t]）积累，
-    保证两专家在每步的 conditioning context 完全一致，logit 融合语义有效。
+    Args:
+        group_items: List[(i_global, sample_dict, w1, w2)]  — 同一 (e1,e2) 组
+    Returns:
+        List[str]  — 与 group_items 等长，按相同顺序
+    """
+    import torch
 
-    ── 注意：left-padding ────────────────────────────────────────────────────
-    不同长度的 prompt 用 left-padding 对齐。prefill 阶段传入完整 attention_mask，
-    decode 阶段每步追加 1 列全1（新 token 的 mask），保证 KV Cache 索引正确。
+    all_preds = [''] * len(group_items)
+
+    for batch_start in range(0, len(group_items), batch_size):
+        batch = group_items[batch_start: batch_start + batch_size]
+        if not batch:
+            continue
+        try:
+            batch_preds = _process_minibatch(
+                model_with_adapters, tokenizer,
+                expert1, expert2, batch, args
+            )
+            for j, pred in enumerate(batch_preds):
+                all_preds[batch_start + j] = pred
+        except RuntimeError as e:
+            if 'out of memory' in str(e).lower():
+                logger.warning(
+                    f"  OOM (batch_size={len(batch)}), 降级到逐条推理..."
+                )
+                torch.cuda.empty_cache()
+                for j, (i_s, sample_s, w1_s, w2_s) in enumerate(batch):
+                    try:
+                        pred = _logit_ensemble_generate(
+                            model_with_adapters, tokenizer,
+                            sample_s['input'], expert1, expert2, w1_s, w2_s,
+                            args
+                        )
+                    except Exception as inner_e:
+                        logger.warning(f"  单条回退失败 i={i_s}: {inner_e}")
+                        pred = ''
+                    all_preds[batch_start + j] = pred
+            else:
+                logger.error(f"  批量推理非 OOM 错误: {e}")
+                for j in range(len(batch)):
+                    all_preds[batch_start + j] = ''
+
+    return all_preds
+
+
+def _process_minibatch(
+    model_with_adapters, tokenizer,
+    expert1, expert2, batch_items, args,
+):
+    """
+    RTX 4090 优化核心：批量 prefill + 批量 decode（B×1 token/step × 2 experts）
+
+    v2 优化（相对 v1 的关键改动，解决 GPU 30% / CPU 100% 瓶颈）
+
+    ── 原问题三类高频 GPU-CPU 同步点 ─────────────────────────────────────────
+      A) done.all() in if stmt     : 每步 1 次 GPU→CPU sync（512 次/batch）
+      B) next_tokens[b].item()     : 每步 B 次 sync（B=12 → ~6144 次/batch）
+      C) torch.cat([..., ones(B,t)]): 每步新建张量（512 次内存分配/batch）
+    总计每 batch 约 7000+ 次 GPU-CPU sync → CPU 100%、GPU 空等、利用率 ~30%
+
+    ── v2 修复 ─────────────────────────────────────────────────────────────────
+    ① 预分配 output_ids (B, max_new_tokens) on GPU
+       - 循环内用 tensor 赋值替代 .item()，全程无 Python-level sync
+       - 循环结束后一次 .cpu().tolist() 批量解码（sync 次数：6144 → 1）
+    ② 预分配 attn_mask_buf (B, L+max_new_tokens) on GPU，decode 部分预设全 1
+       - 循环内用 narrow view（[:, :L+step+1]）替代 torch.cat，zero-copy
+       - CUDA 内存分配次数：512 → 0
+    ③ done.all() 改为每 DONE_CHECK_INTERVAL 步同步一次
+       - GPU-CPU sync 次数：512 → ≤32
+    ④ done 更新改为向量化 masked_fill，消除 for b in range(B) Python 循环
+    ⑤ model.eval() 在 prefill 前统一调用一次（而非在 prefill try-blocks 内）
+
+    attention_mask 构造方式（left-padded prompt，长度 L）：
+        prefill:  prompt_mask                          shape (B, L)
+        step d:   attn_mask_buf[:, :L+d+1]  (view)    shape (B, L+d+1)
+                  = [prompt_mask | 1×(d+1)]  全部来自预分配缓冲区，zero-copy
+
+    Args:
+        batch_items: List[(i_global, sample_dict, w1, w2)]
+    Returns:
+        List[str]  — 与 batch_items 等长
     """
     import torch
     from models.prompt_templates.general_template import GeneralInstructionTemplate
 
+    B = len(batch_items)
     max_new_tokens = 512
+    DONE_CHECK_INTERVAL = 16   # 每 16 步做一次 GPU-CPU sync 检查 done.all()
 
+    # stop token set（同 _logit_ensemble_generate 修复2）
     stop_ids = {tokenizer.eos_token_id}
     if (tokenizer.pad_token_id is not None
             and tokenizer.pad_token_id != tokenizer.eos_token_id
             and tokenizer.pad_token_id > 3):
         stop_ids.add(tokenizer.pad_token_id)
+    stop_ids = {sid for sid in stop_ids if sid is not None}
+    # pad_id 用于占位已完成序列的输出槽（post-processing 时截断标记）
+    pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
+
+    # 提取各条样本的 prompt 和融合权重
+    prompts = [GeneralInstructionTemplate.build_prompt(s['input']) for (_, s, _, _) in batch_items]
+    ws1 = [w1 for (_, _, w1, _) in batch_items]
+    ws2 = [w2 for (_, _, _, w2) in batch_items]
+
+    # ── Left-padding tokenize，与 KV Cache decode 兼容 ──────────────────────
+    # 必须 left-pad：right-pad 时 KV Cache 最后一个有效位置对每条样本不同，
+    # 导致 decode 第一个 token 的 position id 错位。
+    orig_padding_side = tokenizer.padding_side
+    tokenizer.padding_side = 'left'
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+    encoded = tokenizer(
+        prompts, return_tensors='pt', padding=True,
+        truncation=True, max_length=512,
+    )
+    tokenizer.padding_side = orig_padding_side
 
     device = (
         model_with_adapters.base_model.model.device
         if hasattr(model_with_adapters, 'base_model')
         else next(model_with_adapters.parameters()).device
     )
+    prompt_ids  = encoded['input_ids'].to(device)        # (B, L)
+    prompt_mask = encoded['attention_mask'].to(device)   # (B, L)，left-pad 位置为 0
+    L = prompt_ids.shape[1]
 
-    B = len(batch_inputs)
-    prompts = [GeneralInstructionTemplate.build_prompt(inp) for inp, _, _ in batch_inputs]
-    # per-sample 权重张量：shape (B, 1)，用于 logit 加权
-    w1_t = torch.tensor([w1 for _, w1, _ in batch_inputs],
-                         dtype=torch.float32, device=device).unsqueeze(1)
-    w2_t = torch.tensor([w2 for _, _, w2 in batch_inputs],
-                         dtype=torch.float32, device=device).unsqueeze(1)
+    # 融合权重广播形状 (B, 1)，与 (B, vocab) logits 广播相乘
+    w1_t = torch.tensor(ws1, dtype=torch.float32, device=device).unsqueeze(1)
+    w2_t = torch.tensor(ws2, dtype=torch.float32, device=device).unsqueeze(1)
 
-    # Left-padding 保持序列右对齐（符合 causal attention 习惯）
-    _orig_padding_side = tokenizer.padding_side
-    tokenizer.padding_side = 'left'
-    if tokenizer.pad_token_id is None:
-        tokenizer.pad_token_id = tokenizer.eos_token_id
+    # ── 优化②：预分配注意力掩码缓冲区（一次分配，循环内 zero-copy view）───
+    # shape (B, L + max_new_tokens)
+    # [:, :L]  = prompt_mask（一次写入）
+    # [:, L:]  = 1（所有 decode 位置预设为 1；view 截断保证不越界）
+    attn_mask_buf = torch.zeros(B, L + max_new_tokens, dtype=torch.long, device=device)
+    attn_mask_buf[:, :L] = prompt_mask
+    attn_mask_buf[:, L:] = 1
 
-    enc = tokenizer(prompts, return_tensors='pt', padding=True,
-                    truncation=True, max_length=1024)
-    tokenizer.padding_side = _orig_padding_side
+    # ── 优化①：预分配输出 token 缓冲区（消除循环内 .item() 同步）──────────
+    # 已完成序列的槽位用 pad_id 填充，post-processing 时截断到第一个 stop/pad
+    output_ids = torch.full((B, max_new_tokens), pad_id, dtype=torch.long, device=device)
+    write_pos = 0   # 下一个写入列的下标
 
-    prompt_ids = enc['input_ids'].to(device)            # (B, L)
-    attn_mask  = enc['attention_mask'].to(device)       # (B, L)，0=pad, 1=real
+    # ── 优化⑤：eval() 统一在 prefill 前调用一次 ─────────────────────────────
+    model_with_adapters.eval()
 
-    # ── Prefill ───────────────────────────────────────────────────────────────
-    past_kv1 = past_kv2 = None
-    logits1_init = logits2_init = None
+    # ── Prefill：两个专家各一次批量前向 ─────────────────────────────────────
+    past_kv1, past_kv2 = None, None
+    logits1_init, logits2_init = None, None
 
     try:
         model_with_adapters.set_adapter(expert1)
-        model_with_adapters.eval()
         with torch.no_grad():
-            o1 = model_with_adapters(input_ids=prompt_ids,
-                                     attention_mask=attn_mask, use_cache=True)
-            logits1_init = o1.logits[:, -1, :]   # (B, V)
-            past_kv1     = o1.past_key_values
+            out1 = model_with_adapters(
+                input_ids=prompt_ids, attention_mask=prompt_mask, use_cache=True,
+            )
+            logits1_init = out1.logits[:, -1, :]   # (B, vocab)
+            past_kv1 = out1.past_key_values          # expert1 专属 KV Cache
     except Exception as e:
-        logger.warning(f"  [batch prefill] expert1={expert1}: {e}")
+        logger.warning(f"  prefill batch expert1={expert1} 失败: {e}")
 
     try:
         model_with_adapters.set_adapter(expert2)
-        model_with_adapters.eval()
         with torch.no_grad():
-            o2 = model_with_adapters(input_ids=prompt_ids,
-                                     attention_mask=attn_mask, use_cache=True)
-            logits2_init = o2.logits[:, -1, :]   # (B, V)
-            past_kv2     = o2.past_key_values
+            out2 = model_with_adapters(
+                input_ids=prompt_ids, attention_mask=prompt_mask, use_cache=True,
+            )
+            logits2_init = out2.logits[:, -1, :]   # (B, vocab)
+            past_kv2 = out2.past_key_values          # expert2 专属 KV Cache
     except Exception as e:
-        logger.warning(f"  [batch prefill] expert2={expert2}: {e}")
+        logger.warning(f"  prefill batch expert2={expert2} 失败: {e}")
 
     if logits1_init is None and logits2_init is None:
         return [''] * B
 
-    # ── 第一个 token（由 prefill logits 融合）────────────────────────────────
+    # ── 第一个 token：由 prefill logits 融合得到 ─────────────────────────────
     if logits1_init is None:
         logits_fused = logits2_init
     elif logits2_init is None:
         logits_fused = logits1_init
     else:
-        logits_fused = w1_t * logits1_init + w2_t * logits2_init  # (B, V)
+        logits_fused = w1_t * logits1_init + w2_t * logits2_init   # (B, vocab)
 
-    next_tokens = logits_fused.argmax(dim=-1, keepdim=True)  # (B, 1)
+    next_tokens = logits_fused.argmax(dim=-1, keepdim=True)   # (B, 1)
 
-    finished = torch.zeros(B, dtype=torch.bool, device=device)
-    for b in range(B):
-        if next_tokens[b, 0].item() in stop_ids:
-            finished[b] = True
+    # ── 优化④：向量化 done 更新（无 Python for 循环、无 .item()）────────────
+    done = torch.zeros(B, dtype=torch.bool, device=device)
+    for sid in stop_ids:
+        done |= (next_tokens.squeeze(1) == sid)
 
-    fused_tokens = [[] for _ in range(B)]
-    for b in range(B):
-        if not finished[b]:
-            fused_tokens[b].append(next_tokens[b, 0].item())
+    # 写入第一个 token；done 序列写 pad_id（post-processing 时截断）
+    output_ids[:, write_pos] = next_tokens.squeeze(1).masked_fill(done, pad_id)
+    write_pos += 1
 
-    # decode 阶段的 attention mask：每步追加 1 列全 1
-    decode_attn = attn_mask  # (B, L) → 每步 cat (B, 1)
-
-    # ── Decode loop ───────────────────────────────────────────────────────────
-    for _step in range(max_new_tokens - 1):
-        if finished.all():
+    # ── Decode 循环：每步 2 次 (B,1) forward ────────────────────────────────
+    for decode_step in range(max_new_tokens - 1):
+        # 优化③：每 DONE_CHECK_INTERVAL 步才做一次 GPU-CPU sync（.item() 触发）
+        if decode_step % DONE_CHECK_INTERVAL == 0 and done.all().item():
             break
 
-        # 追加本步新 token 的 attention mask 列
-        decode_attn = torch.cat(
-            [decode_attn, torch.ones(B, 1, dtype=decode_attn.dtype, device=device)],
-            dim=1,
-        )
+        # 优化②：view 零拷贝，shape (B, L+decode_step+1)，与原实现等价
+        # 原：torch.cat([prompt_mask, ones(B, decode_step+1)], dim=1)
+        # 现：attn_mask_buf 预置了所有 1，此处仅取前缀视图，无内存分配
+        attn_mask_step = attn_mask_buf[:, :L + decode_step + 1]
 
-        l1 = l2 = None
+        logits1, logits2 = None, None
 
         if past_kv1 is not None:
             try:
                 model_with_adapters.set_adapter(expert1)
                 with torch.no_grad():
-                    o1 = model_with_adapters(
+                    out1 = model_with_adapters(
                         input_ids=next_tokens,
-                        attention_mask=decode_attn,
+                        attention_mask=attn_mask_step,
                         past_key_values=past_kv1,
                         use_cache=True,
                     )
-                    l1       = o1.logits[:, -1, :]   # (B, V)
-                    past_kv1 = o1.past_key_values
+                    logits1  = out1.logits[:, -1, :]   # (B, vocab)
+                    past_kv1 = out1.past_key_values     # 更新 expert1 KV Cache
             except Exception as e:
-                logger.warning(f"  [batch decode] step={_step} expert1={expert1}: {e}")
+                logger.warning(f"  decode step={decode_step} expert1={expert1} batch 失败: {e}")
                 past_kv1 = None
 
         if past_kv2 is not None:
             try:
                 model_with_adapters.set_adapter(expert2)
                 with torch.no_grad():
-                    o2 = model_with_adapters(
+                    out2 = model_with_adapters(
                         input_ids=next_tokens,
-                        attention_mask=decode_attn,
+                        attention_mask=attn_mask_step,
                         past_key_values=past_kv2,
                         use_cache=True,
                     )
-                    l2       = o2.logits[:, -1, :]   # (B, V)
-                    past_kv2 = o2.past_key_values
+                    logits2  = out2.logits[:, -1, :]   # (B, vocab)
+                    past_kv2 = out2.past_key_values     # 更新 expert2 KV Cache
             except Exception as e:
-                logger.warning(f"  [batch decode] step={_step} expert2={expert2}: {e}")
+                logger.warning(f"  decode step={decode_step} expert2={expert2} batch 失败: {e}")
                 past_kv2 = None
 
-        if l1 is None and l2 is None:
+        if logits1 is None and logits2 is None:
             break
-        elif l1 is None:
-            logits_fused = l2
-        elif l2 is None:
-            logits_fused = l1
+        elif logits1 is None:
+            logits_fused = logits2
+        elif logits2 is None:
+            logits_fused = logits1
         else:
-            logits_fused = w1_t * l1 + w2_t * l2  # (B, V)
+            logits_fused = w1_t * logits1 + w2_t * logits2   # (B, vocab)
 
-        # 已结束的序列强制 EOS，不影响 KV cache 但保证输出干净
-        logits_fused[finished] = float('-inf')
-        logits_fused[finished, tokenizer.eos_token_id] = 0.0
+        next_tokens = logits_fused.argmax(dim=-1, keepdim=True)   # (B, 1)
 
-        next_tokens = logits_fused.argmax(dim=-1, keepdim=True)  # (B, 1)
+        # 优化④：向量化 done 更新（纯 CUDA op，无 Python 循环、无 .item()）
+        for sid in stop_ids:
+            done |= (next_tokens.squeeze(1) == sid)
 
-        for b in range(B):
-            if not finished[b]:
-                tok = next_tokens[b, 0].item()
-                if tok in stop_ids:
-                    finished[b] = True
-                else:
-                    fused_tokens[b].append(tok)
+        # 优化①：写入 output_ids（CUDA 赋值，无 sync；done 位写 pad_id）
+        output_ids[:, write_pos] = next_tokens.squeeze(1).masked_fill(done, pad_id)
+        write_pos += 1
 
-    # 释放大型 KV Cache，不等 GC
-    del past_kv1, past_kv2, decode_attn, logits_fused
-    import gc; gc.collect()
+    # ── 批量解码：循环结束后仅一次 GPU→CPU 转移 ──────────────────────────────
+    # 原实现：每步 B 次 .item() sync（最多 ~6144 次）→ 现在：1 次
+    if write_pos == 0:
+        return [''] * B
 
-    return [
-        tokenizer.decode(toks, skip_special_tokens=True) if toks else ''
-        for toks in fused_tokens
-    ]
+    output_cpu = output_ids[:, :write_pos].cpu().tolist()   # 唯一一次 GPU-CPU 同步
+    stop_ids_py = stop_ids | {pad_id}   # pad_id 作为截断标记（已完成序列的占位符）
+
+    results = []
+    for b_tokens in output_cpu:
+        # 截断到第一个终止符（EOS / pad_id），语义等价于原实现的 "not done[b] 才 append"
+        truncated = []
+        for tok in b_tokens:
+            if tok in stop_ids_py:
+                break
+            truncated.append(tok)
+        decoded = tokenizer.decode(truncated, skip_special_tokens=True) if truncated else ''
+        results.append(decoded)
+
+    return results
 
 
 def _logit_ensemble_generate(model_with_adapters, tokenizer,
