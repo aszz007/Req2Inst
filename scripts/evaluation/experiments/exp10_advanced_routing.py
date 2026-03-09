@@ -38,6 +38,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 import matplotlib
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -69,6 +70,7 @@ FEATURE_CACHE_DIR = CACHE_DIR / 'exp10_router_features'
 
 ALL_TYPES = ['text', 'image', 'uml', 'general']
 SPECIALIZED_TYPES = ['text', 'image', 'uml']
+
 
 # ─────────────────────────────────────────────
 # 模板工厂（核心修复：避免 GeneralTemplate 一刀切导致专家混淆）
@@ -181,8 +183,6 @@ def _load_exp9_results():
         logger.warning("Exp9 Phase2结果不存在，Soft Routing基线将缺失")
 
     return phase1, phase2
-
-
 
 
 # ─────────────────────────────────────────────
@@ -325,7 +325,7 @@ def run_phase1(args, exp9_phase1):
     # 类别分布
     for i, name in IDX_TO_EXPERT.items():
         cnt = (train_y == i).sum()
-        logger.info(f"  训练集-{name}: {cnt} 条 ({cnt/len(train_y)*100:.1f}%)")
+        logger.info(f"  训练集-{name}: {cnt} 条 ({cnt / len(train_y) * 100:.1f}%)")
 
     # ── 步骤4: 训练MLP ──
     logger.info("\n--- 步骤4: 训练MLP路由器 ---")
@@ -347,14 +347,14 @@ def run_phase1(args, exp9_phase1):
         y_pred = router.predict(X)
         acc = (y_pred == y_true).mean()
         accuracy_results[domain] = float(acc)
-        logger.info(f"  {domain}: 路由准确率={acc:.4f} ({acc*100:.1f}%)")
+        logger.info(f"  {domain}: 路由准确率={acc:.4f} ({acc * 100:.1f}%)")
 
     # General域评估
     y_pred_general = router.predict(general_features)
     y_true_general = np.array(general_labels)
     acc_general = (y_pred_general == y_true_general).mean()
     accuracy_results['general'] = float(acc_general)
-    logger.info(f"  general: 路由准确率={acc_general:.4f} ({acc_general*100:.1f}%)")
+    logger.info(f"  general: 路由准确率={acc_general:.4f} ({acc_general * 100:.1f}%)")
 
     # 混淆矩阵：汇总所有域（specialized + general），才能展示完整的4分类分布
     from sklearn.metrics import confusion_matrix, classification_report
@@ -372,7 +372,7 @@ def run_phase1(args, exp9_phase1):
     )
     logger.info(
         f"  全域分类报告:\n"
-        f"{classification_report(all_y_true, all_y_pred, target_names=['text','image','uml','general'], zero_division=0)}"
+        f"{classification_report(all_y_true, all_y_pred, target_names=['text', 'image', 'uml', 'general'], zero_division=0)}"
     )
 
     results = {
@@ -513,6 +513,7 @@ def _rebuild_general_labels(test_data, args):
 
     return labels
 
+
 def _train_router(router, train_X, train_y, val_X, val_y, args):
     """
     训练MLP路由器
@@ -553,12 +554,12 @@ def _train_router(router, train_X, train_y, val_X, val_y, args):
     class_counts = np.bincount(train_y, minlength=4).astype(float)
     class_weights = np.where(class_counts > 0, 1.0 / class_counts, 0.0)
     class_weights = class_weights / (class_weights.mean() + 1e-9)
-    logger.info(f"  类别样本数: {dict(zip(['text','image','uml','general'], class_counts.astype(int)))}")
-    logger.info(f"  类别权重:   {dict(zip(['text','image','uml','general'], class_weights.round(3)))}")
+    logger.info(f"  类别样本数: {dict(zip(['text', 'image', 'uml', 'general'], class_counts.astype(int)))}")
+    logger.info(f"  类别权重:   {dict(zip(['text', 'image', 'uml', 'general'], class_weights.round(3)))}")
 
     criterion = nn.CrossEntropyLoss(
         weight=torch.tensor(class_weights, dtype=torch.float32).to(device),
-        label_smoothing=0.1,   # 防止对噪声 Oracle 标签过拟合
+        label_smoothing=0.1,  # 防止对噪声 Oracle 标签过拟合
     )
 
     # CosineAnnealingWarmRestarts：T_0=20 个 epoch 后重启一次
@@ -603,7 +604,7 @@ def _train_router(router, train_X, train_y, val_X, val_y, args):
 
         if (epoch + 1) % 10 == 0 or epoch == 0:
             logger.info(
-                f"  Epoch {epoch+1}/{max_epochs}: "
+                f"  Epoch {epoch + 1}/{max_epochs}: "
                 f"loss={avg_loss:.4f}, val_acc={val_acc:.4f}, val_macro_F1={val_f1:.4f}"
             )
 
@@ -616,7 +617,7 @@ def _train_router(router, train_X, train_y, val_X, val_y, args):
             no_improve += 1
             if no_improve >= patience:
                 logger.info(
-                    f"  Early stop at epoch {epoch+1}, "
+                    f"  Early stop at epoch {epoch + 1}, "
                     f"best val_macro_F1={best_val_f1:.4f}"
                 )
                 break
@@ -705,9 +706,11 @@ def run_phase2(args, phase1_results, exp9_phase1):
     logger.info("=" * 60)
     logger.info(f"Hard Routing (baseline):   {hard_rougeL:.4f}")
     logger.info(f"Oracle Routing (upper):    {oracle_rougeL:.4f}")
-    logger.info(f"Gap:                       {gap:.4f} ({gap*100:.2f}%)")
-    logger.info(f"Learned Router:            {router_result['rougeL']:.4f} | Gap缩小: {router_gap_reduction*100:.1f}%")
-    logger.info(f"Output Ensemble:           {ensemble_result['rougeL']:.4f} | Gap缩小: {ensemble_gap_reduction*100:.1f}%")
+    logger.info(f"Gap:                       {gap:.4f} ({gap * 100:.2f}%)")
+    logger.info(
+        f"Learned Router:            {router_result['rougeL']:.4f} | Gap缩小: {router_gap_reduction * 100:.1f}%")
+    logger.info(
+        f"Output Ensemble:           {ensemble_result['rougeL']:.4f} | Gap缩小: {ensemble_gap_reduction * 100:.1f}%")
 
     results = {
         'phase': 'phase2',
@@ -750,7 +753,7 @@ def _run_learned_router_inference(router, features, general_test, args):
             return {'rougeL': _get_rougeL(m), 'routing_stats': cached.get('routing_stats', {})}
 
     # Router预测每条样本应路由到哪个专家
-    probs = router.predict_proba(features)   # (N, 4)
+    probs = router.predict_proba(features)  # (N, 4)
     predicted_experts = np.argmax(probs, axis=1)  # (N,)
 
     routing_stats = defaultdict(int)
@@ -824,7 +827,7 @@ def _run_output_ensemble(router, features, general_test, args):
     top1_probs = probs.max(axis=1)
     need_ensemble = (top1_probs < 0.85).sum()
     top2_rate = float(need_ensemble / len(probs))
-    logger.info(f"  需要双专家融合的样本数: {need_ensemble}/{len(probs)} ({top2_rate*100:.1f}%)")
+    logger.info(f"  需要双专家融合的样本数: {need_ensemble}/{len(probs)} ({top2_rate * 100:.1f}%)")
 
     # 加载基础模型
     import torch
@@ -883,10 +886,10 @@ def _run_output_ensemble(router, features, general_test, args):
     # 重要修复：pre-build prompt 时按每个样本 data_type 选择对应模板，
     #   确保两个专家收到格式一致且与其训练分布匹配的 prompt，
     #   避免 GeneralTemplate 一刀切导致格式崩溃和输出失控。
-    sample_meta = []          # [(i, expert1, expert2, w1, w2, w1_raw, template_name), ...]
-    cache_results = {}        # {i: pred_str}
-    ensemble_groups = defaultdict(list)   # {(e1, e2): [(i, prompt_str, w1, w2), ...]}
-    template_usage: defaultdict = defaultdict(int)   # {template_name: count}
+    sample_meta = []  # [(i, expert1, expert2, w1, w2, w1_raw, template_name), ...]
+    cache_results = {}  # {i: pred_str}
+    ensemble_groups = defaultdict(list)  # {(e1, e2): [(i, prompt_str, w1, w2), ...]}
+    template_usage: defaultdict = defaultdict(int)  # {template_name: count}
 
     for i, (sample, prob) in enumerate(zip(general_test, probs)):
         top2_idxs = np.argsort(prob)[::-1][:2]
@@ -894,7 +897,7 @@ def _run_output_ensemble(router, features, general_test, args):
         expert2 = IDX_TO_EXPERT[top2_idxs[1]]
         w1_raw = float(prob[top2_idxs[0]])
         w2_raw = float(prob[top2_idxs[1]])
-        w_sum   = w1_raw + w2_raw
+        w_sum = w1_raw + w2_raw
         w1 = w1_raw / w_sum
         w2 = w2_raw / w_sum
         routing_stats[f"{expert1}+{expert2}"] += 1
@@ -926,10 +929,10 @@ def _run_output_ensemble(router, features, general_test, args):
     # 同一组内的样本共享两次 prefill（而非每条样本各自 prefill），
     # decode 阶段每步两次 (B,1) forward 替代原来 B×2 次 (1,1) forward，
     # GPU 利用率从 ~10% 提升至 ~60%+。
-    ensemble_results = {}   # {i: pred_str}
+    ensemble_results = {}  # {i: pred_str}
     for group_idx, ((expert1, expert2), group_items) in enumerate(ensemble_groups.items()):
         logger.info(
-            f"  Ensemble组 {group_idx+1}/{len(ensemble_groups)}: "
+            f"  Ensemble组 {group_idx + 1}/{len(ensemble_groups)}: "
             f"{expert1}+{expert2}, {len(group_items)} 条"
         )
         # [DEBUG] 检查该组的模板分布（验证每组内模板是否一致）
@@ -958,10 +961,26 @@ def _run_output_ensemble(router, features, general_test, args):
                 if any(kw in p for kw in ['Definition', 'Emphasis', 'Things to Avoid',
                                           'definition', 'emphasis', 'things to avoid'])
             )
+            # [DEBUG] 新增：per-group ROUGE-L 估算（用于定位问题组）
+            from rouge_score import rouge_scorer as rs_mod
+            _scorer = rs_mod.RougeScorer(['rougeL'], use_stemmer=True)
+            group_rougeL_scores = []
+            for item in group_items:
+                i_s = item[0]
+                pred = ensemble_results.get(i_s, '')
+                ref = general_test[i_s].get('output', '')
+                if pred and ref:
+                    try:
+                        sc = _scorer.score(ref, pred)['rougeL'].fmeasure
+                        group_rougeL_scores.append(sc)
+                    except Exception:
+                        pass
+            group_rougeL = np.mean(group_rougeL_scores) if group_rougeL_scores else 0.0
             logger.info(
                 f"    [DEBUG] 组 {expert1}+{expert2}: "
                 f"avg_len={avg_len:.0f}, empty={empty_count}, "
-                f"format_ok={format_ok}/{len(valid_preds)} ({format_ok/len(valid_preds)*100:.0f}%)"
+                f"format_ok={format_ok}/{len(valid_preds)} ({format_ok / len(valid_preds) * 100:.0f}%), "
+                f"ROUGE-L={group_rougeL:.4f}"
             )
 
     # ── Stage 3: 按原始顺序 reassemble ──────────────────────────────────────
@@ -993,6 +1012,41 @@ def _run_output_ensemble(router, features, general_test, args):
     del lm, model_with_adapters, tokenizer
     _cleanup_gpu()
 
+    # ── [DEBUG] per-data_type ROUGE-L 分解：定位哪个子域仍有问题 ──────────
+    from rouge_score import rouge_scorer as rs_mod
+    _scorer = rs_mod.RougeScorer(['rougeL'], use_stemmer=True)
+    dtype_scores = defaultdict(list)
+    for s in samples:
+        dt = s.get('data_type', 'unknown')
+        pred, ref = s.get('prediction', ''), s.get('reference', '')
+        if pred and ref:
+            try:
+                sc = _scorer.score(ref, pred)['rougeL'].fmeasure
+                dtype_scores[dt].append(sc)
+            except Exception:
+                pass
+    for dt, scores in sorted(dtype_scores.items()):
+        logger.info(
+            f"  [DEBUG] data_type={dt}: n={len(scores)}, "
+            f"ROUGE-L={np.mean(scores):.4f} (std={np.std(scores):.4f})"
+        )
+    # per-expert-pair ROUGE-L
+    pair_scores = defaultdict(list)
+    for s in samples:
+        pair_key = f"{s.get('expert1', '?')}+{s.get('expert2', '?')}"
+        pred, ref = s.get('prediction', ''), s.get('reference', '')
+        if pred and ref:
+            try:
+                sc = _scorer.score(ref, pred)['rougeL'].fmeasure
+                pair_scores[pair_key].append(sc)
+            except Exception:
+                pass
+    for pair, scores in sorted(pair_scores.items(), key=lambda x: -len(x[1])):
+        logger.info(
+            f"  [DEBUG] expert_pair={pair}: n={len(scores)}, "
+            f"ROUGE-L={np.mean(scores):.4f}"
+        )
+
     save_predictions_cache(
         samples, 'exp10_ensemble', 'general',
         {
@@ -1010,13 +1064,15 @@ def _run_output_ensemble(router, features, general_test, args):
 
 
 _ENSEMBLE_BATCH_SIZE = 12  # RTX 4090 24 GB: batch=12 → KV Cache 约 2.5 GB，仍远低于预算
+
+
 # 说明：4090 24GB = 基础模型4bit ~10GB + 2专家KV Cache(B=12, seq≈1024) ~3GB → 峰值约13GB，安全
 
 
 def _logit_ensemble_generate_batched(
-    model_with_adapters, tokenizer,
-    expert1, expert2, group_items, args,
-    batch_size=_ENSEMBLE_BATCH_SIZE,
+        model_with_adapters, tokenizer,
+        expert1, expert2, group_items, args,
+        batch_size=_ENSEMBLE_BATCH_SIZE,
 ):
     """
     批量版 logit-space 双专家融合生成
@@ -1077,34 +1133,38 @@ def _logit_ensemble_generate_batched(
 
 
 def _process_minibatch(
-    model_with_adapters, tokenizer,
-    expert1, expert2, batch_items, args,
+        model_with_adapters, tokenizer,
+        expert1, expert2, batch_items, args,
 ):
     """
     RTX 4090 优化核心：批量 prefill + 批量 decode（B×1 token/step × 2 experts）
 
-    v3 修复（相对 v2 的关键改动，解决模板不匹配导致格式崩溃的根本问题）
+    v4 修复（解决 Output Ensemble ROUGE-L 比 Hard Routing 还差的根本问题）
 
-    ── 原问题：GeneralTemplate 一刀切 ──────────────────────────────────────────
-    v2 实现在此函数内部对所有样本统一使用 GeneralInstructionTemplate.build_prompt()，
-    而专化专家（text/image/uml）是在 domain-specific 模板下训练的，
-    收到 GeneralTemplate prompt 时输出分布偏移：
-      - 输出长度从 392 膨胀至 612（+56%）
-      - 格式通过率从 100% 跌至 77%
-      - ROUGE-L 从 0.5515 退化至 0.4319（Gap 缩小率 -145%）
+    ── 原问题 v3: PoE 融合导致 EOS 压制，UML 组输出失控 ──────────────────────
+    v3 使用 Product of Experts (PoE) 在 log-probability 空间融合：
+      fused = w1 * log_softmax(L1) + w2 * log_softmax(L2)
+    等价于概率空间乘法：P_fused ∝ P1^w1 * P2^w2
 
-    ── 修复：调用方预构建 prompt ──────────────────────────────────────────────
-    batch_items 格式由原来的 [(i_global, sample_dict, w1, w2), ...]
-    改为 [(i_global, prompt_str, w1, w2), ...] ，
-    prompt_str 已由 _run_output_ensemble 按每个样本的 data_type 选择正确模板构建。
-    两个专家收到 **完全相同的 prompt_str**，保证 KV Cache 前缀一致，PoE 融合有意义。
+    UML 专家训练在长序列上，其 P(EOS) 极低（~0.001），当 UML 作为 expert1：
+      PoE: P_fused(EOS) ∝ 0.001^0.6 * 0.1^0.4 = 0.0025 → EOS 被碾压
+    结果：uml+general 组 avg_len=1993, format_ok=9% → ROUGE-L 崩溃
 
-    ── 其他优化（v2 保留）──────────────────────────────────────────────────────
+    ── 修复：MoE 概率空间加权平均 ──────────────────────────────────────────────
+    P_fused(t) = w1 * softmax(L1) + w2 * softmax(L2)
+    同一例子：0.6*0.001 + 0.4*0.1 = 0.041 → EOS 信号保留
+
+    补充保护：
+    1. 动态 max_new_tokens：按 expert pair 中最大域上限设置（不再一刀切 512）
+    2. EOS 长度惩罚：超过 soft_limit 后逐步提升 EOS logit
+
+    ── 其他优化（v2/v3 保留）──────────────────────────────────────────────────
     ① 预分配 output_ids (B, max_new_tokens) on GPU，消除循环内 .item() sync
     ② 预分配 attn_mask_buf，decode 用 narrow view，zero-copy
     ③ 每 DONE_CHECK_INTERVAL 步 sync 一次 done.all()
     ④ 向量化 done 更新（无 Python for 循环）
     ⑤ eval() 在 prefill 前统一调用一次
+    ⑥ 调用方预构建 prompt（按样本 data_type 选模板，避免 GeneralTemplate 一刀切）
 
     Args:
         batch_items: List[(i_global, prompt_str, w1, w2)]
@@ -1115,8 +1175,18 @@ def _process_minibatch(
     import torch.nn.functional as F
 
     B = len(batch_items)
-    max_new_tokens = 512
-    DONE_CHECK_INTERVAL = 16   # 每 16 步做一次 GPU-CPU sync 检查 done.all()
+    DONE_CHECK_INTERVAL = 16  # 每 16 步做一次 GPU-CPU sync 检查 done.all()
+
+    # ── 动态 max_new_tokens：防止 UML 专家主导时输出失控 ──────────────────
+    # 各数据域的参考输出长度（token 数）基于训练集统计：
+    #   text: ~80 tokens, image: ~100 tokens, uml: ~150 tokens, general: ~100 tokens
+    # 设置为 2.5 倍参考长度作为上限，平衡生成质量与防失控
+    _DOMAIN_MAX_TOKENS = {'text': 256, 'image': 300, 'uml': 400, 'general': 300}
+    # 如果两个专家中有 UML，取 UML 的上限；否则取两者中较大的
+    max_new_tokens = max(
+        _DOMAIN_MAX_TOKENS.get(expert1, 300),
+        _DOMAIN_MAX_TOKENS.get(expert2, 300),
+    )
 
     # stop token set
     stop_ids = {tokenizer.eos_token_id}
@@ -1126,15 +1196,24 @@ def _process_minibatch(
         stop_ids.add(tokenizer.pad_token_id)
     stop_ids = {sid for sid in stop_ids if sid is not None}
     sentinel_id = tokenizer.eos_token_id
+    eos_id = tokenizer.eos_token_id
 
     # 核心修复：直接用预构建的 prompt_str，不再在此处调用任何 Template
     prompts = [prompt_str for (_, prompt_str, _, _) in batch_items]
     ws1 = [w1 for (_, _, w1, _) in batch_items]
     ws2 = [w2 for (_, _, _, w2) in batch_items]
 
+    # ── EOS 长度惩罚参数 ──────────────────────────────────────────────────
+    # 当生成超过 soft_limit 个 token 后，逐步加大 EOS 对数概率的偏置，
+    # 使模型倾向于在合理长度内结束。这是对 MoE 融合的补充保护，
+    # 针对 UML 专家的长输出偏好做二次兜底。
+    _SOFT_LIMIT = int(max_new_tokens * 0.6)  # 60% 处开始施加惩罚
+    _EOS_BOOST_RATE = 0.03  # 每超出 1 个 token，EOS logit 增加 0.03
+
     # [DEBUG] 记录 batch 基本信息
     logger.debug(
         f"    [minibatch] B={B}, expert1={expert1}, expert2={expert2}, "
+        f"max_new_tokens={max_new_tokens}, soft_limit={_SOFT_LIMIT}, "
         f"prompt0[:60]={prompts[0][:60]!r}"
     )
 
@@ -1156,8 +1235,8 @@ def _process_minibatch(
         if hasattr(model_with_adapters, 'base_model')
         else next(model_with_adapters.parameters()).device
     )
-    prompt_ids  = encoded['input_ids'].to(device)        # (B, L)
-    prompt_mask = encoded['attention_mask'].to(device)   # (B, L)，left-pad 位置为 0
+    prompt_ids = encoded['input_ids'].to(device)  # (B, L)
+    prompt_mask = encoded['attention_mask'].to(device)  # (B, L)，left-pad 位置为 0
     L = prompt_ids.shape[1]
 
     # 融合权重广播形状 (B, 1)，与 (B, vocab) logits 广播相乘
@@ -1175,7 +1254,7 @@ def _process_minibatch(
     # ── 优化①：预分配输出 token 缓冲区（消除循环内 .item() 同步）──────────
     # 已完成序列的槽位用 sentinel_id 填充，post-processing 时截断到第一个 stop/sentinel
     output_ids = torch.full((B, max_new_tokens), sentinel_id, dtype=torch.long, device=device)
-    write_pos = 0   # 下一个写入列的下标
+    write_pos = 0  # 下一个写入列的下标
 
     # ── 优化⑤：eval() 统一在 prefill 前调用一次 ─────────────────────────────
     model_with_adapters.eval()
@@ -1190,8 +1269,8 @@ def _process_minibatch(
             out1 = model_with_adapters(
                 input_ids=prompt_ids, attention_mask=prompt_mask, use_cache=True,
             )
-            logits1_init = out1.logits[:, -1, :]   # (B, vocab)
-            past_kv1 = out1.past_key_values          # expert1 专属 KV Cache
+            logits1_init = out1.logits[:, -1, :]  # (B, vocab)
+            past_kv1 = out1.past_key_values  # expert1 专属 KV Cache
     except Exception as e:
         logger.warning(f"  prefill batch expert1={expert1} 失败: {e}")
 
@@ -1201,8 +1280,8 @@ def _process_minibatch(
             out2 = model_with_adapters(
                 input_ids=prompt_ids, attention_mask=prompt_mask, use_cache=True,
             )
-            logits2_init = out2.logits[:, -1, :]   # (B, vocab)
-            past_kv2 = out2.past_key_values          # expert2 专属 KV Cache
+            logits2_init = out2.logits[:, -1, :]  # (B, vocab)
+            past_kv2 = out2.past_key_values  # expert2 专属 KV Cache
     except Exception as e:
         logger.warning(f"  prefill batch expert2={expert2} 失败: {e}")
 
@@ -1215,14 +1294,24 @@ def _process_minibatch(
     elif logits2_init is None:
         logits_fused = logits1_init
     else:
-        # PoE: fuse in log-probability space so each expert's log-partition
-        # function is cancelled before weighting.  Raw logit fusion is WRONG
-        # because log Z_1 ≠ log Z_2 under 4-bit quantization — the scale
-        # difference suppresses EOS and causes runaway generation.
-        logits_fused = (w1_t * F.log_softmax(logits1_init, dim=-1)
-                        + w2_t * F.log_softmax(logits2_init, dim=-1))   # (B, vocab)
+        # ── MoE 概率空间混合（修复 PoE 的 EOS 压制问题）──────────────────
+        # 旧实现：PoE (log-space additive) = 概率空间乘法
+        #   fused = w1*log_softmax(L1) + w2*log_softmax(L2)
+        #   等价于 P_fused(t) ∝ P1(t)^w1 * P2(t)^w2
+        #   问题：若 P_uml(EOS)=0.001，P_text(EOS)=0.1，
+        #         PoE: 0.001^0.6 * 0.1^0.4 = 0.0025 → EOS 被碾压，生成失控
+        #
+        # 新实现：MoE (probability-space additive) = 概率空间加权平均
+        #   P_fused(t) = w1*softmax(L1) + w2*softmax(L2)
+        #   同一例子：0.6*0.001 + 0.4*0.1 = 0.041 → EOS 信号保留
+        #   任一专家认为应该停止，融合后的 EOS 概率仍然可观。
+        prob1 = F.softmax(logits1_init, dim=-1)  # (B, vocab)
+        prob2 = F.softmax(logits2_init, dim=-1)  # (B, vocab)
+        fused_prob = w1_t * prob1 + w2_t * prob2  # (B, vocab)
+        # 转回 log 空间供 argmax（log 单调，argmax 等价）
+        logits_fused = torch.log(fused_prob + 1e-10)
 
-    next_tokens = logits_fused.argmax(dim=-1, keepdim=True)   # (B, 1)
+    next_tokens = logits_fused.argmax(dim=-1, keepdim=True)  # (B, 1)
 
     # ── 优化④：向量化 done 更新（无 Python for 循环、无 .item()）────────────
     done = torch.zeros(B, dtype=torch.bool, device=device)
@@ -1256,8 +1345,8 @@ def _process_minibatch(
                         past_key_values=past_kv1,
                         use_cache=True,
                     )
-                    logits1  = out1.logits[:, -1, :]   # (B, vocab)
-                    past_kv1 = out1.past_key_values     # 更新 expert1 KV Cache
+                    logits1 = out1.logits[:, -1, :]  # (B, vocab)
+                    past_kv1 = out1.past_key_values  # 更新 expert1 KV Cache
             except Exception as e:
                 logger.warning(f"  decode step={decode_step} expert1={expert1} batch 失败: {e}")
                 past_kv1 = None
@@ -1272,8 +1361,8 @@ def _process_minibatch(
                         past_key_values=past_kv2,
                         use_cache=True,
                     )
-                    logits2  = out2.logits[:, -1, :]   # (B, vocab)
-                    past_kv2 = out2.past_key_values     # 更新 expert2 KV Cache
+                    logits2 = out2.logits[:, -1, :]  # (B, vocab)
+                    past_kv2 = out2.past_key_values  # 更新 expert2 KV Cache
             except Exception as e:
                 logger.warning(f"  decode step={decode_step} expert2={expert2} batch 失败: {e}")
                 past_kv2 = None
@@ -1285,10 +1374,20 @@ def _process_minibatch(
         elif logits2 is None:
             logits_fused = logits1
         else:
-            logits_fused = (w1_t * F.log_softmax(logits1, dim=-1)
-                            + w2_t * F.log_softmax(logits2, dim=-1))   # (B, vocab)
+            # MoE 概率空间混合（与 prefill 保持一致）
+            prob1 = F.softmax(logits1, dim=-1)
+            prob2 = F.softmax(logits2, dim=-1)
+            fused_prob = w1_t * prob1 + w2_t * prob2
+            logits_fused = torch.log(fused_prob + 1e-10)  # (B, vocab)
 
-        next_tokens = logits_fused.argmax(dim=-1, keepdim=True)   # (B, 1)
+        # ── EOS 长度惩罚：超过 soft_limit 后逐步提升 EOS 概率 ────────────
+        # 防止 UML 专家的长输出偏好通过 MoE 融合泄露，导致生成过长
+        current_step = decode_step + 1  # +1 因为 prefill 已产出第一个 token
+        if current_step > _SOFT_LIMIT and eos_id is not None:
+            boost = _EOS_BOOST_RATE * (current_step - _SOFT_LIMIT)
+            logits_fused[:, eos_id] += boost
+
+        next_tokens = logits_fused.argmax(dim=-1, keepdim=True)  # (B, 1)
 
         # 优化④：向量化 done 更新（纯 CUDA op，无 Python 循环、无 .item()）
         for sid in stop_ids:
@@ -1303,8 +1402,8 @@ def _process_minibatch(
     if write_pos == 0:
         return [''] * B
 
-    output_cpu = output_ids[:, :write_pos].cpu().tolist()   # 唯一一次 GPU-CPU 同步
-    stop_ids_py = stop_ids | {sentinel_id}   # sentinel_id 作为截断标记（已完成序列的占位符）
+    output_cpu = output_ids[:, :write_pos].cpu().tolist()  # 唯一一次 GPU-CPU 同步
+    stop_ids_py = stop_ids | {sentinel_id}  # sentinel_id 作为截断标记（已完成序列的占位符）
 
     results = []
     for b_tokens in output_cpu:
@@ -1329,30 +1428,36 @@ def _process_minibatch(
         logger.debug(
             f"    [minibatch done] B={B}, avg_len={avg_len:.0f}, "
             f"empty={empty_cnt}, format_ok={format_ok}/{len(valid)}, "
-            f"write_pos={write_pos}"
+            f"write_pos={write_pos}, max_new_tokens={max_new_tokens}"
         )
 
     return results
 
 
 def _logit_ensemble_generate(model_with_adapters, tokenizer,
-                              prompt_str, expert1, expert2, w1, w2, args):
+                             prompt_str, expert1, expert2, w1, w2, args):
     """
-    核心：两专家同步自回归 **对数空间** 加权融合生成（Product of Experts）
+    核心：两专家同步自回归 **概率空间** 加权混合生成（Mixture of Experts）
 
-    v3 修复：接受预构建的 prompt_str 而非 input_text，
-    由调用方（_logit_ensemble_generate_batched OOM fallback）负责按
-    样本 data_type 选择正确模板，不再在此函数内部调用任何 Template。
+    v4 修复：
+    修复1: PoE → MoE（概率空间加权平均，防止 EOS 被 UML 专家碾压）
+    修复2: 动态 max_new_tokens + EOS 长度惩罚，按 expert pair 设上限
+    修复3: stop_ids 安全过滤 (避免 pad_token_id 误截断)
+    修复4: 接受预构建的 prompt_str，由调用方选择正确模板
 
-    ── 其余修复（v2 保留）──────────────────────────────────────────────────────
-    修复1: PoE in log-probability space (避免原始 logit 融合导致 EOS 被压制)
-    修复2: stop_ids 安全过滤 (避免 pad_token_id 误截断)
     性能优化: KV Cache + O(n) decode 复杂度
     """
     import torch
     import torch.nn.functional as F
 
-    max_new_tokens = 512
+    # 动态 max_new_tokens（与 _process_minibatch 保持一致）
+    _DOMAIN_MAX_TOKENS = {'text': 256, 'image': 300, 'uml': 400, 'general': 300}
+    max_new_tokens = max(
+        _DOMAIN_MAX_TOKENS.get(expert1, 300),
+        _DOMAIN_MAX_TOKENS.get(expert2, 300),
+    )
+    _SOFT_LIMIT = int(max_new_tokens * 0.6)
+    _EOS_BOOST_RATE = 0.03
 
     # 修复2：stop_ids 只包含确定的终止符，避免 pad_token_id 误触提前截断
     stop_ids = {tokenizer.eos_token_id}
@@ -1379,8 +1484,8 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
         model_with_adapters.eval()
         with torch.no_grad():
             out1 = model_with_adapters(input_ids=prompt_ids, use_cache=True)
-            logits1_init = out1.logits[:, -1, :]   # (1, vocab_size)
-            past_kv1 = out1.past_key_values         # expert1 专属 KV Cache
+            logits1_init = out1.logits[:, -1, :]  # (1, vocab_size)
+            past_kv1 = out1.past_key_values  # expert1 专属 KV Cache
     except Exception as e:
         logger.warning(f"  prefill expert1={expert1} 失败: {e}")
 
@@ -1389,8 +1494,8 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
         model_with_adapters.eval()
         with torch.no_grad():
             out2 = model_with_adapters(input_ids=prompt_ids, use_cache=True)
-            logits2_init = out2.logits[:, -1, :]   # (1, vocab_size)
-            past_kv2 = out2.past_key_values         # expert2 专属 KV Cache
+            logits2_init = out2.logits[:, -1, :]  # (1, vocab_size)
+            past_kv2 = out2.past_key_values  # expert2 专属 KV Cache
     except Exception as e:
         logger.warning(f"  prefill expert2={expert2} 失败: {e}")
 
@@ -1405,13 +1510,13 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
         logits_fused_init = logits1_init
     else:
         import torch.nn.functional as F
-        # PoE in log-probability space: normalise each expert's logits before
-        # weighting so that differing log-partition functions don't distort the
-        # argmax.  w1*logits1+w2*logits2 is only equal to
-        # w1*log_softmax(logits1)+w2*log_softmax(logits2) when both experts share
-        # the same log Z — which is NOT guaranteed with 4-bit quantisation.
-        logits_fused_init = (w1 * F.log_softmax(logits1_init, dim=-1)
-                             + w2 * F.log_softmax(logits2_init, dim=-1))
+        # MoE 概率空间混合（取代 PoE log-space 融合）
+        # PoE 会导致 EOS 被碾压（当 UML 专家 P(EOS) 极低时），
+        # MoE 保留两个专家各自的 EOS 信号：P_fused = w1*P1 + w2*P2
+        prob1 = F.softmax(logits1_init, dim=-1)
+        prob2 = F.softmax(logits2_init, dim=-1)
+        fused_prob = w1 * prob1 + w2 * prob2
+        logits_fused_init = torch.log(fused_prob + 1e-10)
 
     next_token = logits_fused_init.argmax(dim=-1, keepdim=True)  # (1, 1)
     fused_tokens = []
@@ -1458,7 +1563,7 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
                 logger.warning(f"  step={step} expert2={expert2} 推理失败: {e}")
                 past_kv2 = None
 
-        # ── log_softmax PoE 融合，与 prefill 保持一致 ──
+        # ── MoE 概率空间混合，与 prefill 保持一致 ──
         if logits1 is None and logits2 is None:
             break
         elif logits1 is None:
@@ -1467,8 +1572,16 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
             logits_fused = logits1
         else:
             import torch.nn.functional as F
-            logits_fused = (w1 * F.log_softmax(logits1, dim=-1)
-                            + w2 * F.log_softmax(logits2, dim=-1))
+            prob1 = F.softmax(logits1, dim=-1)
+            prob2 = F.softmax(logits2, dim=-1)
+            fused_prob = w1 * prob1 + w2 * prob2
+            logits_fused = torch.log(fused_prob + 1e-10)
+
+        # EOS 长度惩罚
+        eos_id = tokenizer.eos_token_id
+        if step > _SOFT_LIMIT and eos_id is not None:
+            boost = _EOS_BOOST_RATE * (step - _SOFT_LIMIT)
+            logits_fused[:, eos_id] += boost
 
         next_token = logits_fused.argmax(dim=-1, keepdim=True)  # (1, 1)
         if next_token.item() in stop_ids:
@@ -1483,6 +1596,7 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
     logger.debug(
         f"    [single-generate] expert={expert1}+{expert2}, "
         f"tok_count={len(fused_tokens)}, char_len={len(result)}, "
+        f"max_new_tokens={max_new_tokens}, "
         f"format_ok={'Definition' in result or 'Emphasis' in result}"
     )
     return result
@@ -1601,9 +1715,9 @@ def run_phase3(args, phase1_results, phase2_results, exp9_phase1, exp9_phase2):
     exp9_strategies = exp9_phase1.get('strategies', {})
     # 兼容 exp9 phase2 可能用不同 key 存储 Soft Routing 结果
     soft_rougeL = (
-        (exp9_phase2 or {}).get('best_rougeL')
-        or (exp9_phase2 or {}).get('soft_routing', {}).get('rougeL')
-        or (exp9_phase2 or {}).get('strategies', {}).get('Soft Routing', {}).get('per_domain', {}).get('general')
+            (exp9_phase2 or {}).get('best_rougeL')
+            or (exp9_phase2 or {}).get('soft_routing', {}).get('rougeL')
+            or (exp9_phase2 or {}).get('strategies', {}).get('Soft Routing', {}).get('per_domain', {}).get('general')
     )
     soft_general_rougeL = soft_rougeL  # Exp9 Soft只评估了General域
 
@@ -1729,8 +1843,8 @@ def _plot_routing_accuracy(phase1_results, exp9_phase1):
     width = 0.35
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    b1 = ax.bar(x - width/2, router_accs, width, label='Learned Router Accuracy', color='#3498db', alpha=0.85)
-    b2 = ax.bar(x + width/2, oracle_dominant, width, label='Oracle Dominant Expert Rate', color='#2ecc71', alpha=0.85)
+    b1 = ax.bar(x - width / 2, router_accs, width, label='Learned Router Accuracy', color='#3498db', alpha=0.85)
+    b2 = ax.bar(x + width / 2, oracle_dominant, width, label='Oracle Dominant Expert Rate', color='#2ecc71', alpha=0.85)
     ax.axhline(y=25, color='red', linestyle='--', linewidth=1.5, label='Random Baseline (25%)')
 
     ax.set_xlabel('Domain', fontsize=12)
@@ -1742,7 +1856,7 @@ def _plot_routing_accuracy(phase1_results, exp9_phase1):
     ax.set_ylim(0, 100)
 
     for bar in b1:
-        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
                 f'{bar.get_height():.1f}%', ha='center', fontsize=9)
 
     plt.tight_layout()
@@ -1769,7 +1883,7 @@ def _plot_ensemble_vs_single(phase2_results, exp9_strategies):
     ax.set_ylim(min(values) * 0.95, max(values) * 1.05)
 
     for bar, val in zip(bars, values):
-        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.002,
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.002,
                 f'{val:.4f}', ha='center', fontsize=10, fontweight='bold')
 
     plt.tight_layout()
@@ -1782,13 +1896,15 @@ def _plot_all_strategies_comparison(exp9_strategies, soft_rougeL, router_rougeL,
     """图5: 7种策略对比（General域）"""
     strategy_data = [
         ('Worst Routing', exp9_strategies.get('Worst Routing', {}).get('per_domain', {}).get('general', 0), '#e74c3c'),
-        ('Random Routing', exp9_strategies.get('Random Routing', {}).get('per_domain', {}).get('general', 0), '#f39c12'),
+        ('Random Routing', exp9_strategies.get('Random Routing', {}).get('per_domain', {}).get('general', 0),
+         '#f39c12'),
         ('General-Only', exp9_strategies.get('General-Only', {}).get('per_domain', {}).get('general', 0), '#95a5a6'),
         ('Hard Routing', exp9_strategies.get('Hard Routing', {}).get('per_domain', {}).get('general', 0), '#3498db'),
         ('Soft Routing\n(Exp9,a=0.3)', soft_rougeL or 0, '#9b59b6'),
         ('Learned Router\n(Exp10)', router_rougeL, '#8e44ad'),
         ('Output Ensemble\n(Exp10)', ensemble_rougeL, '#e67e22'),
-        ('Oracle Routing', exp9_strategies.get('Oracle Routing', {}).get('per_domain', {}).get('general', 0), '#2ecc71'),
+        ('Oracle Routing', exp9_strategies.get('Oracle Routing', {}).get('per_domain', {}).get('general', 0),
+         '#2ecc71'),
     ]
 
     labels = [d[0] for d in strategy_data]
@@ -1805,7 +1921,7 @@ def _plot_all_strategies_comparison(exp9_strategies, soft_rougeL, router_rougeL,
 
     for bar, val in zip(bars, values):
         if val > 0:
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.003,
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.003,
                     f'{val:.4f}', ha='center', fontsize=9)
 
     plt.tight_layout()
@@ -1851,7 +1967,7 @@ def _plot_gap_reduction(hard_rougeL, oracle_rougeL, soft_rougeL, router_rougeL, 
     ax.legend()
 
     for bar, val in zip(bars, reductions):
-        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
                 f'{val:.1f}%', ha='center', fontsize=11, fontweight='bold')
 
     plt.tight_layout()
@@ -1879,7 +1995,7 @@ def _plot_general_domain_deep_dive(phase2_results, exp9_phase1):
     if routing_stats_router:
         router_dist = [routing_stats_router.get(e, 0) for e in experts]
         total_r = sum(router_dist) or 1
-        ax1.bar(experts, [v/total_r*100 for v in router_dist], color='#8e44ad', alpha=0.8, label='Learned Router')
+        ax1.bar(experts, [v / total_r * 100 for v in router_dist], color='#8e44ad', alpha=0.8, label='Learned Router')
     if routing_stats_ensemble:
         # Ensemble用expert1统计
         ens_by_expert = defaultdict(int)
@@ -1889,7 +2005,7 @@ def _plot_general_domain_deep_dive(phase2_results, exp9_phase1):
         ens_dist = [ens_by_expert.get(e, 0) for e in experts]
         total_e = sum(ens_dist) or 1
         ax1.bar([i + 0.35 for i in range(len(experts))],
-                [v/total_e*100 for v in ens_dist], width=0.35,
+                [v / total_e * 100 for v in ens_dist], width=0.35,
                 color='#e67e22', alpha=0.8, label='Output Ensemble (top-1)')
 
     ax1.set_title('Routing Distribution Comparison', fontsize=12)
@@ -1937,36 +2053,36 @@ def _plot_summary_table(exp9_strategies, soft_rougeL, router_rougeL, ensemble_ro
 
     rows = [
         ['Worst Routing',
-         f"{per_d('Worst Routing','text'):.4f}", f"{per_d('Worst Routing','image'):.4f}",
-         f"{per_d('Worst Routing','uml'):.4f}", f"{per_d('Worst Routing','general'):.4f}",
-         f"{exp9_strategies.get('Worst Routing',{}).get('average',0):.4f}", '—', '—'],
+         f"{per_d('Worst Routing', 'text'):.4f}", f"{per_d('Worst Routing', 'image'):.4f}",
+         f"{per_d('Worst Routing', 'uml'):.4f}", f"{per_d('Worst Routing', 'general'):.4f}",
+         f"{exp9_strategies.get('Worst Routing', {}).get('average', 0):.4f}", '—', '—'],
         ['Random Routing',
-         f"{per_d('Random Routing','text'):.4f}", f"{per_d('Random Routing','image'):.4f}",
-         f"{per_d('Random Routing','uml'):.4f}", f"{per_d('Random Routing','general'):.4f}",
-         f"{exp9_strategies.get('Random Routing',{}).get('average',0):.4f}", '—', '—'],
+         f"{per_d('Random Routing', 'text'):.4f}", f"{per_d('Random Routing', 'image'):.4f}",
+         f"{per_d('Random Routing', 'uml'):.4f}", f"{per_d('Random Routing', 'general'):.4f}",
+         f"{exp9_strategies.get('Random Routing', {}).get('average', 0):.4f}", '—', '—'],
         ['General-Only',
-         f"{per_d('General-Only','text'):.4f}", f"{per_d('General-Only','image'):.4f}",
-         f"{per_d('General-Only','uml'):.4f}", f"{per_d('General-Only','general'):.4f}",
-         f"{exp9_strategies.get('General-Only',{}).get('average',0):.4f}", '—', '0%'],
+         f"{per_d('General-Only', 'text'):.4f}", f"{per_d('General-Only', 'image'):.4f}",
+         f"{per_d('General-Only', 'uml'):.4f}", f"{per_d('General-Only', 'general'):.4f}",
+         f"{exp9_strategies.get('General-Only', {}).get('average', 0):.4f}", '—', '0%'],
         ['Hard Routing (baseline)',
-         f"{per_d('Hard Routing','text'):.4f}", f"{per_d('Hard Routing','image'):.4f}",
-         f"{per_d('Hard Routing','uml'):.4f}", f"{per_d('Hard Routing','general'):.4f}",
+         f"{per_d('Hard Routing', 'text'):.4f}", f"{per_d('Hard Routing', 'image'):.4f}",
+         f"{per_d('Hard Routing', 'uml'):.4f}", f"{per_d('Hard Routing', 'general'):.4f}",
          f"{hard_avg:.4f}", '—', '0%'],
         ['Soft Routing (Exp9, a=0.3)',
          '—', '—', '—', f"{soft_rougeL:.4f}" if soft_rougeL else '—',
          '—', '—',
-         f"{(soft_rougeL - per_d('Hard Routing','general'))/(per_d('Oracle Routing','general')-per_d('Hard Routing','general'))*100:.1f}%" if soft_rougeL else '—'],
+         f"{(soft_rougeL - per_d('Hard Routing', 'general')) / (per_d('Oracle Routing', 'general') - per_d('Hard Routing', 'general')) * 100:.1f}%" if soft_rougeL else '—'],
         ['Learned Router (Exp10)',
          '—', '—', '—', f"{router_rougeL:.4f}" if router_rougeL else '—',
-         '—', f"{router_acc*100:.1f}%",
-         f"{(router_rougeL - per_d('Hard Routing','general'))/(per_d('Oracle Routing','general')-per_d('Hard Routing','general'))*100:.1f}%" if router_rougeL else '—'],
+         '—', f"{router_acc * 100:.1f}%",
+         f"{(router_rougeL - per_d('Hard Routing', 'general')) / (per_d('Oracle Routing', 'general') - per_d('Hard Routing', 'general')) * 100:.1f}%" if router_rougeL else '—'],
         ['Output Ensemble (Exp10)',
          '—', '—', '—', f"{ensemble_rougeL:.4f}" if ensemble_rougeL else '—',
          '—', '—',
-         f"{(ensemble_rougeL - per_d('Hard Routing','general'))/(per_d('Oracle Routing','general')-per_d('Hard Routing','general'))*100:.1f}%" if ensemble_rougeL else '—'],
+         f"{(ensemble_rougeL - per_d('Hard Routing', 'general')) / (per_d('Oracle Routing', 'general') - per_d('Hard Routing', 'general')) * 100:.1f}%" if ensemble_rougeL else '—'],
         ['Oracle Routing',
-         f"{per_d('Oracle Routing','text'):.4f}", f"{per_d('Oracle Routing','image'):.4f}",
-         f"{per_d('Oracle Routing','uml'):.4f}", f"{per_d('Oracle Routing','general'):.4f}",
+         f"{per_d('Oracle Routing', 'text'):.4f}", f"{per_d('Oracle Routing', 'image'):.4f}",
+         f"{per_d('Oracle Routing', 'uml'):.4f}", f"{per_d('Oracle Routing', 'general'):.4f}",
          f"{oracle_avg:.4f}", '—', '100%'],
     ]
 
@@ -2010,9 +2126,9 @@ def _generate_report(phase1_results, phase2_results, exp9_phase1, exp9_phase2):
     if phase1_results:
         acc = phase1_results.get('routing_accuracy', {})
         lines += [
-            f"- 整体路由准确率: {phase1_results.get('overall_accuracy', 0)*100:.1f}%",
+            f"- 整体路由准确率: {phase1_results.get('overall_accuracy', 0) * 100:.1f}%",
             "- 分域准确率:",
-            *[f"  - {d}: {acc.get(d, 0)*100:.1f}%" for d in ALL_TYPES],
+            *[f"  - {d}: {acc.get(d, 0) * 100:.1f}%" for d in ALL_TYPES],
         ]
 
     lines += [
@@ -2025,22 +2141,23 @@ def _generate_report(phase1_results, phase2_results, exp9_phase1, exp9_phase2):
 
     if (exp9_phase2 or {}).get('best_rougeL'):
         soft_r = exp9_phase2['best_rougeL']
-        lines.append(f"| Soft Routing (Exp9) | {soft_r:.4f} | {(soft_r-hard_g)/gap*100:.1f}% |")
+        lines.append(f"| Soft Routing (Exp9) | {soft_r:.4f} | {(soft_r - hard_g) / gap * 100:.1f}% |")
 
     if router_rougeL:
-        lines.append(f"| Learned Router (方案B) | {router_rougeL:.4f} | {(router_rougeL-hard_g)/gap*100:.1f}% |")
+        lines.append(f"| Learned Router (方案B) | {router_rougeL:.4f} | {(router_rougeL - hard_g) / gap * 100:.1f}% |")
     if ensemble_rougeL:
-        lines.append(f"| Output Ensemble (方案A) | {ensemble_rougeL:.4f} | {(ensemble_rougeL-hard_g)/gap*100:.1f}% |")
+        lines.append(
+            f"| Output Ensemble (方案A) | {ensemble_rougeL:.4f} | {(ensemble_rougeL - hard_g) / gap * 100:.1f}% |")
 
     lines.append(f"| Oracle Routing | {oracle_g:.4f} | 100% |")
 
     lines += [
         "\n## 核心研究问题回答",
         f"\n**RQ1**: Output Ensemble vs Soft Routing — Gap缩小率分别为 "
-        f"{(ensemble_rougeL-hard_g)/gap*100:.1f}% vs "
-        f"{((exp9_phase2 or {}).get('best_rougeL', hard_g)-hard_g)/gap*100:.1f}%",
+        f"{(ensemble_rougeL - hard_g) / gap * 100:.1f}% vs "
+        f"{((exp9_phase2 or {}).get('best_rougeL', hard_g) - hard_g) / gap * 100:.1f}%",
         f"\n**RQ2**: Learned Router路由准确率（General域）= "
-        f"{(phase1_results or {}).get('routing_accuracy', {}).get('general', 0)*100:.1f}%",
+        f"{(phase1_results or {}).get('routing_accuracy', {}).get('general', 0) * 100:.1f}%",
         f"\n**RQ3**: Output Ensemble在General域表现最优，Gap缩小率最高",
         f"\n**RQ4**: Learned Router推理开销≈Hard Routing×1；Output Ensemble≈Hard Routing×1.5~2",
     ]
@@ -2076,8 +2193,9 @@ def main():
 
     # 加载Exp9结果（必须存在）
     exp9_phase1, exp9_phase2 = _load_exp9_results()
-    logger.info(f"Exp9 Hard Routing平均: {exp9_phase1.get('strategies',{}).get('Hard Routing',{}).get('average',0):.4f}")
-    logger.info(f"Exp9 Oracle平均: {exp9_phase1.get('strategies',{}).get('Oracle Routing',{}).get('average',0):.4f}")
+    logger.info(
+        f"Exp9 Hard Routing平均: {exp9_phase1.get('strategies', {}).get('Hard Routing', {}).get('average', 0):.4f}")
+    logger.info(f"Exp9 Oracle平均: {exp9_phase1.get('strategies', {}).get('Oracle Routing', {}).get('average', 0):.4f}")
 
     EXP_DIR.mkdir(parents=True, exist_ok=True)
 
