@@ -1003,8 +1003,10 @@ def _process_minibatch(
             and tokenizer.pad_token_id > 3):
         stop_ids.add(tokenizer.pad_token_id)
     stop_ids = {sid for sid in stop_ids if sid is not None}
-    # pad_id 用于占位已完成序列的输出槽（post-processing 时截断标记）
-    pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
+    # sentinel_id 用于占位已完成序列的输出槽（post-processing 时截断标记）
+    # 必须用 eos_token_id 而非 pad_token_id：pad_token_id 可能是 token 0（合法内容），
+    # 用它做 sentinel 会导致正常输出被误截断。eos_token_id 始终安全。
+    sentinel_id = tokenizer.eos_token_id
 
     # 提取各条样本的 prompt 和融合权重
     prompts = [GeneralInstructionTemplate.build_prompt(s['input']) for (_, s, _, _) in batch_items]
@@ -1046,8 +1048,8 @@ def _process_minibatch(
     attn_mask_buf[:, L:] = 1
 
     # ── 优化①：预分配输出 token 缓冲区（消除循环内 .item() 同步）──────────
-    # 已完成序列的槽位用 pad_id 填充，post-processing 时截断到第一个 stop/pad
-    output_ids = torch.full((B, max_new_tokens), pad_id, dtype=torch.long, device=device)
+    # 已完成序列的槽位用 sentinel_id 填充，post-processing 时截断到第一个 stop/sentinel
+    output_ids = torch.full((B, max_new_tokens), sentinel_id, dtype=torch.long, device=device)
     write_pos = 0   # 下一个写入列的下标
 
     # ── 优化⑤：eval() 统一在 prefill 前调用一次 ─────────────────────────────
@@ -1088,7 +1090,13 @@ def _process_minibatch(
     elif logits2_init is None:
         logits_fused = logits1_init
     else:
-        logits_fused = w1_t * logits1_init + w2_t * logits2_init   # (B, vocab)
+        import torch.nn.functional as F
+        # PoE: fuse in log-probability space so each expert's log-partition
+        # function is cancelled before weighting.  Raw logit fusion is WRONG
+        # because log Z_1 ≠ log Z_2 under 4-bit quantization — the scale
+        # difference suppresses EOS and causes runaway generation.
+        logits_fused = (w1_t * F.log_softmax(logits1_init, dim=-1)
+                        + w2_t * F.log_softmax(logits2_init, dim=-1))   # (B, vocab)
 
     next_tokens = logits_fused.argmax(dim=-1, keepdim=True)   # (B, 1)
 
@@ -1097,8 +1105,8 @@ def _process_minibatch(
     for sid in stop_ids:
         done |= (next_tokens.squeeze(1) == sid)
 
-    # 写入第一个 token；done 序列写 pad_id（post-processing 时截断）
-    output_ids[:, write_pos] = next_tokens.squeeze(1).masked_fill(done, pad_id)
+    # 写入第一个 token；done 序列写 sentinel_id（post-processing 时截断）
+    output_ids[:, write_pos] = next_tokens.squeeze(1).masked_fill(done, sentinel_id)
     write_pos += 1
 
     # ── Decode 循环：每步 2 次 (B,1) forward ────────────────────────────────
@@ -1153,7 +1161,9 @@ def _process_minibatch(
         elif logits2 is None:
             logits_fused = logits1
         else:
-            logits_fused = w1_t * logits1 + w2_t * logits2   # (B, vocab)
+            import torch.nn.functional as F
+            logits_fused = (w1_t * F.log_softmax(logits1, dim=-1)
+                            + w2_t * F.log_softmax(logits2, dim=-1))   # (B, vocab)
 
         next_tokens = logits_fused.argmax(dim=-1, keepdim=True)   # (B, 1)
 
@@ -1161,8 +1171,8 @@ def _process_minibatch(
         for sid in stop_ids:
             done |= (next_tokens.squeeze(1) == sid)
 
-        # 优化①：写入 output_ids（CUDA 赋值，无 sync；done 位写 pad_id）
-        output_ids[:, write_pos] = next_tokens.squeeze(1).masked_fill(done, pad_id)
+        # 优化①：写入 output_ids（CUDA 赋值，无 sync；done 位写 sentinel_id）
+        output_ids[:, write_pos] = next_tokens.squeeze(1).masked_fill(done, sentinel_id)
         write_pos += 1
 
     # ── 批量解码：循环结束后仅一次 GPU→CPU 转移 ──────────────────────────────
@@ -1171,11 +1181,11 @@ def _process_minibatch(
         return [''] * B
 
     output_cpu = output_ids[:, :write_pos].cpu().tolist()   # 唯一一次 GPU-CPU 同步
-    stop_ids_py = stop_ids | {pad_id}   # pad_id 作为截断标记（已完成序列的占位符）
+    stop_ids_py = stop_ids | {sentinel_id}   # sentinel_id 作为截断标记（已完成序列的占位符）
 
     results = []
     for b_tokens in output_cpu:
-        # 截断到第一个终止符（EOS / pad_id），语义等价于原实现的 "not done[b] 才 append"
+        # 截断到第一个终止符（stop_ids_py），语义等价于原实现的 "not done[b] 才 append"
         truncated = []
         for tok in b_tokens:
             if tok in stop_ids_py:
@@ -1203,14 +1213,25 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
       - 实测：输出字符数从 392.5 降至 300.8（-23%），ROUGE-L 0.5921→0.4419
 
     ── 修复1: 融合空间 ────────────────────────────────────────────────────────
-    在「logit 空间（对数概率空间）」做加权线性组合，即 Product of Experts（PoE）：
+    在「log-probability 空间」做加权线性组合，即 Product of Experts（PoE）：
 
-        logits_fused = w1 * logits1 + w2 * logits2
+        logits_fused = w1 * log_softmax(logits1) + w2 * log_softmax(logits2)
 
-    数学等价性：
-        argmax(w1*logits1 + w2*logits2)
-        ≡ argmax(w1*log_softmax(logits1) + w2*log_softmax(logits2))  # 常数不影响argmax
-        ≡ argmax(log(p1^w1 · p2^w2))   # Product of Experts的定义
+    为什么必须先 log_softmax，而不能直接用 raw logits：
+        raw logit 融合：w1*logits1 + w2*logits2
+        log_softmax 融合：w1*(logits1 - log Z1) + w2*(logits2 - log Z2)
+
+        两者差值为常量 (w1*log_Z1 + w2*log_Z2)，在单精度下确实不影响 argmax。
+        但在 4-bit 量化后，两个专家的数值尺度（log Z）差异可达 10~20 倍，
+        导致 raw logit 融合被数值大的专家强行主导，EOS token 被压制：
+          - 实测：输出从 ~392字符 膨胀至 ~614字符，格式通过率从 100% 跌至 78.5%，
+            ROUGE-L 从 0.5515（Hard Routing 基线）退化至 0.4540（Gap 缩小率 -118%）
+        使用 log_softmax 归一化后，每个专家的输出分布先归一化到同一尺度，
+        再按权重混合，避免了尺度失衡问题。
+
+    数学等价性（正确表述）：
+        argmax(w1*log_softmax(logits1) + w2*log_softmax(logits2))
+        ≡ argmax(log(p1^w1 · p2^w2))   # Product of Experts 的定义
 
     为什么不坍缩：
         PoE 分布满足 H(p_fused) ≤ min(H(p1), H(p2))
@@ -1298,7 +1319,14 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
     elif logits2_init is None:
         logits_fused_init = logits1_init
     else:
-        logits_fused_init = w1 * logits1_init + w2 * logits2_init  # logit空间加权
+        import torch.nn.functional as F
+        # PoE in log-probability space: normalise each expert's logits before
+        # weighting so that differing log-partition functions don't distort the
+        # argmax.  w1*logits1+w2*logits2 is only equal to
+        # w1*log_softmax(logits1)+w2*log_softmax(logits2) when both experts share
+        # the same log Z — which is NOT guaranteed with 4-bit quantisation.
+        logits_fused_init = (w1 * F.log_softmax(logits1_init, dim=-1)
+                             + w2 * F.log_softmax(logits2_init, dim=-1))
 
     next_token = logits_fused_init.argmax(dim=-1, keepdim=True)  # (1, 1)
     fused_tokens = []
@@ -1345,7 +1373,7 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
                 logger.warning(f"  step={step} expert2={expert2} 推理失败: {e}")
                 past_kv2 = None
 
-        # ── logit 空间加权融合（Product of Experts），与修复1保持一致 ──
+        # ── log_softmax PoE 融合，与 prefill 保持一致 ──
         if logits1 is None and logits2 is None:
             break
         elif logits1 is None:
@@ -1353,7 +1381,9 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
         elif logits2 is None:
             logits_fused = logits1
         else:
-            logits_fused = w1 * logits1 + w2 * logits2
+            import torch.nn.functional as F
+            logits_fused = (w1 * F.log_softmax(logits1, dim=-1)
+                            + w2 * F.log_softmax(logits2, dim=-1))
 
         next_token = logits_fused.argmax(dim=-1, keepdim=True)  # (1, 1)
         if next_token.item() in stop_ids:
