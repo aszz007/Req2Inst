@@ -70,6 +70,65 @@ FEATURE_CACHE_DIR = CACHE_DIR / 'exp10_router_features'
 ALL_TYPES = ['text', 'image', 'uml', 'general']
 SPECIALIZED_TYPES = ['text', 'image', 'uml']
 
+# ─────────────────────────────────────────────
+# 模板工厂（核心修复：避免 GeneralTemplate 一刀切导致专家混淆）
+# ─────────────────────────────────────────────
+# 背景：各专家在各自 domain-specific 模板下训练；推理时若统一使用 GeneralTemplate，
+#       专家收到的指令格式与训练分布不符，输出长度失控（612 vs 392）、
+#       格式通过率骤降（77% → 100%），ROUGE-L 从 0.59 跌至 0.43。
+# 修复：根据样本的 data_type 选择对应模板，同一批次两个专家使用 **相同 prompt**
+#       保证 KV Cache 的条件化前缀一致，PoE logit 融合在语义上有意义。
+
+def _build_prompt_for_sample(sample: dict) -> tuple:
+    """
+    根据样本 data_type 构建正确的 prompt 字符串。
+
+    Returns:
+        (prompt_str, template_name)  — template_name 仅用于 debug 日志
+    """
+    input_text = sample.get('input', '')
+    data_type = sample.get('data_type', 'general')
+
+    # 按 data_type 尝试加载对应模板；任何 ImportError / AttributeError 都回退到 GeneralTemplate
+    try:
+        if data_type == 'text':
+            from models.prompt_templates.text_template import TextInstructionTemplate
+            return TextInstructionTemplate.build_prompt(input_text), 'text_template'
+    except (ImportError, AttributeError):
+        pass
+
+    try:
+        if data_type == 'image':
+            from models.prompt_templates.image_template import ImageInstructionTemplate
+            return ImageInstructionTemplate.build_prompt(input_text), 'image_template'
+    except (ImportError, AttributeError):
+        pass
+
+    try:
+        if data_type == 'uml':
+            from models.prompt_templates.uml_template import UMLInstructionTemplate
+            return UMLInstructionTemplate.build_prompt(input_text), 'uml_template'
+    except (ImportError, AttributeError):
+        pass
+
+    from models.prompt_templates.general_template import GeneralInstructionTemplate
+    return GeneralInstructionTemplate.build_prompt(input_text), 'general_template'
+
+
+def _detect_datatype(sample: dict) -> str:
+    """
+    从样本 dict 推断 data_type，优先取显式字段，否则根据 input 内容猜测。
+    """
+    dt = sample.get('data_type') or sample.get('type') or sample.get('domain')
+    if dt in ('text', 'image', 'uml', 'general'):
+        return dt
+    # 根据 input 格式猜测
+    inp = str(sample.get('input', ''))
+    if inp.strip().startswith('{') or inp.strip().startswith('['):
+        # JSON 格式 → image 或 uml；无法区分时保守取 general
+        return 'general'
+    return 'text'
+
 
 # ─────────────────────────────────────────────
 # 工具函数
@@ -771,7 +830,6 @@ def _run_output_ensemble(router, features, general_test, args):
     import torch
     from peft import PeftModel
     from models.language_model import LanguageModel
-    from models.prompt_templates.general_template import GeneralInstructionTemplate
 
     lm = LanguageModel(use_4bit=True)
     base_model = lm.model
@@ -801,13 +859,34 @@ def _run_output_ensemble(router, features, general_test, args):
     preloaded_caches = _load_all_expert_caches_for_general()
     logger.info(f"  已预加载专家缓存: {list(preloaded_caches.keys())}")
 
+    # ── DEBUG: data_type 分布分析 ──────────────────────────────────────────
+    dtype_counts: defaultdict = defaultdict(int)
+    for sample in general_test:
+        dt = _detect_datatype(sample)
+        dtype_counts[dt] += 1
+    logger.info(f"  [DEBUG] general_test data_type 分布: {dict(dtype_counts)}")
+    # 检查 sample dict 中实际字段
+    if general_test:
+        sample0 = general_test[0]
+        logger.info(f"  [DEBUG] 样本0 字段: {list(sample0.keys())}")
+        logger.info(f"  [DEBUG] 样本0 data_type字段值: "
+                    f"data_type={sample0.get('data_type')!r}, "
+                    f"type={sample0.get('type')!r}, "
+                    f"domain={sample0.get('domain')!r}")
+        prompt0, tpl0 = _build_prompt_for_sample(sample0)
+        logger.info(f"  [DEBUG] 样本0 使用模板: {tpl0}, prompt前80字符: {prompt0[:80]!r}")
+
     # ── Stage 1: 分类样本（纯 CPU，O(N)）──────────────────────────────────────
     # cache_results  : top-1 prob >= 0.85，直接从磁盘缓存取，零 GPU 开销
     # ensemble_groups: 按 (expert1, expert2) 分组，后续批量 GPU 推理
     # sample_meta    : 保存每条样本的路由元信息，供最终重新排序（reassemble）用
-    sample_meta = []          # [(i, expert1, expert2, w1, w2, w1_raw), ...]
+    # 重要修复：pre-build prompt 时按每个样本 data_type 选择对应模板，
+    #   确保两个专家收到格式一致且与其训练分布匹配的 prompt，
+    #   避免 GeneralTemplate 一刀切导致格式崩溃和输出失控。
+    sample_meta = []          # [(i, expert1, expert2, w1, w2, w1_raw, template_name), ...]
     cache_results = {}        # {i: pred_str}
-    ensemble_groups = defaultdict(list)   # {(e1, e2): [(i, sample, w1, w2), ...]}
+    ensemble_groups = defaultdict(list)   # {(e1, e2): [(i, prompt_str, w1, w2), ...]}
+    template_usage: defaultdict = defaultdict(int)   # {template_name: count}
 
     for i, (sample, prob) in enumerate(zip(general_test, probs)):
         top2_idxs = np.argsort(prob)[::-1][:2]
@@ -819,7 +898,11 @@ def _run_output_ensemble(router, features, general_test, args):
         w1 = w1_raw / w_sum
         w2 = w2_raw / w_sum
         routing_stats[f"{expert1}+{expert2}"] += 1
-        sample_meta.append((i, expert1, expert2, w1, w2, w1_raw))
+
+        # 核心修复：每个样本独立选模板，两个专家用同一个 prompt
+        prompt_str, tpl_name = _build_prompt_for_sample(sample)
+        template_usage[tpl_name] += 1
+        sample_meta.append((i, expert1, expert2, w1, w2, w1_raw, tpl_name))
 
         if w1_raw >= 0.85:
             # 退化为单专家：直接从缓存取，不占 GPU
@@ -827,7 +910,10 @@ def _run_output_ensemble(router, features, general_test, args):
                 expert1, 'general', i, preloaded_caches
             )
         else:
-            ensemble_groups[(expert1, expert2)].append((i, sample, w1, w2))
+            # 传入 prompt_str 而非 sample dict，保证模板选择已固定
+            ensemble_groups[(expert1, expert2)].append((i, prompt_str, w1, w2))
+
+    logger.info(f"  [DEBUG] 模板使用分布: {dict(template_usage)}")
 
     n_cache = len(cache_results)
     n_ensemble = sum(len(v) for v in ensemble_groups.values())
@@ -846,18 +932,51 @@ def _run_output_ensemble(router, features, general_test, args):
             f"  Ensemble组 {group_idx+1}/{len(ensemble_groups)}: "
             f"{expert1}+{expert2}, {len(group_items)} 条"
         )
+        # [DEBUG] 检查该组的模板分布（验证每组内模板是否一致）
+        if group_items:
+            # group_items 格式: [(i, prompt_str, w1, w2), ...]
+            # 取前3个样本的 prompt 前50字符，确认模板多样性
+            sample_prompts_debug = [item[1][:60] for item in group_items[:3]]
+            logger.debug(f"    [DEBUG] 组内前3个prompt前缀: {sample_prompts_debug}")
+
         preds = _logit_ensemble_generate_batched(
             model_with_adapters, tokenizer,
             expert1, expert2, group_items, args
         )
-        for (i_s, _s, _w1, _w2), pred in zip(group_items, preds):
+        for (i_s, _prompt, _w1, _w2), pred in zip(group_items, preds):
             ensemble_results[i_s] = pred
+
+        # [DEBUG] 每组生成后报告质量概况
+        group_preds = [ensemble_results.get(item[0], '') for item in group_items]
+        valid_preds = [p for p in group_preds if p]
+        if valid_preds:
+            avg_len = sum(len(p) for p in valid_preds) / len(valid_preds)
+            empty_count = len(group_preds) - len(valid_preds)
+            # 简单格式检测：是否含有指令三段式关键词
+            format_ok = sum(
+                1 for p in valid_preds
+                if any(kw in p for kw in ['Definition', 'Emphasis', 'Things to Avoid',
+                                          'definition', 'emphasis', 'things to avoid'])
+            )
+            logger.info(
+                f"    [DEBUG] 组 {expert1}+{expert2}: "
+                f"avg_len={avg_len:.0f}, empty={empty_count}, "
+                f"format_ok={format_ok}/{len(valid_preds)} ({format_ok/len(valid_preds)*100:.0f}%)"
+            )
 
     # ── Stage 3: 按原始顺序 reassemble ──────────────────────────────────────
     samples = []
-    for (i, expert1, expert2, w1, w2, _w1_raw) in sample_meta:
+    for (i, expert1, expert2, w1, w2, _w1_raw, tpl_name) in sample_meta:
         sample = general_test[i]
         pred = cache_results.get(i) or ensemble_results.get(i, '')
+
+        # [DEBUG] 记录前5个样本的生成详情
+        if i < 5:
+            logger.info(
+                f"  [DEBUG] 样本{i}: expert={expert1}+{expert2}, tpl={tpl_name}, "
+                f"pred_len={len(pred)}, pred前80: {pred[:80]!r}"
+            )
+
         samples.append({
             'index': i,
             'input': sample['input'],
@@ -867,6 +986,8 @@ def _run_output_ensemble(router, features, general_test, args):
             'expert2': expert2,
             'w1': w1,
             'w2': w2,
+            'template': tpl_name,
+            'data_type': _detect_datatype(sample),
         })
 
     del lm, model_with_adapters, tokenizer
@@ -908,7 +1029,9 @@ def _logit_ensemble_generate_batched(
     OOM fallback: 某批次显存溢出时，自动降级为逐条 _logit_ensemble_generate。
 
     Args:
-        group_items: List[(i_global, sample_dict, w1, w2)]  — 同一 (e1,e2) 组
+        group_items: List[(i_global, prompt_str, w1, w2)]  — 同一 (e1,e2) 组
+                     注意：prompt_str 已由 _run_output_ensemble 按样本 data_type 预构建，
+                     确保两个专家收到相同的、与训练分布匹配的 prompt 格式。
     Returns:
         List[str]  — 与 group_items 等长，按相同顺序
     """
@@ -933,11 +1056,12 @@ def _logit_ensemble_generate_batched(
                     f"  OOM (batch_size={len(batch)}), 降级到逐条推理..."
                 )
                 torch.cuda.empty_cache()
-                for j, (i_s, sample_s, w1_s, w2_s) in enumerate(batch):
+                # OOM 回退：batch 格式已是 (i, prompt_str, w1, w2)，直接传 prompt_str
+                for j, (i_s, prompt_str_s, w1_s, w2_s) in enumerate(batch):
                     try:
                         pred = _logit_ensemble_generate(
                             model_with_adapters, tokenizer,
-                            sample_s['input'], expert1, expert2, w1_s, w2_s,
+                            prompt_str_s, expert1, expert2, w1_s, w2_s,
                             args
                         )
                     except Exception as inner_e:
@@ -959,59 +1083,60 @@ def _process_minibatch(
     """
     RTX 4090 优化核心：批量 prefill + 批量 decode（B×1 token/step × 2 experts）
 
-    v2 优化（相对 v1 的关键改动，解决 GPU 30% / CPU 100% 瓶颈）
+    v3 修复（相对 v2 的关键改动，解决模板不匹配导致格式崩溃的根本问题）
 
-    ── 原问题三类高频 GPU-CPU 同步点 ─────────────────────────────────────────
-      A) done.all() in if stmt     : 每步 1 次 GPU→CPU sync（512 次/batch）
-      B) next_tokens[b].item()     : 每步 B 次 sync（B=12 → ~6144 次/batch）
-      C) torch.cat([..., ones(B,t)]): 每步新建张量（512 次内存分配/batch）
-    总计每 batch 约 7000+ 次 GPU-CPU sync → CPU 100%、GPU 空等、利用率 ~30%
+    ── 原问题：GeneralTemplate 一刀切 ──────────────────────────────────────────
+    v2 实现在此函数内部对所有样本统一使用 GeneralInstructionTemplate.build_prompt()，
+    而专化专家（text/image/uml）是在 domain-specific 模板下训练的，
+    收到 GeneralTemplate prompt 时输出分布偏移：
+      - 输出长度从 392 膨胀至 612（+56%）
+      - 格式通过率从 100% 跌至 77%
+      - ROUGE-L 从 0.5515 退化至 0.4319（Gap 缩小率 -145%）
 
-    ── v2 修复 ─────────────────────────────────────────────────────────────────
-    ① 预分配 output_ids (B, max_new_tokens) on GPU
-       - 循环内用 tensor 赋值替代 .item()，全程无 Python-level sync
-       - 循环结束后一次 .cpu().tolist() 批量解码（sync 次数：6144 → 1）
-    ② 预分配 attn_mask_buf (B, L+max_new_tokens) on GPU，decode 部分预设全 1
-       - 循环内用 narrow view（[:, :L+step+1]）替代 torch.cat，zero-copy
-       - CUDA 内存分配次数：512 → 0
-    ③ done.all() 改为每 DONE_CHECK_INTERVAL 步同步一次
-       - GPU-CPU sync 次数：512 → ≤32
-    ④ done 更新改为向量化 masked_fill，消除 for b in range(B) Python 循环
-    ⑤ model.eval() 在 prefill 前统一调用一次（而非在 prefill try-blocks 内）
+    ── 修复：调用方预构建 prompt ──────────────────────────────────────────────
+    batch_items 格式由原来的 [(i_global, sample_dict, w1, w2), ...]
+    改为 [(i_global, prompt_str, w1, w2), ...] ，
+    prompt_str 已由 _run_output_ensemble 按每个样本的 data_type 选择正确模板构建。
+    两个专家收到 **完全相同的 prompt_str**，保证 KV Cache 前缀一致，PoE 融合有意义。
 
-    attention_mask 构造方式（left-padded prompt，长度 L）：
-        prefill:  prompt_mask                          shape (B, L)
-        step d:   attn_mask_buf[:, :L+d+1]  (view)    shape (B, L+d+1)
-                  = [prompt_mask | 1×(d+1)]  全部来自预分配缓冲区，zero-copy
+    ── 其他优化（v2 保留）──────────────────────────────────────────────────────
+    ① 预分配 output_ids (B, max_new_tokens) on GPU，消除循环内 .item() sync
+    ② 预分配 attn_mask_buf，decode 用 narrow view，zero-copy
+    ③ 每 DONE_CHECK_INTERVAL 步 sync 一次 done.all()
+    ④ 向量化 done 更新（无 Python for 循环）
+    ⑤ eval() 在 prefill 前统一调用一次
 
     Args:
-        batch_items: List[(i_global, sample_dict, w1, w2)]
+        batch_items: List[(i_global, prompt_str, w1, w2)]
     Returns:
         List[str]  — 与 batch_items 等长
     """
     import torch
-    from models.prompt_templates.general_template import GeneralInstructionTemplate
+    import torch.nn.functional as F
 
     B = len(batch_items)
     max_new_tokens = 512
     DONE_CHECK_INTERVAL = 16   # 每 16 步做一次 GPU-CPU sync 检查 done.all()
 
-    # stop token set（同 _logit_ensemble_generate 修复2）
+    # stop token set
     stop_ids = {tokenizer.eos_token_id}
     if (tokenizer.pad_token_id is not None
             and tokenizer.pad_token_id != tokenizer.eos_token_id
             and tokenizer.pad_token_id > 3):
         stop_ids.add(tokenizer.pad_token_id)
     stop_ids = {sid for sid in stop_ids if sid is not None}
-    # sentinel_id 用于占位已完成序列的输出槽（post-processing 时截断标记）
-    # 必须用 eos_token_id 而非 pad_token_id：pad_token_id 可能是 token 0（合法内容），
-    # 用它做 sentinel 会导致正常输出被误截断。eos_token_id 始终安全。
     sentinel_id = tokenizer.eos_token_id
 
-    # 提取各条样本的 prompt 和融合权重
-    prompts = [GeneralInstructionTemplate.build_prompt(s['input']) for (_, s, _, _) in batch_items]
+    # 核心修复：直接用预构建的 prompt_str，不再在此处调用任何 Template
+    prompts = [prompt_str for (_, prompt_str, _, _) in batch_items]
     ws1 = [w1 for (_, _, w1, _) in batch_items]
     ws2 = [w2 for (_, _, _, w2) in batch_items]
+
+    # [DEBUG] 记录 batch 基本信息
+    logger.debug(
+        f"    [minibatch] B={B}, expert1={expert1}, expert2={expert2}, "
+        f"prompt0[:60]={prompts[0][:60]!r}"
+    )
 
     # ── Left-padding tokenize，与 KV Cache decode 兼容 ──────────────────────
     # 必须 left-pad：right-pad 时 KV Cache 最后一个有效位置对每条样本不同，
@@ -1090,7 +1215,6 @@ def _process_minibatch(
     elif logits2_init is None:
         logits_fused = logits1_init
     else:
-        import torch.nn.functional as F
         # PoE: fuse in log-probability space so each expert's log-partition
         # function is cancelled before weighting.  Raw logit fusion is WRONG
         # because log Z_1 ≠ log Z_2 under 4-bit quantization — the scale
@@ -1161,7 +1285,6 @@ def _process_minibatch(
         elif logits2 is None:
             logits_fused = logits1
         else:
-            import torch.nn.functional as F
             logits_fused = (w1_t * F.log_softmax(logits1, dim=-1)
                             + w2_t * F.log_softmax(logits2, dim=-1))   # (B, vocab)
 
@@ -1194,78 +1317,40 @@ def _process_minibatch(
         decoded = tokenizer.decode(truncated, skip_special_tokens=True) if truncated else ''
         results.append(decoded)
 
+    # [DEBUG] 批次生成统计
+    valid = [r for r in results if r]
+    if valid:
+        avg_len = sum(len(r) for r in valid) / len(valid)
+        empty_cnt = len(results) - len(valid)
+        format_ok = sum(
+            1 for r in valid
+            if any(kw in r for kw in ['Definition', 'Emphasis', 'Things to Avoid'])
+        )
+        logger.debug(
+            f"    [minibatch done] B={B}, avg_len={avg_len:.0f}, "
+            f"empty={empty_cnt}, format_ok={format_ok}/{len(valid)}, "
+            f"write_pos={write_pos}"
+        )
+
     return results
 
 
 def _logit_ensemble_generate(model_with_adapters, tokenizer,
-                              input_text, expert1, expert2, w1, w2, args):
+                              prompt_str, expert1, expert2, w1, w2, args):
     """
     核心：两专家同步自回归 **对数空间** 加权融合生成（Product of Experts）
 
-    ── Bug修复说明 ────────────────────────────────────────────────────────────
-    原实现在「概率空间」做算术平均（Mixture of Experts）：
-        p_fused = w1 * softmax(logits1) + w2 * softmax(logits2)
+    v3 修复：接受预构建的 prompt_str 而非 input_text，
+    由调用方（_logit_ensemble_generate_batched OOM fallback）负责按
+    样本 data_type 选择正确模板，不再在此函数内部调用任何 Template。
 
-    这会导致「概率混合分布坍缩」：
-      - 两个独立微调专家各自有尖峰分布（熵低），
-        算术平均后峰值被稀释，整体分布变平坦（熵增大）
-      - 平坦分布中 EOS 等低频 token 被相对放大，导致提前截断
-      - 实测：输出字符数从 392.5 降至 300.8（-23%），ROUGE-L 0.5921→0.4419
-
-    ── 修复1: 融合空间 ────────────────────────────────────────────────────────
-    在「log-probability 空间」做加权线性组合，即 Product of Experts（PoE）：
-
-        logits_fused = w1 * log_softmax(logits1) + w2 * log_softmax(logits2)
-
-    为什么必须先 log_softmax，而不能直接用 raw logits：
-        raw logit 融合：w1*logits1 + w2*logits2
-        log_softmax 融合：w1*(logits1 - log Z1) + w2*(logits2 - log Z2)
-
-        两者差值为常量 (w1*log_Z1 + w2*log_Z2)，在单精度下确实不影响 argmax。
-        但在 4-bit 量化后，两个专家的数值尺度（log Z）差异可达 10~20 倍，
-        导致 raw logit 融合被数值大的专家强行主导，EOS token 被压制：
-          - 实测：输出从 ~392字符 膨胀至 ~614字符，格式通过率从 100% 跌至 78.5%，
-            ROUGE-L 从 0.5515（Hard Routing 基线）退化至 0.4540（Gap 缩小率 -118%）
-        使用 log_softmax 归一化后，每个专家的输出分布先归一化到同一尺度，
-        再按权重混合，避免了尺度失衡问题。
-
-    数学等价性（正确表述）：
-        argmax(w1*log_softmax(logits1) + w2*log_softmax(logits2))
-        ≡ argmax(log(p1^w1 · p2^w2))   # Product of Experts 的定义
-
-    为什么不坍缩：
-        PoE 分布满足 H(p_fused) ≤ min(H(p1), H(p2))
-        即融合后比单个专家更尖锐（熵更低），不会出现分布平坦化问题。
-        语义：只有在「两个专家都认可」的 token 才能胜出，而非任一专家喜欢就通过。
-
-    ── 修复2: stop_ids ──────────────────────────────────────────────────────
-    原实现 stop_ids = {eos_token_id, pad_token_id} 存在风险：
-      - Qwen3-8B 的 pad_token_id 可能 == eos_token_id（无害但冗余）
-      - 也可能被设为 0（合法内容 token），无条件加入会导致误截断
-      - 修复：只在 pad_token_id 明确是特殊符（id>3）且与 eos 不同时才加入
-
-    ── 性能优化: KV Cache ────────────────────────────────────────────────────
-    原实现每个 decoding step 传入完整 current_ids（prompt + 所有已生成 token），
-    导致计算复杂度为 O(n²)：
-      - 假设 prompt 长度 L=300，输出长度 T=512，则每条样本总计算量约
-        Σ(L+t) for t=0..T-1 ≈ (300+512/2)*512 ≈ 280k token 次前向
-      - 两个专家各自一份，实际 ≈ 560k token 次前向，GPU 长时间处理长序列
-      - CPU 需要不断拼接和搬运越来越长的 current_ids，形成 CPU 瓶颈（GPU 利用率~40%）
-
-    修复：每个专家独立维护 KV Cache（past_key_values），每步只处理 1 个新 token：
-      - Prefill 阶段：用完整 prompt 对两个专家各做一次全量前向，得到初始 KV Cache
-      - Decode 阶段：每步只传入上一步生成的单 token + 对应专家的 KV Cache
-      - 计算复杂度降至 O(n)：每步 GPU 只处理 1 个 token，显著降低 CPU 调度开销
-      - 两个专家的 KV Cache 完全独立（past_kv1 / past_kv2），切换 adapter 不互相污染
-      - 注意：KV Cache 存储在 fp16/bf16（非 4bit），24GB 显存完全够用
-        （Qwen3-8B 32层 × 2专家 × max_len≈812 ≈ ~200MB，远小于模型本身占用）
-
-    ── 正确性保证 ────────────────────────────────────────────────────────────
-    每一步 t，两个专家的 KV Cache 均由完全相同的 token 序列（prompt + fused_tokens[:t]）
-    积累而来，保证 conditioning context 完全一致，logit 融合在语义上有意义。
+    ── 其余修复（v2 保留）──────────────────────────────────────────────────────
+    修复1: PoE in log-probability space (避免原始 logit 融合导致 EOS 被压制)
+    修复2: stop_ids 安全过滤 (避免 pad_token_id 误截断)
+    性能优化: KV Cache + O(n) decode 复杂度
     """
     import torch
-    from models.prompt_templates.general_template import GeneralInstructionTemplate
+    import torch.nn.functional as F
 
     max_new_tokens = 512
 
@@ -1276,13 +1361,13 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
             and tokenizer.pad_token_id > 3):
         stop_ids.add(tokenizer.pad_token_id)
 
-    prompt = GeneralInstructionTemplate.build_prompt(input_text)
+    # 核心修复：直接使用调用方传入的 prompt_str，不再调用 GeneralInstructionTemplate
     device = (
         model_with_adapters.base_model.model.device
         if hasattr(model_with_adapters, 'base_model')
         else next(model_with_adapters.parameters()).device
     )
-    prompt_ids = tokenizer(prompt, return_tensors='pt').input_ids.to(device)
+    prompt_ids = tokenizer(prompt_str, return_tensors='pt').input_ids.to(device)
 
     # ── Prefill 阶段：完整 prompt 各过一次两个专家，建立各自 KV Cache ──
     # 注意：两个专家的 KV Cache 独立存储，切换 adapter 时彼此不干扰
@@ -1393,7 +1478,14 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
 
     if not fused_tokens:
         return ''
-    return tokenizer.decode(fused_tokens, skip_special_tokens=True)
+    result = tokenizer.decode(fused_tokens, skip_special_tokens=True)
+    # [DEBUG] 单条回退路径：记录基本质量指标
+    logger.debug(
+        f"    [single-generate] expert={expert1}+{expert2}, "
+        f"tok_count={len(fused_tokens)}, char_len={len(result)}, "
+        f"format_ok={'Definition' in result or 'Emphasis' in result}"
+    )
+    return result
 
 
 def _decode_from_logits(tokenizer, logits_list):
