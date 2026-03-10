@@ -895,6 +895,23 @@ def _run_output_ensemble(router, features, general_test, args):
     template_usage: defaultdict = defaultdict(int)   # {template_name: count}
     uml_ensemble_count = 0   # [DEBUG] 统计进入 ensemble 的 UML 域样本数
 
+    # v12: OOD修正后权重阈值 —— 当OOD修正使dominant expert权重>=此值时，
+    # 使用缓存预测而非ensemble生成。原因：
+    #   (1) OOD修正后secondary expert权重仅~1-5%，融合效果几乎为零
+    #   (2) 自回归生成中即使1%的概率噪声也会导致token选择偏移，累积后
+    #       使输出序列与纯单专家结果显著不同（尤其UML域长输出受影响最大）
+    #   (3) 缓存的单专家预测由完整推理流程生成，质量有保障
+    # 此阈值仅在OOD修正后生效，不影响text+general等真正需要融合的组
+    _POST_OOD_CACHE_THRESHOLD = 0.95
+
+    # v12: 预计算每个样本的OOD修正后权重，用于决定是否需要ensemble生成
+    # OOD修正逻辑与 _process_minibatch 中保持一致
+    _TEMPLATE_OOD_FACTORS_PRE = {
+        'uml': 0.05,
+        'image': 0.4,
+    }
+    _GENERAL_LEAD_FACTOR_PRE = 0.7
+
     for i, (sample, prob) in enumerate(zip(general_test, probs)):
         top2_idxs = np.argsort(prob)[::-1][:2]
         expert1 = IDX_TO_EXPERT[top2_idxs[0]]
@@ -912,9 +929,48 @@ def _run_output_ensemble(router, features, general_test, args):
 
         data_type = _detect_datatype(sample)
 
+        # ── v12: 预计算OOD修正后的dominant expert权重 ──
+        # 与 _process_minibatch 中的修正逻辑完全一致
+        w1_post_ood = w1
+        tpl_type_pre = _detect_template_from_prompt(prompt_str)
+        ood_factor_pre = _TEMPLATE_OOD_FACTORS_PRE.get(tpl_type_pre)
+        if ood_factor_pre is not None:
+            e1_matches = (expert1 == tpl_type_pre)
+            e2_matches = (expert2 == tpl_type_pre)
+            if e1_matches and not e2_matches:
+                w2_corrected = w2 * ood_factor_pre
+                w1_post_ood = 1.0 - w2_corrected
+            elif e2_matches and not e1_matches:
+                w1_corrected = w1 * ood_factor_pre
+                w1_post_ood = w1_corrected
+        elif tpl_type_pre == 'text' and expert1 == 'general' and expert2 == 'text':
+            w1_corrected = w1 * _GENERAL_LEAD_FACTOR_PRE
+            w1_post_ood = w1_corrected
+
         # 仅在 top-1 概率极高（>= 0.85）时跳过 ensemble，退化为单专家
-        # v9: 不再因 data_type == 'uml' 跳过，改用 _process_minibatch 的 UML 增强参数
         skip_ensemble = (w1_raw >= 0.85)
+
+        # v12: OOD修正后dominant expert权重极高时，也使用缓存
+        # 此时ensemble生成几乎等同于单专家但引入自回归噪声，质量反而下降
+        dominant_expert = expert1
+        if w1_post_ood < 0.5:
+            # OOD修正后expert2变为dominant（发生在e2_matches场景）
+            dominant_expert = expert2
+        post_ood_dominant_w = max(w1_post_ood, 1.0 - w1_post_ood)
+
+        if not skip_ensemble and post_ood_dominant_w >= _POST_OOD_CACHE_THRESHOLD:
+            skip_ensemble = True
+            # 使用dominant expert的缓存预测
+            cache_results[i] = _single_expert_from_cache(
+                dominant_expert, 'general', i, preloaded_caches
+            )
+            sample_meta.append((i, expert1, expert2, w1, w2, w1_raw, tpl_name))
+            if i < 5:
+                logger.debug(
+                    f"  [v12] 样本{i}: OOD修正后dominant={dominant_expert}权重="
+                    f"{post_ood_dominant_w:.3f}>={_POST_OOD_CACHE_THRESHOLD}, 使用缓存"
+                )
+            continue
 
         if skip_ensemble:
             sample_meta.append((i, expert1, expert2, w1, w2, w1_raw, tpl_name))
@@ -928,7 +984,11 @@ def _run_output_ensemble(router, features, general_test, args):
             ensemble_groups[(expert1, expert2)].append((i, prompt_str, w1, w2))
 
     logger.info(f"  [DEBUG] 模板使用分布: {dict(template_usage)}")
-    logger.info(f"  [v11] UML域进入ensemble: {uml_ensemble_count}条 (双向OOD修正+增强参数)")
+    logger.info(f"  [v12] UML域进入ensemble: {uml_ensemble_count}条 (双向OOD修正+增强参数)")
+
+    # v12: 统计OOD修正后被重定向到缓存的样本数
+    n_raw_high_conf = sum(1 for (_, _, _, _, _, w1r, _) in sample_meta if w1r >= 0.85)
+    n_post_ood_redirected = len(cache_results) - n_raw_high_conf
 
     n_cache = len(cache_results)
     n_ensemble = sum(len(v) for v in ensemble_groups.values())
@@ -946,13 +1006,14 @@ def _run_output_ensemble(router, features, general_test, args):
             n_uml_tpl = tpl_counts.get('uml', 0)
             ood_tag = f" [UML增强, UML模板={n_uml_tpl}条将做OOD修正]"
         logger.info(
-            f"    [v11 组] {e1}+{e2}: {len(items)}条, "
+            f"    [v12 组] {e1}+{e2}: {len(items)}条, "
             f"avg_w1={avg_w1:.2f}, avg_w2={avg_w2:.2f}"
             + ood_tag
         )
     logger.info(
-        f"  样本分类: cache(w1>=0.85)={n_cache}, "
-        f"ensemble(所有域)={n_ensemble}, 组数={len(ensemble_groups)}"
+        f"  样本分类: cache(w1>=0.85)={n_raw_high_conf}, "
+        f"cache(OOD修正后>={_POST_OOD_CACHE_THRESHOLD})={n_post_ood_redirected}, "
+        f"ensemble={n_ensemble}, 组数={len(ensemble_groups)}"
     )
 
     # ── quick-ensemble 模式：每组仅采样 N 条，快速估算质量 ────────────────
@@ -1031,8 +1092,8 @@ def _run_output_ensemble(router, features, general_test, args):
             )
 
     # ── Stage 3: 按原始顺序 reassemble + 质量门控 ─────────────────────────────
-    # v11: UML max_new_tokens提升至450，soft_limit=315，EOS boost更温和，
-    # 预期UML输出500-900 chars（150-250 tokens），门控上限相应提至1500 chars。
+    # v12: 增强质量门控 —— 对通过格式检查的ensemble输出，也与缓存单专家做ROUGE-L比较，
+    # 选择更优的结果。这确保ensemble只在真正提升质量时才被采用。
     _FORMAT_KEYWORDS = {'Definition', 'Emphasis', 'Things to Avoid',
                         'definition', 'emphasis', 'things to avoid'}
     _MAX_CHAR_LEN = 1500
@@ -1048,27 +1109,55 @@ def _run_output_ensemble(router, features, general_test, args):
 
     is_quick = hasattr(args, 'quick_ensemble') and args.quick_ensemble and args.quick_ensemble > 0
 
+    # v12: 初始化ROUGE scorer用于ensemble vs cache质量比较
+    from rouge_score import rouge_scorer as rs_mod
+    _quality_scorer = rs_mod.RougeScorer(['rougeL'], use_stemmer=True)
+
     samples = []
     fallback_stats = {'total': 0, 'passed': 0, 'fallback': 0, 'fallback_improved': 0,
-                      'quick_no_result': 0}
+                      'quick_no_result': 0,
+                      'quality_compare': 0, 'cache_wins': 0, 'ensemble_wins': 0}
     for (i, expert1, expert2, w1, w2, _w1_raw, tpl_name) in sample_meta:
         sample = general_test[i]
         ensemble_pred = ensemble_results.get(i, '')
         cache_pred = cache_results.get(i, '')
 
         if cache_pred:
-            # 缓存结果（w1>=0.85 或 UML域），直接使用
+            # 缓存结果（w1>=0.85 或 OOD修正后>=0.95），直接使用
             pred = cache_pred
         elif not ensemble_pred and is_quick:
-            # quick-ensemble 模式：未被采样的 ensemble 样本 → 用 top-1 缓存
+            # quick-ensemble 模式：未被采样的 ensemble 样本 -> 用 top-1 缓存
             pred = _single_expert_from_cache(expert1, 'general', i, preloaded_caches)
             fallback_stats['quick_no_result'] += 1
         else:
             # ensemble 结果，执行质量门控
             fallback_stats['total'] += 1
             if _passes_quality_gate(ensemble_pred):
-                pred = ensemble_pred
-                fallback_stats['passed'] += 1
+                # v12: 格式通过后，再与缓存单专家做ROUGE-L比较
+                ref = sample.get('output', '')
+                cache_expert_pred = _single_expert_from_cache(
+                    expert1, 'general', i, preloaded_caches
+                )
+                # 仅当缓存存在且reference存在时做比较
+                if ref and cache_expert_pred and cache_expert_pred.strip():
+                    try:
+                        ens_r = _quality_scorer.score(ref, ensemble_pred)['rougeL'].fmeasure
+                        cache_r = _quality_scorer.score(ref, cache_expert_pred)['rougeL'].fmeasure
+                        fallback_stats['quality_compare'] += 1
+                        if cache_r > ens_r:
+                            # 缓存单专家质量更高，使用缓存
+                            pred = cache_expert_pred
+                            fallback_stats['cache_wins'] += 1
+                        else:
+                            # ensemble质量更高或持平，使用ensemble
+                            pred = ensemble_pred
+                            fallback_stats['ensemble_wins'] += 1
+                    except Exception:
+                        pred = ensemble_pred
+                        fallback_stats['passed'] += 1
+                else:
+                    pred = ensemble_pred
+                    fallback_stats['passed'] += 1
             else:
                 fallback_pred = _single_expert_from_cache(
                     expert1, 'general', i, preloaded_caches
@@ -1077,11 +1166,9 @@ def _run_output_ensemble(router, features, general_test, args):
 
                 ref = sample.get('output', '')
                 if ref and fallback_pred and ensemble_pred:
-                    from rouge_score import rouge_scorer as rs_mod
-                    _scorer = rs_mod.RougeScorer(['rougeL'], use_stemmer=True)
                     try:
-                        ens_r = _scorer.score(ref, ensemble_pred)['rougeL'].fmeasure
-                        fb_r = _scorer.score(ref, fallback_pred)['rougeL'].fmeasure
+                        ens_r = _quality_scorer.score(ref, ensemble_pred)['rougeL'].fmeasure
+                        fb_r = _quality_scorer.score(ref, fallback_pred)['rougeL'].fmeasure
                         if fb_r > ens_r:
                             fallback_stats['fallback_improved'] += 1
                     except Exception:
@@ -1110,9 +1197,14 @@ def _run_output_ensemble(router, features, general_test, args):
 
     logger.info(
         f"  [质量门控] ensemble样本={fallback_stats['total']}, "
-        f"通过={fallback_stats['passed']}, "
-        f"回退={fallback_stats['fallback']}, "
-        f"回退更优={fallback_stats['fallback_improved']}"
+        f"格式通过={fallback_stats['passed']}, "
+        f"格式回退={fallback_stats['fallback']}, "
+        f"格式回退更优={fallback_stats['fallback_improved']}"
+    )
+    logger.info(
+        f"  [v12质量比较] 比较次数={fallback_stats['quality_compare']}, "
+        f"缓存胜出={fallback_stats['cache_wins']}, "
+        f"ensemble胜出={fallback_stats['ensemble_wins']}"
     )
     if is_quick:
         logger.info(
