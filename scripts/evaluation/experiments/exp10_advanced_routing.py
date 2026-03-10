@@ -877,35 +877,28 @@ def _run_output_ensemble(router, features, general_test, args):
         logger.info(f"  [DEBUG] 样本0 使用模板: {tpl0}, prompt前80字符: {prompt0[:80]!r}")
 
     # ── Stage 1: 分类样本（纯 CPU，O(N)）──────────────────────────────────────
-    # cache_results  : top-1 prob >= 0.85 OR UML-domain → 从磁盘缓存取
+    # cache_results  : top-1 prob >= 0.85 → 从磁盘缓存取（单专家高置信度）
     # ensemble_groups: 按 (expert1, expert2) 分组，后续批量 GPU 推理
     # sample_meta    : 保存每条样本的路由元信息，供最终重新排序（reassemble）用
     #
-    # ── v8 核心修复：UML 域样本跳过 ensemble，使用缓存单专家 ────────────────
-    # v4-v7 全部迭代的根因分析总结（6次实验验证）：
+    # ── v9 修复：重新启用 UML 域 ensemble，使用更强的温度缩放 + 更早的 EOS boost ──
+    # v8 分析了 UML 域无法 ensemble 的原因：UML 专家 logit 分布极尖锐（高置信度），
+    # 即使 T=2.0 仍主导融合，导致生成 800-1200 字符的过长输出，摧毁三段式格式。
     #
-    #   ensemble 要求 primary expert 必须对当前 prompt 模板 **in-distribution**：
-    #   - text_template 输入 → text/general 可做 primary → ensemble 有效
-    #   - image_template 输入 → image/general 可做 primary → ensemble 有效
-    #   - uml_template 输入 → 只有 uml/general 可做 primary，但：
-    #     * uml 作 primary → 长输出风格摧毁三段式格式（v3-v5 验证）
-    #     * general 作 primary → 也学过 UML 长风格，EOS 信号弱（v5 验证）
-    #     * text 作 primary → 对 uml_template OOD，logits 近均匀（v7 验证）
-    #     * image 作 primary → 对 uml_template OOD（v6 验证）
-    #   结论：UML 域不存在有效的双专家融合 pair。
+    # v9 核心修复：
+    #   1. T_uml: 2.0 → 4.0，更强力压平 UML 分布，使 general 专家贡献有实质影响
+    #   2. soft_limit: 50% → 45%（99 tokens），更早开始施加 EOS 推进
+    #   3. eos_boost_rate: 0.15 → 0.30，每步 EOS 增量翻倍，在 ~130 tokens 时
+    #      boost 达到 9.3，在 ~150 tokens 时达到 15.3，足以压过 UML 专家的 EOS 偏差
+    #   4. max_new_tokens（UML 参与组）: 250 → 220，配合 EOS boost 更快收敛
     #
-    #   v5 中 text+uml 的 ROUGE=0.73 实为 text 域样本（text_template），
-    #   text 专家 in-distribution → UML 只起辅助作用 → 效果好。
-    #   这不适用于 UML 域样本（uml_template）。
-    #
-    # 修复：UML 域样本直接走 router top-1 缓存（与 Learned Router 方案B 等价），
-    #        text/image 域样本正常 ensemble，保留加权创新点。
-    uml_skipped = 0
+    # 保留：text/image 域 ensemble 参数不变（T=1.0，soft_limit=50%，rate=0.15）
 
     sample_meta = []          # [(i, expert1, expert2, w1, w2, w1_raw, template_name), ...]
     cache_results = {}        # {i: pred_str}
     ensemble_groups = defaultdict(list)   # {(e1, e2): [(i, prompt_str, w1, w2), ...]}
     template_usage: defaultdict = defaultdict(int)   # {template_name: count}
+    uml_ensemble_count = 0   # [DEBUG] 统计进入 ensemble 的 UML 域样本数
 
     for i, (sample, prob) in enumerate(zip(general_test, probs)):
         top2_idxs = np.argsort(prob)[::-1][:2]
@@ -924,14 +917,9 @@ def _run_output_ensemble(router, features, general_test, args):
 
         data_type = _detect_datatype(sample)
 
-        # 判断是否跳过 ensemble
-        skip_ensemble = False
-        if w1_raw >= 0.85:
-            skip_ensemble = True
-        elif data_type == 'uml':
-            # v8: UML 域样本不适合 ensemble（无有效 primary expert）
-            skip_ensemble = True
-            uml_skipped += 1
+        # 仅在 top-1 概率极高（>= 0.85）时跳过 ensemble，退化为单专家
+        # v9: 不再因 data_type == 'uml' 跳过，改用 _process_minibatch 的 UML 增强参数
+        skip_ensemble = (w1_raw >= 0.85)
 
         if skip_ensemble:
             sample_meta.append((i, expert1, expert2, w1, w2, w1_raw, tpl_name))
@@ -939,12 +927,13 @@ def _run_output_ensemble(router, features, general_test, args):
                 expert1, 'general', i, preloaded_caches
             )
         else:
-            # text/image 域：正常 ensemble，保留加权创新
+            if data_type == 'uml':
+                uml_ensemble_count += 1
             sample_meta.append((i, expert1, expert2, w1, w2, w1_raw, tpl_name))
             ensemble_groups[(expert1, expert2)].append((i, prompt_str, w1, w2))
 
     logger.info(f"  [DEBUG] 模板使用分布: {dict(template_usage)}")
-    logger.info(f"  [v8] UML域跳过ensemble: {uml_skipped}条 (使用router top-1缓存)")
+    logger.info(f"  [v9] UML域进入ensemble: {uml_ensemble_count}条 (使用T=4.0+早期EOS boost)")
 
     n_cache = len(cache_results)
     n_ensemble = sum(len(v) for v in ensemble_groups.values())
@@ -952,13 +941,15 @@ def _run_output_ensemble(router, features, general_test, args):
     for (e1, e2), items in sorted(ensemble_groups.items(), key=lambda x: -len(x[1])):
         avg_w1 = np.mean([w1 for (_, _, w1, _) in items])
         avg_w2 = np.mean([w2 for (_, _, _, w2) in items])
+        is_uml_grp = (e1 == 'uml' or e2 == 'uml')
         logger.info(
-            f"    [v8 组] {e1}+{e2}: {len(items)}条, "
+            f"    [v9 组] {e1}+{e2}: {len(items)}条, "
             f"avg_w1={avg_w1:.2f}, avg_w2={avg_w2:.2f}"
+            + (" [UML增强参数]" if is_uml_grp else "")
         )
     logger.info(
-        f"  样本分类: cache(w1>=0.85 或 UML域)={n_cache}, "
-        f"ensemble(text/image域)={n_ensemble}, 组数={len(ensemble_groups)}"
+        f"  样本分类: cache(w1>=0.85)={n_cache}, "
+        f"ensemble(所有域)={n_ensemble}, 组数={len(ensemble_groups)}"
     )
 
     # ── quick-ensemble 模式：每组仅采样 N 条，快速估算质量 ────────────────
@@ -1037,6 +1028,8 @@ def _run_output_ensemble(router, features, general_test, args):
             )
 
     # ── Stage 3: 按原始顺序 reassemble + 质量门控 ─────────────────────────────
+    # v9: UML 域样本参与 ensemble，预期输出 400-700 chars（120-150 tokens），
+    # 在 1000 chars 门控限制以内；如超出则触发回退（说明 EOS boost 仍不足）
     _FORMAT_KEYWORDS = {'Definition', 'Emphasis', 'Things to Avoid',
                         'definition', 'emphasis', 'things to avoid'}
     _MAX_CHAR_LEN = 1000
@@ -1130,6 +1123,7 @@ def _run_output_ensemble(router, features, general_test, args):
     from rouge_score import rouge_scorer as rs_mod
     _scorer = rs_mod.RougeScorer(['rougeL'], use_stemmer=True)
     dtype_scores = defaultdict(list)
+    dtype_char_lens = defaultdict(list)
     for s in samples:
         dt = s.get('data_type', 'unknown')
         pred, ref = s.get('prediction', ''), s.get('reference', '')
@@ -1137,12 +1131,47 @@ def _run_output_ensemble(router, features, general_test, args):
             try:
                 sc = _scorer.score(ref, pred)['rougeL'].fmeasure
                 dtype_scores[dt].append(sc)
+                dtype_char_lens[dt].append(len(pred))
             except Exception:
                 pass
     for dt, scores in sorted(dtype_scores.items()):
+        avg_len = np.mean(dtype_char_lens[dt]) if dtype_char_lens[dt] else 0
         logger.info(
             f"  [DEBUG] data_type={dt}: n={len(scores)}, "
-            f"ROUGE-L={np.mean(scores):.4f} (std={np.std(scores):.4f})"
+            f"ROUGE-L={np.mean(scores):.4f} (std={np.std(scores):.4f}), "
+            f"avg_pred_chars={avg_len:.0f}"
+        )
+    # [DEBUG] UML域ensemble专项：区分ensemble输出 vs 缓存回退，帮助定位参数效果
+    uml_ensemble_samples = [
+        s for s in samples
+        if s.get('data_type') == 'uml' and s.get('index') in ensemble_results
+    ]
+    uml_cache_samples = [
+        s for s in samples
+        if s.get('data_type') == 'uml' and s.get('index') not in ensemble_results
+    ]
+    if uml_ensemble_samples:
+        uml_ens_rouges = []
+        uml_ens_lens = []
+        for s in uml_ensemble_samples:
+            pred, ref = s.get('prediction', ''), s.get('reference', '')
+            if pred and ref:
+                try:
+                    sc = _scorer.score(ref, pred)['rougeL'].fmeasure
+                    uml_ens_rouges.append(sc)
+                    uml_ens_lens.append(len(pred))
+                except Exception:
+                    pass
+        logger.info(
+            f"  [DEBUG][UML-ensemble] ensemble输出={len(uml_ensemble_samples)}条, "
+            f"avg_ROUGE-L={np.mean(uml_ens_rouges):.4f}, "
+            f"avg_chars={np.mean(uml_ens_lens):.0f}, "
+            f"长输出(>700chars)={sum(1 for l in uml_ens_lens if l > 700)}条"
+        )
+    if uml_cache_samples:
+        logger.info(
+            f"  [DEBUG][UML-cache] 缓存单专家={len(uml_cache_samples)}条 "
+            f"(w1>=0.85高置信度)"
         )
     # per-expert-pair ROUGE-L
     pair_scores = defaultdict(list)
@@ -1251,7 +1280,8 @@ def _process_minibatch(
     """
     批量 prefill + 批量 decode（B×1 token/step × 2 experts）
 
-    v8: UML 域样本已在 Stage 1 跳过 ensemble，此处只处理 text/image 域。
+    v9: UML 域样本重新参与 ensemble，使用增强参数：
+        T_uml=4.0（强力压平 UML 分布），soft_limit=45%，eos_boost_rate=0.30。
     MoE 概率空间加权 + 温度缩放 + EOS 长度惩罚。
     """
     import torch
@@ -1260,26 +1290,36 @@ def _process_minibatch(
     B = len(batch_items)
     DONE_CHECK_INTERVAL = 16   # 每 16 步做一次 GPU-CPU sync 检查 done.all()
 
-    # ── v5 Fix 1: 专家温度缩放 ──────────────────────────────────────────────
+    # ── v9 专家温度缩放 ──────────────────────────────────────────────────────
     # UML 专家在长序列上训练，其 softmax 分布极尖锐（高 confidence），
     # 即使 MoE 概率空间加权平均，UML 的极端分布仍然主导融合结果：
-    #   - P_uml(next_specialized_token) ≈ 0.6，P_other(next_token) ≈ 0.2
-    #   - MoE: 0.6*0.6 + 0.4*0.2 = 0.44 → UML 依旧主导
-    # 温度 T>1 拉平 UML 的分布，让次要专家的贡献更有意义：
-    #   - T=2.0: P_uml(next) ≈ 0.3 → MoE: 0.6*0.3 + 0.4*0.2 = 0.26
-    #   - P_uml(EOS) 也从 ~0.001 提升至 ~0.01，大幅缓解 EOS 压制
-    _EXPERT_TEMPERATURE = {'text': 1.0, 'image': 1.0, 'uml': 2.0, 'general': 1.0}
+    #   - v8 T=2.0 时：P_uml(next) ≈ 0.3 → MoE 仍由 UML 主导 → 长输出 800-1200 chars
+    #   - v9 T=4.0 时：P_uml(next) ≈ 0.15 → general 专家贡献比例上升到有效范围
+    #                  P_uml(EOS) 同步从 ~0.001 提升至 ~0.05，EOS 信号不再被完全压制
+    # text/image 保持 T=1.0（无需变更，效果已稳定）
+    _EXPERT_TEMPERATURE = {'text': 1.0, 'image': 1.0, 'uml': 4.0, 'general': 1.0}
     T1 = _EXPERT_TEMPERATURE.get(expert1, 1.0)
     T2 = _EXPERT_TEMPERATURE.get(expert2, 1.0)
 
-    # ── v5 Fix 2: 更紧凑的长度上限 ──────────────────────────────────────────
-    # General 域参考输出统计：avg 392 chars / 57.7 words ≈ 80-100 tokens
-    # 以 2x 参考长度为上限（而非 v4 的 2.5-4x），足够生成完整三段式指令
-    _DOMAIN_MAX_TOKENS = {'text': 200, 'image': 200, 'uml': 250, 'general': 200}
-    max_new_tokens = max(
-        _DOMAIN_MAX_TOKENS.get(expert1, 200),
-        _DOMAIN_MAX_TOKENS.get(expert2, 200),
-    )
+    # ── v9 UML 参与组专项参数 ────────────────────────────────────────────────
+    # UML 域参考输出平均约 130-150 tokens（短样本 ~100 tokens，长样本 ~200 tokens）
+    # 需要让 EOS boost 在合理长度范围内有足够强度触发停止，避免 800+ chars 过长输出
+    _is_uml_involved = (expert1 == 'uml' or expert2 == 'uml')
+    _DOMAIN_MAX_TOKENS = {'text': 200, 'image': 200, 'uml': 220, 'general': 200}
+    if _is_uml_involved:
+        # UML 参与组：更紧凑的上限 + 更早、更强的 EOS 推进
+        max_new_tokens = 220
+        _SOFT_LIMIT = int(max_new_tokens * 0.45)  # 99 tokens，比默认 50% 更早
+        _EOS_BOOST_RATE = 0.30  # 每步 EOS +0.30，是默认 0.15 的 2 倍
+        # 在 130 tokens 时 boost=9.3，在 150 tokens 时 boost=15.3，
+        # 足以压过 UML 专家极负的 EOS logit，强制在合理长度内停止
+    else:
+        max_new_tokens = max(
+            _DOMAIN_MAX_TOKENS.get(expert1, 200),
+            _DOMAIN_MAX_TOKENS.get(expert2, 200),
+        )
+        _SOFT_LIMIT = int(max_new_tokens * 0.5)  # 默认：50% 处开始施加惩罚
+        _EOS_BOOST_RATE = 0.15  # 默认：每超出 1 个 token，EOS logit 增加 0.15
 
     # stop token set
     stop_ids = {tokenizer.eos_token_id}
@@ -1296,19 +1336,12 @@ def _process_minibatch(
     ws1 = [w1 for (_, _, w1, _) in batch_items]
     ws2 = [w2 for (_, _, _, w2) in batch_items]
 
-    # ── v5 Fix 2b: 更激进的 EOS 长度惩罚 ────────────────────────────────────
-    # v4 的 rate=0.03 + soft_limit=60% 对 UML 组无效（1560 chars 输出仍然过长）
-    # 原因：UML 专家的 log P(EOS) ≈ -7，boost 0.03/step × 100 steps = 3.0，
-    #       远不够将 EOS 推到 argmax 位置
-    # v5: rate=0.15, soft_limit=50%，在 100 步时 boost=7.5，足以翻转 EOS 排名
-    _SOFT_LIMIT = int(max_new_tokens * 0.5)  # 50% 处开始施加惩罚
-    _EOS_BOOST_RATE = 0.15  # 每超出 1 个 token，EOS logit 增加 0.15
-
     # [DEBUG] 记录 batch 基本信息
     logger.info(
         f"    [minibatch] B={B}, expert1={expert1}(T={T1}), expert2={expert2}(T={T2}), "
         f"max_new_tokens={max_new_tokens}, soft_limit={_SOFT_LIMIT}, "
         f"eos_boost_rate={_EOS_BOOST_RATE}"
+        + (" [UML增强]" if _is_uml_involved else "")
     )
 
     # ── Left-padding tokenize，与 KV Cache decode 兼容 ──────────────────────
@@ -1524,23 +1557,29 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
                               prompt_str, expert1, expert2, w1, w2, args):
     """
     单条双专家 MoE 概率空间加权混合（OOM 回退路径）
-    v8: 仅处理 text/image 域，UML 域已在 Stage 1 跳过。
+    v9: 与 _process_minibatch 使用相同的 UML 增强参数（T=4.0 + 早期 EOS boost）。
     """
     import torch
     import torch.nn.functional as F
 
-    # v5: 温度缩放 + 紧凑长度上限（与 _process_minibatch 保持一致）
-    _EXPERT_TEMPERATURE = {'text': 1.0, 'image': 1.0, 'uml': 2.0, 'general': 1.0}
+    # v9: 与 _process_minibatch 保持一致的温度和长度参数
+    _EXPERT_TEMPERATURE = {'text': 1.0, 'image': 1.0, 'uml': 4.0, 'general': 1.0}
     T1 = _EXPERT_TEMPERATURE.get(expert1, 1.0)
     T2 = _EXPERT_TEMPERATURE.get(expert2, 1.0)
 
-    _DOMAIN_MAX_TOKENS = {'text': 200, 'image': 200, 'uml': 250, 'general': 200}
-    max_new_tokens = max(
-        _DOMAIN_MAX_TOKENS.get(expert1, 200),
-        _DOMAIN_MAX_TOKENS.get(expert2, 200),
-    )
-    _SOFT_LIMIT = int(max_new_tokens * 0.5)
-    _EOS_BOOST_RATE = 0.15
+    _is_uml_involved = (expert1 == 'uml' or expert2 == 'uml')
+    _DOMAIN_MAX_TOKENS = {'text': 200, 'image': 200, 'uml': 220, 'general': 200}
+    if _is_uml_involved:
+        max_new_tokens = 220
+        _SOFT_LIMIT = int(max_new_tokens * 0.45)  # 99 tokens，更早触发
+        _EOS_BOOST_RATE = 0.30  # 更强的 EOS 推进
+    else:
+        max_new_tokens = max(
+            _DOMAIN_MAX_TOKENS.get(expert1, 200),
+            _DOMAIN_MAX_TOKENS.get(expert2, 200),
+        )
+        _SOFT_LIMIT = int(max_new_tokens * 0.5)
+        _EOS_BOOST_RATE = 0.15
 
     # 修复2：stop_ids 只包含确定的终止符，避免 pad_token_id 误触提前截断
     stop_ids = {tokenizer.eos_token_id}
