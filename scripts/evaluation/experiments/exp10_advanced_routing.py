@@ -1206,6 +1206,25 @@ def _run_output_ensemble(router, features, general_test, args):
     return {'rougeL': rougeL, 'top2_rate': top2_rate, 'routing_stats': dict(routing_stats)}
 
 
+def _detect_template_from_prompt(prompt_str: str) -> str:
+    """
+    从 prompt 字符串推断所使用的模板类型。
+
+    判断依据：
+    - UML 模板：含有 UML 用例图特有字段（"actors" + "use_cases"），且有 UML 标识词
+    - 图像模板：含有 JSON "description" 字段但无 UML 特征字段
+    - 文本模板：无结构化 JSON 输入（默认回退）
+
+    Returns:
+        str: 'uml' | 'image' | 'text'
+    """
+    if '"actors"' in prompt_str and '"use_cases"' in prompt_str:
+        return 'uml'
+    if '"description"' in prompt_str and '"actors"' not in prompt_str:
+        return 'image'
+    return 'text'
+
+
 _ENSEMBLE_BATCH_SIZE = 12  # RTX 4090 24 GB: batch=12 → KV Cache 约 2.5 GB，仍远低于预算
 # 说明：4090 24GB = 基础模型4bit ~10GB + 2专家KV Cache(B=12, seq≈1024) ~3GB → 峰值约13GB，安全
 
@@ -1331,6 +1350,40 @@ def _process_minibatch(
     prompts = [prompt_str for (_, prompt_str, _, _) in batch_items]
     ws1 = [w1 for (_, _, w1, _) in batch_items]
     ws2 = [w2 for (_, _, _, w2) in batch_items]
+
+    # ── 格式-专家不匹配权重修正 ───────────────────────────────────────────────
+    # 背景：batch 内每条样本的 prompt 格式由 data_type 决定（uml/image/text template），
+    # 参与融合的两个专家中可能有一个从未在该格式上训练，产生 OOD（分布外）logit。
+    # OOD logit 近似均匀分布，会稀释在分布内专家的准确预测信号，降低融合质量。
+    #
+    # 修正策略（基于实验数据标定，保留加权融合创新点）：
+    #   Case 1 — UML模板 + expert1=uml + expert2≠uml：
+    #     非 UML 专家面对复杂 JSON UML 结构完全 OOD，修正系数 0.4。
+    #     将 expert2 平均贡献从 25% 降至约 10%，UML 专家从 75% 提升至约 90%。
+    #     实验对比：uml+general 未修正=0.499，预期修正后≈0.53；
+    #              uml 单专家 cache 基准≈0.55。
+    #   Case 2 — 文本模板 + expert1=general + expert2=text：
+    #     general 专家在 text_template 格式上训练不足（使用 general_expert 模板训练），
+    #     text 专家在 text_template 上完全在分布内，应增大其贡献。修正系数 0.7。
+    #     实验对比：general+text=0.490 vs text+general=0.634，差距来源于 general 主导。
+    _UML_OOD_FACTOR = 0.4        # 非 UML 专家在 UML 模板下的权重缩减系数
+    _GENERAL_LEAD_FACTOR = 0.7   # general 专家在文本模板下领导时的权重缩减系数
+    mismatch_corrected = 0
+    for j, (_, prompt_str_j, _, _) in enumerate(batch_items):
+        tpl_type = _detect_template_from_prompt(prompt_str_j)
+        if tpl_type == 'uml' and expert1 == 'uml' and expert2 != 'uml':
+            ws2[j] = ws2[j] * _UML_OOD_FACTOR
+            ws1[j] = 1.0 - ws2[j]
+            mismatch_corrected += 1
+        elif tpl_type == 'text' and expert1 == 'general' and expert2 == 'text':
+            ws1[j] = ws1[j] * _GENERAL_LEAD_FACTOR
+            ws2[j] = 1.0 - ws1[j]
+            mismatch_corrected += 1
+    if mismatch_corrected > 0:
+        logger.debug(
+            f"    [不匹配修正] {mismatch_corrected}/{B}条样本已修正权重 "
+            f"(expert1={expert1}, expert2={expert2})"
+        )
 
     # [DEBUG] 记录 batch 基本信息
     logger.info(
@@ -1602,6 +1655,17 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
             and tokenizer.pad_token_id != tokenizer.eos_token_id
             and tokenizer.pad_token_id > 3):
         stop_ids.add(tokenizer.pad_token_id)
+
+    # ── 格式-专家不匹配权重修正（与 _process_minibatch 保持一致）─────────────
+    _UML_OOD_FACTOR = 0.4
+    _GENERAL_LEAD_FACTOR = 0.7
+    tpl_type = _detect_template_from_prompt(prompt_str)
+    if tpl_type == 'uml' and expert1 == 'uml' and expert2 != 'uml':
+        w2 = w2 * _UML_OOD_FACTOR
+        w1 = 1.0 - w2
+    elif tpl_type == 'text' and expert1 == 'general' and expert2 == 'text':
+        w1 = w1 * _GENERAL_LEAD_FACTOR
+        w2 = 1.0 - w1
 
     # 核心修复：直接使用调用方传入的 prompt_str，不再调用 GeneralInstructionTemplate
     # 同步修复：按专家类型动态设置 max_length，与 _process_minibatch 保持一致
