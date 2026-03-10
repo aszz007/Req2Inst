@@ -881,11 +881,13 @@ def _run_output_ensemble(router, features, general_test, args):
     # ensemble_groups: 按 (expert1, expert2) 分组，后续批量 GPU 推理
     # sample_meta    : 保存每条样本的路由元信息，供最终重新排序（reassemble）用
     #
-    # ── v10 修复：UML参数优化，解决实体名词预测污染问题 ──
-    # 根因分析：T_uml=1.5压平UML专家在actor/use_case名词上的概率峰值（0.9→0.75），
-    # general专家完全OOD（均匀分布），混合后污染实体名预测，format_ok=100%但ROUGE-L仅0.45。
-    # v10修复：T_uml=1.0保留高置信度，_UML_OOD_FACTOR=0.15将non-UML贡献压至~3%，
-    #          max_new_tokens=320允许完整枚举，soft_limit=65%不提前截断正常输出。
+    # ── v11 修复：双向对称OOD修正 + UML参数提升 ──
+    # 根因分析（v10遗留bug）：OOD修正仅处理expert1=uml的情况，
+    #   对称情况（general+uml、image+uml等）中非UML专家以高权重（~73%）
+    #   面对UML模板完全OOD，严重污染融合输出。
+    # v11修复：泛化为双向对称OOD修正（_TEMPLATE_OOD_FACTORS），
+    #   UML OOD因子从0.15降至0.05，max_new_tokens 320→450，
+    #   soft_limit 65%→70%，eos_boost_rate 0.12→0.08。
 
     sample_meta = []          # [(i, expert1, expert2, w1, w2, w1_raw, template_name), ...]
     cache_results = {}        # {i: pred_str}
@@ -926,19 +928,27 @@ def _run_output_ensemble(router, features, general_test, args):
             ensemble_groups[(expert1, expert2)].append((i, prompt_str, w1, w2))
 
     logger.info(f"  [DEBUG] 模板使用分布: {dict(template_usage)}")
-    logger.info(f"  [v9] UML域进入ensemble: {uml_ensemble_count}条 (使用T=4.0+早期EOS boost)")
+    logger.info(f"  [v11] UML域进入ensemble: {uml_ensemble_count}条 (双向OOD修正+增强参数)")
 
     n_cache = len(cache_results)
     n_ensemble = sum(len(v) for v in ensemble_groups.values())
-    # [DEBUG] per-group size breakdown
+    # [DEBUG] per-group size breakdown，标注OOD修正状态
     for (e1, e2), items in sorted(ensemble_groups.items(), key=lambda x: -len(x[1])):
         avg_w1 = np.mean([w1 for (_, _, w1, _) in items])
         avg_w2 = np.mean([w2 for (_, _, _, w2) in items])
         is_uml_grp = (e1 == 'uml' or e2 == 'uml')
+        # 统计组内各模板类型分布
+        tpl_counts = defaultdict(int)
+        for (idx, prompt_s, _, _) in items:
+            tpl_counts[_detect_template_from_prompt(prompt_s)] += 1
+        ood_tag = ""
+        if is_uml_grp:
+            n_uml_tpl = tpl_counts.get('uml', 0)
+            ood_tag = f" [UML增强, UML模板={n_uml_tpl}条将做OOD修正]"
         logger.info(
-            f"    [v9 组] {e1}+{e2}: {len(items)}条, "
+            f"    [v11 组] {e1}+{e2}: {len(items)}条, "
             f"avg_w1={avg_w1:.2f}, avg_w2={avg_w2:.2f}"
-            + (" [UML增强参数]" if is_uml_grp else "")
+            + ood_tag
         )
     logger.info(
         f"  样本分类: cache(w1>=0.85)={n_cache}, "
@@ -1021,11 +1031,11 @@ def _run_output_ensemble(router, features, general_test, args):
             )
 
     # ── Stage 3: 按原始顺序 reassemble + 质量门控 ─────────────────────────────
-    # v9: UML 域样本参与 ensemble，预期输出 400-700 chars（120-150 tokens），
-    # 在 1000 chars 门控限制以内；如超出则触发回退（说明 EOS boost 仍不足）
+    # v11: UML max_new_tokens提升至450，soft_limit=315，EOS boost更温和，
+    # 预期UML输出500-900 chars（150-250 tokens），门控上限相应提至1500 chars。
     _FORMAT_KEYWORDS = {'Definition', 'Emphasis', 'Things to Avoid',
                         'definition', 'emphasis', 'things to avoid'}
-    _MAX_CHAR_LEN = 1000
+    _MAX_CHAR_LEN = 1500
 
     def _passes_quality_gate(pred_text: str) -> bool:
         if not pred_text or not pred_text.strip():
@@ -1306,10 +1316,10 @@ def _process_minibatch(
     """
     批量 prefill + 批量 decode（B×1 token/step × 2 experts）
 
-    UML 参与组参数（v10修复）：
+    UML 参与组参数（v11修复）：
         T_uml=1.0（保留实体名词高置信度预测），
-        _UML_OOD_FACTOR=0.15（non-UML专家贡献压低至约3%，隔离OOD噪声），
-        max_new_tokens=320，soft_limit=65%（208 tokens），eos_boost_rate=0.12。
+        双向OOD修正（_TEMPLATE_OOD_FACTORS['uml']=0.05，non-UML专家贡献降至~1%），
+        max_new_tokens=450，soft_limit=70%（315 tokens），eos_boost_rate=0.08。
     非UML组：T=1.0，soft_limit=50%，eos_boost_rate=0.15（不变）。
     MoE 概率空间加权 + 温度缩放 + EOS 长度惩罚。
     """
@@ -1330,18 +1340,19 @@ def _process_minibatch(
     T2 = _EXPERT_TEMPERATURE.get(expert2, 1.0)
 
     # ── UML 参与组专项参数 ───────────────────────────────────────────────────
-    # max_new_tokens=320：UML指令参考输出约200-400 tokens（含完整actor/use_case枚举），
-    # 原220 tokens过短导致枚举被截断，ROUGE-L偏低。
-    # soft_limit=65%（208 tokens）：对应约1000字符，UML完整输出的典型长度上限，
-    # 超出此阈值才施加EOS推进，避免提前截断正常的枚举内容。
-    # eos_boost_rate=0.12：温和收束，每步仅增加0.12，在300 tokens时约boost=11，
-    # 足以阻止异常超长输出，同时不干扰150-200 tokens内的正常生成。
+    # max_new_tokens=450：UML指令参考输出含完整actor/use_case枚举，长样本可达200+ tokens，
+    # 320 tokens在EOS boost施加后实际可用约260 tokens，对长UML样本仍存在截断风险。
+    # 提升至450可覆盖99%分位的UML输出长度。
+    # soft_limit=70%（315 tokens）：给UML完整输出充足的无惩罚生成空间，
+    # 仅在315 tokens后才施加温和收束，避免提前截断正常的枚举内容。
+    # eos_boost_rate=0.08：更温和的收束，每步仅增加0.08，在450 tokens时约boost=10.8，
+    # 足以阻止异常超长输出，同时不干扰200-300 tokens内的正常生成。
     _is_uml_involved = (expert1 == 'uml' or expert2 == 'uml')
-    _DOMAIN_MAX_TOKENS = {'text': 200, 'image': 200, 'uml': 320, 'general': 200}
+    _DOMAIN_MAX_TOKENS = {'text': 200, 'image': 200, 'uml': 450, 'general': 200}
     if _is_uml_involved:
-        max_new_tokens = 320
-        _SOFT_LIMIT = int(max_new_tokens * 0.65)   # 208 tokens
-        _EOS_BOOST_RATE = 0.12  # 温和收束，不提前截断正常枚举
+        max_new_tokens = 450
+        _SOFT_LIMIT = int(max_new_tokens * 0.70)   # 315 tokens
+        _EOS_BOOST_RATE = 0.08  # 温和收束，不提前截断正常枚举
     else:
         max_new_tokens = max(
             _DOMAIN_MAX_TOKENS.get(expert1, 200),
@@ -1365,35 +1376,65 @@ def _process_minibatch(
     ws1 = [w1 for (_, _, w1, _) in batch_items]
     ws2 = [w2 for (_, _, _, w2) in batch_items]
 
-    # ── 格式-专家不匹配权重修正 ───────────────────────────────────────────────
-    # 背景：batch 内每条样本的 prompt 格式由 data_type 决定（uml/image/text template），
-    # 参与融合的两个专家中可能有一个从未在该格式上训练，产生 OOD（分布外）logit。
-    # OOD logit 近似均匀分布，会稀释在分布内专家的准确预测信号，降低融合质量。
+    # ── 通用模板-专家不匹配权重修正（双向对称机制）──────────────────────────────
+    # 核心思路：当样本模板类型（由 data_type 决定）与某个专家的训练域不匹配时，
+    # 该专家处于OOD状态，其logit近似均匀分布会稀释domain expert的准确预测信号。
     #
-    # 修正策略（基于实验数据标定，保留加权融合创新点）：
-    #   Case 1 — UML模板 + expert1=uml + expert2≠uml：
-    #     非UML专家面对复杂JSON UML结构完全OOD，修正系数0.15。
-    #     将 expert2 平均贡献从 25% 降至约 3%，UML 专家主导但仍保留微量平滑效果。
-    #     T_uml=1.0时UML专家在实体名词上置信度高，OOD干扰需进一步压低。
-    #   Case 2 — 文本模板 + expert1=general + expert2=text：
-    #     general 专家在 text_template 格式上训练不足，修正系数 0.7。
-    _UML_OOD_FACTOR = 0.15       # non-UML专家在UML模板下贡献压低至约3%
-    _GENERAL_LEAD_FACTOR = 0.7   # general 专家在文本模板下领导时的权重缩减系数
+    # v11修复：将原来仅处理 expert1=uml 的单向逻辑泛化为双向对称机制。
+    # 原bug：general+uml 组（expert1=general, expert2=uml）在UML模板下，
+    #   general专家占73%权重且完全OOD，但未做任何修正，ROUGE-L仅0.5011。
+    #   同理 image+uml 组也未修正。
+    #
+    # 修正策略（按域配置OOD因子，保留加权融合创新点）：
+    #   UML模板 → non-UML专家贡献压至OOD因子（复杂JSON结构，OOD噪声最强）
+    #   Image模板 → non-Image专家适度降权（JSON描述较简单，OOD影响温和）
+    #   Text模板 → 仅对general-lead特殊情况做轻微修正（general训练时text占比最大）
+    #
+    # 注意：general专家虽训练时包含所有域数据，但使用通用模板格式，
+    # 面对domain-specific模板时仍存在格式OOD问题，因此也需降权。
+    _TEMPLATE_OOD_FACTORS = {
+        'uml': 0.05,     # non-UML专家在UML模板下贡献降至~1%（UML JSON结构复杂，OOD噪声极强）
+        'image': 0.4,    # non-Image专家在Image模板下适度降权（JSON描述结构较简单）
+    }
+    _GENERAL_LEAD_FACTOR = 0.7   # general 专家在文本模板下领导时的权重缩减系数（保持兼容）
     mismatch_corrected = 0
+    ood_correction_detail = defaultdict(int)   # {修正类型: 计数}
     for j, (_, prompt_str_j, _, _) in enumerate(batch_items):
         tpl_type = _detect_template_from_prompt(prompt_str_j)
-        if tpl_type == 'uml' and expert1 == 'uml' and expert2 != 'uml':
-            ws2[j] = ws2[j] * _UML_OOD_FACTOR
-            ws1[j] = 1.0 - ws2[j]
-            mismatch_corrected += 1
+
+        # 通用OOD修正：UML/Image模板的双向对称处理
+        ood_factor = _TEMPLATE_OOD_FACTORS.get(tpl_type)
+        if ood_factor is not None:
+            e1_matches = (expert1 == tpl_type)
+            e2_matches = (expert2 == tpl_type)
+            if e1_matches and not e2_matches:
+                # expert2 不匹配模板域，降低其权重
+                ws2[j] = ws2[j] * ood_factor
+                ws1[j] = 1.0 - ws2[j]
+                mismatch_corrected += 1
+                ood_correction_detail[f'{tpl_type}:e2_ood({expert2})'] += 1
+            elif e2_matches and not e1_matches:
+                # expert1 不匹配模板域，降低其权重（v11新增：对称修正）
+                ws1[j] = ws1[j] * ood_factor
+                ws2[j] = 1.0 - ws1[j]
+                mismatch_corrected += 1
+                ood_correction_detail[f'{tpl_type}:e1_ood({expert1})'] += 1
+            elif not e1_matches and not e2_matches:
+                # 两个专家都不匹配模板域（罕见：Router将该域样本路由到两个非本域专家）
+                # 保持原始权重不变，让Router的原始概率决策生效
+                ood_correction_detail[f'{tpl_type}:both_ood'] += 1
+        # Text模板特殊处理：仅general-lead时轻微修正（保持兼容）
         elif tpl_type == 'text' and expert1 == 'general' and expert2 == 'text':
             ws1[j] = ws1[j] * _GENERAL_LEAD_FACTOR
             ws2[j] = 1.0 - ws1[j]
             mismatch_corrected += 1
+            ood_correction_detail['text:general_lead'] += 1
+
     if mismatch_corrected > 0:
-        logger.debug(
-            f"    [不匹配修正] {mismatch_corrected}/{B}条样本已修正权重 "
-            f"(expert1={expert1}, expert2={expert2})"
+        logger.info(
+            f"    [OOD修正] {mismatch_corrected}/{B}条样本已修正权重 "
+            f"(expert1={expert1}, expert2={expert2}), "
+            f"明细: {dict(ood_correction_detail)}"
         )
 
     # [DEBUG] 记录 batch 基本信息
@@ -1401,8 +1442,8 @@ def _process_minibatch(
         f"    [minibatch] B={B}, expert1={expert1}(T={T1}), expert2={expert2}(T={T2}), "
         f"max_new_tokens={max_new_tokens}, soft_limit={_SOFT_LIMIT}, "
         f"eos_boost_rate={_EOS_BOOST_RATE}"
-        + (f" [UML增强: max={max_new_tokens},sl={_SOFT_LIMIT},rate={_EOS_BOOST_RATE},"
-           f"ood_factor={_UML_OOD_FACTOR}]" if _is_uml_involved else "")
+        + (f" [UML增强: max={max_new_tokens},sl={_SOFT_LIMIT},rate={_EOS_BOOST_RATE}]"
+           if _is_uml_involved else "")
     )
 
     # ── Left-padding tokenize，与 KV Cache decode 兼容 ──────────────────────
@@ -1637,7 +1678,7 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
                               prompt_str, expert1, expert2, w1, w2, args):
     """
     单条双专家 MoE 概率空间加权混合（OOM 回退路径）
-    v9: 与 _process_minibatch 使用相同的 UML 增强参数（T=4.0 + 早期 EOS boost）。
+    v11: 与 _process_minibatch 使用相同的双向对称OOD修正 + UML增强参数。
     """
     import torch
     import torch.nn.functional as F
@@ -1648,11 +1689,11 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
     T2 = _EXPERT_TEMPERATURE.get(expert2, 1.0)
 
     _is_uml_involved = (expert1 == 'uml' or expert2 == 'uml')
-    _DOMAIN_MAX_TOKENS = {'text': 200, 'image': 200, 'uml': 320, 'general': 200}
+    _DOMAIN_MAX_TOKENS = {'text': 200, 'image': 200, 'uml': 450, 'general': 200}
     if _is_uml_involved:
-        max_new_tokens = 320
-        _SOFT_LIMIT = int(max_new_tokens * 0.65)   # 208 tokens
-        _EOS_BOOST_RATE = 0.12  # 温和收束，与 _process_minibatch 一致
+        max_new_tokens = 450
+        _SOFT_LIMIT = int(max_new_tokens * 0.70)   # 315 tokens，与 _process_minibatch 一致
+        _EOS_BOOST_RATE = 0.08  # 温和收束，与 _process_minibatch 一致
     else:
         max_new_tokens = max(
             _DOMAIN_MAX_TOKENS.get(expert1, 200),
@@ -1668,13 +1709,23 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
             and tokenizer.pad_token_id > 3):
         stop_ids.add(tokenizer.pad_token_id)
 
-    # ── 格式-专家不匹配权重修正（与 _process_minibatch 保持一致）─────────────
-    _UML_OOD_FACTOR = 0.15
+    # ── 通用模板-专家不匹配权重修正（与 _process_minibatch 保持一致的双向对称机制）─
+    _TEMPLATE_OOD_FACTORS = {
+        'uml': 0.05,     # non-UML专家在UML模板下贡献降至~1%
+        'image': 0.4,    # non-Image专家在Image模板下适度降权
+    }
     _GENERAL_LEAD_FACTOR = 0.7
     tpl_type = _detect_template_from_prompt(prompt_str)
-    if tpl_type == 'uml' and expert1 == 'uml' and expert2 != 'uml':
-        w2 = w2 * _UML_OOD_FACTOR
-        w1 = 1.0 - w2
+    ood_factor = _TEMPLATE_OOD_FACTORS.get(tpl_type)
+    if ood_factor is not None:
+        e1_matches = (expert1 == tpl_type)
+        e2_matches = (expert2 == tpl_type)
+        if e1_matches and not e2_matches:
+            w2 = w2 * ood_factor
+            w1 = 1.0 - w2
+        elif e2_matches and not e1_matches:
+            w1 = w1 * ood_factor
+            w2 = 1.0 - w1
     elif tpl_type == 'text' and expert1 == 'general' and expert2 == 'text':
         w1 = w1 * _GENERAL_LEAD_FACTOR
         w2 = 1.0 - w1
