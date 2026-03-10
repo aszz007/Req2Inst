@@ -881,18 +881,11 @@ def _run_output_ensemble(router, features, general_test, args):
     # ensemble_groups: 按 (expert1, expert2) 分组，后续批量 GPU 推理
     # sample_meta    : 保存每条样本的路由元信息，供最终重新排序（reassemble）用
     #
-    # ── v9 修复：重新启用 UML 域 ensemble，使用更强的温度缩放 + 更早的 EOS boost ──
-    # v8 分析了 UML 域无法 ensemble 的原因：UML 专家 logit 分布极尖锐（高置信度），
-    # 即使 T=2.0 仍主导融合，导致生成 800-1200 字符的过长输出，摧毁三段式格式。
-    #
-    # v9 核心修复：
-    #   1. T_uml: 2.0 → 4.0，更强力压平 UML 分布，使 general 专家贡献有实质影响
-    #   2. soft_limit: 50% → 45%（99 tokens），更早开始施加 EOS 推进
-    #   3. eos_boost_rate: 0.15 → 0.30，每步 EOS 增量翻倍，在 ~130 tokens 时
-    #      boost 达到 9.3，在 ~150 tokens 时达到 15.3，足以压过 UML 专家的 EOS 偏差
-    #   4. max_new_tokens（UML 参与组）: 250 → 220，配合 EOS boost 更快收敛
-    #
-    # 保留：text/image 域 ensemble 参数不变（T=1.0，soft_limit=50%，rate=0.15）
+    # ── v10 修复：UML参数优化，解决实体名词预测污染问题 ──
+    # 根因分析：T_uml=1.5压平UML专家在actor/use_case名词上的概率峰值（0.9→0.75），
+    # general专家完全OOD（均匀分布），混合后污染实体名预测，format_ok=100%但ROUGE-L仅0.45。
+    # v10修复：T_uml=1.0保留高置信度，_UML_OOD_FACTOR=0.15将non-UML贡献压至~3%，
+    #          max_new_tokens=320允许完整枚举，soft_limit=65%不提前截断正常输出。
 
     sample_meta = []          # [(i, expert1, expert2, w1, w2, w1_raw, template_name), ...]
     cache_results = {}        # {i: pred_str}
@@ -1228,11 +1221,16 @@ def _detect_template_from_prompt(prompt_str: str) -> str:
 _ENSEMBLE_BATCH_SIZE = 12  # RTX 4090 24 GB: batch=12 → KV Cache 约 2.5 GB，仍远低于预算
 # 说明：4090 24GB = 基础模型4bit ~10GB + 2专家KV Cache(B=12, seq≈1024) ~3GB → 峰值约13GB，安全
 
+# UML参与组专用批大小：UML输入平均1063 tokens，max_length=2048时KV Cache约为普通组的4倍，
+# batch=12会导致峰值约21GB（OOM），缩至6可将峰值降到约14GB，在安全边界内。
+# 非UML组继续使用 _ENSEMBLE_BATCH_SIZE=12，不影响推理速度。
+_UML_BATCH_SIZE = 6
+
 
 def _logit_ensemble_generate_batched(
     model_with_adapters, tokenizer,
     expert1, expert2, group_items, args,
-    batch_size=_ENSEMBLE_BATCH_SIZE,
+    batch_size=None,
 ):
     """
     批量版 logit-space 双专家融合生成
@@ -1241,6 +1239,10 @@ def _logit_ensemble_generate_batched(
     每批调用 _process_minibatch 完成：
       - 一次批量 prefill（B 条同时过 expert1 / expert2）
       - 每个 decode 步：两次 (B, 1) forward（而非 B×2 次 (1, 1) forward）
+
+    批大小选择：
+      - UML参与组使用 _UML_BATCH_SIZE=6，避免 max_length=2048 时 OOM
+      - 非UML组使用 _ENSEMBLE_BATCH_SIZE=12，保持推理效率
 
     OOM fallback: 某批次显存溢出时，自动降级为逐条 _logit_ensemble_generate。
 
@@ -1252,6 +1254,11 @@ def _logit_ensemble_generate_batched(
         List[str]  — 与 group_items 等长，按相同顺序
     """
     import torch
+
+    # 按专家类型自动选择批大小：UML参与组使用小批避免OOM
+    _is_uml_group = (expert1 == 'uml' or expert2 == 'uml')
+    if batch_size is None:
+        batch_size = _UML_BATCH_SIZE if _is_uml_group else _ENSEMBLE_BATCH_SIZE
 
     all_preds = [''] * len(group_items)
 
@@ -1299,8 +1306,11 @@ def _process_minibatch(
     """
     批量 prefill + 批量 decode（B×1 token/step × 2 experts）
 
-    v9: UML 域样本重新参与 ensemble，使用增强参数：
-        T_uml=4.0（强力压平 UML 分布），soft_limit=45%，eos_boost_rate=0.30。
+    UML 参与组参数（v10修复）：
+        T_uml=1.0（保留实体名词高置信度预测），
+        _UML_OOD_FACTOR=0.15（non-UML专家贡献压低至约3%，隔离OOD噪声），
+        max_new_tokens=320，soft_limit=65%（208 tokens），eos_boost_rate=0.12。
+    非UML组：T=1.0，soft_limit=50%，eos_boost_rate=0.15（不变）。
     MoE 概率空间加权 + 温度缩放 + EOS 长度惩罚。
     """
     import torch
@@ -1310,24 +1320,28 @@ def _process_minibatch(
     DONE_CHECK_INTERVAL = 16   # 每 16 步做一次 GPU-CPU sync 检查 done.all()
 
     # ── 专家温度缩放 ─────────────────────────────────────────────────────────
-    # 截断修复后（UML max_length=2048），模型可完整感知 JSON 输入，
-    # 格式引导信号恢复正常，不再需要 T=4.0 的极端压平。
-    # T_uml=1.5：适度软化 UML 分布，在保留格式引导信号的同时
-    # 给 general 专家足够的贡献空间，避免 UML 专家完全主导融合。
+    # T_uml=1.0：保留UML专家在实体名词token（actor名、use case名）上的概率峰值。
+    # 实验发现：T=1.5会将置信度0.9的正确预测降至约0.75，而general专家在UML模板下
+    # 完全OOD（均匀分布），混合后会污染实体名预测，导致ROUGE-L下降约0.08。
+    # T=1.0保持UML专家的准确性，再通过 _UML_OOD_FACTOR 降低non-UML专家贡献来隔离干扰。
     # text/image 保持 T=1.0（无需变更，效果已稳定）
-    _EXPERT_TEMPERATURE = {'text': 1.0, 'image': 1.0, 'uml': 1.5, 'general': 1.0}
+    _EXPERT_TEMPERATURE = {'text': 1.0, 'image': 1.0, 'uml': 1.0, 'general': 1.0}
     T1 = _EXPERT_TEMPERATURE.get(expert1, 1.0)
     T2 = _EXPERT_TEMPERATURE.get(expert2, 1.0)
 
     # ── UML 参与组专项参数 ───────────────────────────────────────────────────
-    # 输入截断修复后，UML 专家可正常感知完整 JSON，输出长度恢复正常（100-200 tokens）。
-    # EOS boost 参数相应恢复接近默认值：soft_limit=50%，rate=0.20（略高于默认 0.15）。
+    # max_new_tokens=320：UML指令参考输出约200-400 tokens（含完整actor/use_case枚举），
+    # 原220 tokens过短导致枚举被截断，ROUGE-L偏低。
+    # soft_limit=65%（208 tokens）：对应约1000字符，UML完整输出的典型长度上限，
+    # 超出此阈值才施加EOS推进，避免提前截断正常的枚举内容。
+    # eos_boost_rate=0.12：温和收束，每步仅增加0.12，在300 tokens时约boost=11，
+    # 足以阻止异常超长输出，同时不干扰150-200 tokens内的正常生成。
     _is_uml_involved = (expert1 == 'uml' or expert2 == 'uml')
-    _DOMAIN_MAX_TOKENS = {'text': 200, 'image': 200, 'uml': 220, 'general': 200}
+    _DOMAIN_MAX_TOKENS = {'text': 200, 'image': 200, 'uml': 320, 'general': 200}
     if _is_uml_involved:
-        max_new_tokens = 220
-        _SOFT_LIMIT = int(max_new_tokens * 0.5)   # 110 tokens，与非 UML 组一致
-        _EOS_BOOST_RATE = 0.20  # 略高于默认 0.15，温和收束，不再需要强力干预
+        max_new_tokens = 320
+        _SOFT_LIMIT = int(max_new_tokens * 0.65)   # 208 tokens
+        _EOS_BOOST_RATE = 0.12  # 温和收束，不提前截断正常枚举
     else:
         max_new_tokens = max(
             _DOMAIN_MAX_TOKENS.get(expert1, 200),
@@ -1358,15 +1372,12 @@ def _process_minibatch(
     #
     # 修正策略（基于实验数据标定，保留加权融合创新点）：
     #   Case 1 — UML模板 + expert1=uml + expert2≠uml：
-    #     非 UML 专家面对复杂 JSON UML 结构完全 OOD，修正系数 0.4。
-    #     将 expert2 平均贡献从 25% 降至约 10%，UML 专家从 75% 提升至约 90%。
-    #     实验对比：uml+general 未修正=0.499，预期修正后≈0.53；
-    #              uml 单专家 cache 基准≈0.55。
+    #     非UML专家面对复杂JSON UML结构完全OOD，修正系数0.15。
+    #     将 expert2 平均贡献从 25% 降至约 3%，UML 专家主导但仍保留微量平滑效果。
+    #     T_uml=1.0时UML专家在实体名词上置信度高，OOD干扰需进一步压低。
     #   Case 2 — 文本模板 + expert1=general + expert2=text：
-    #     general 专家在 text_template 格式上训练不足（使用 general_expert 模板训练），
-    #     text 专家在 text_template 上完全在分布内，应增大其贡献。修正系数 0.7。
-    #     实验对比：general+text=0.490 vs text+general=0.634，差距来源于 general 主导。
-    _UML_OOD_FACTOR = 0.4        # 非 UML 专家在 UML 模板下的权重缩减系数
+    #     general 专家在 text_template 格式上训练不足，修正系数 0.7。
+    _UML_OOD_FACTOR = 0.15       # non-UML专家在UML模板下贡献压低至约3%
     _GENERAL_LEAD_FACTOR = 0.7   # general 专家在文本模板下领导时的权重缩减系数
     mismatch_corrected = 0
     for j, (_, prompt_str_j, _, _) in enumerate(batch_items):
@@ -1390,7 +1401,8 @@ def _process_minibatch(
         f"    [minibatch] B={B}, expert1={expert1}(T={T1}), expert2={expert2}(T={T2}), "
         f"max_new_tokens={max_new_tokens}, soft_limit={_SOFT_LIMIT}, "
         f"eos_boost_rate={_EOS_BOOST_RATE}"
-        + (" [UML增强]" if _is_uml_involved else "")
+        + (f" [UML增强: max={max_new_tokens},sl={_SOFT_LIMIT},rate={_EOS_BOOST_RATE},"
+           f"ood_factor={_UML_OOD_FACTOR}]" if _is_uml_involved else "")
     )
 
     # ── Left-padding tokenize，与 KV Cache decode 兼容 ──────────────────────
@@ -1631,16 +1643,16 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
     import torch.nn.functional as F
 
     # 与 _process_minibatch 保持一致的温度和长度参数
-    _EXPERT_TEMPERATURE = {'text': 1.0, 'image': 1.0, 'uml': 1.5, 'general': 1.0}
+    _EXPERT_TEMPERATURE = {'text': 1.0, 'image': 1.0, 'uml': 1.0, 'general': 1.0}
     T1 = _EXPERT_TEMPERATURE.get(expert1, 1.0)
     T2 = _EXPERT_TEMPERATURE.get(expert2, 1.0)
 
     _is_uml_involved = (expert1 == 'uml' or expert2 == 'uml')
-    _DOMAIN_MAX_TOKENS = {'text': 200, 'image': 200, 'uml': 220, 'general': 200}
+    _DOMAIN_MAX_TOKENS = {'text': 200, 'image': 200, 'uml': 320, 'general': 200}
     if _is_uml_involved:
-        max_new_tokens = 220
-        _SOFT_LIMIT = int(max_new_tokens * 0.5)   # 110 tokens，与非 UML 组一致
-        _EOS_BOOST_RATE = 0.20  # 略高于默认 0.15，温和收束
+        max_new_tokens = 320
+        _SOFT_LIMIT = int(max_new_tokens * 0.65)   # 208 tokens
+        _EOS_BOOST_RATE = 0.12  # 温和收束，与 _process_minibatch 一致
     else:
         max_new_tokens = max(
             _DOMAIN_MAX_TOKENS.get(expert1, 200),
@@ -1657,7 +1669,7 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
         stop_ids.add(tokenizer.pad_token_id)
 
     # ── 格式-专家不匹配权重修正（与 _process_minibatch 保持一致）─────────────
-    _UML_OOD_FACTOR = 0.4
+    _UML_OOD_FACTOR = 0.15
     _GENERAL_LEAD_FACTOR = 0.7
     tpl_type = _detect_template_from_prompt(prompt_str)
     if tpl_type == 'uml' and expert1 == 'uml' and expert2 != 'uml':
