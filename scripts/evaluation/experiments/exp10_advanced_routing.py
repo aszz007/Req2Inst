@@ -1290,29 +1290,25 @@ def _process_minibatch(
     B = len(batch_items)
     DONE_CHECK_INTERVAL = 16   # 每 16 步做一次 GPU-CPU sync 检查 done.all()
 
-    # ── v9 专家温度缩放 ──────────────────────────────────────────────────────
-    # UML 专家在长序列上训练，其 softmax 分布极尖锐（高 confidence），
-    # 即使 MoE 概率空间加权平均，UML 的极端分布仍然主导融合结果：
-    #   - v8 T=2.0 时：P_uml(next) ≈ 0.3 → MoE 仍由 UML 主导 → 长输出 800-1200 chars
-    #   - v9 T=4.0 时：P_uml(next) ≈ 0.15 → general 专家贡献比例上升到有效范围
-    #                  P_uml(EOS) 同步从 ~0.001 提升至 ~0.05，EOS 信号不再被完全压制
+    # ── 专家温度缩放 ─────────────────────────────────────────────────────────
+    # 截断修复后（UML max_length=2048），模型可完整感知 JSON 输入，
+    # 格式引导信号恢复正常，不再需要 T=4.0 的极端压平。
+    # T_uml=1.5：适度软化 UML 分布，在保留格式引导信号的同时
+    # 给 general 专家足够的贡献空间，避免 UML 专家完全主导融合。
     # text/image 保持 T=1.0（无需变更，效果已稳定）
-    _EXPERT_TEMPERATURE = {'text': 1.0, 'image': 1.0, 'uml': 4.0, 'general': 1.0}
+    _EXPERT_TEMPERATURE = {'text': 1.0, 'image': 1.0, 'uml': 1.5, 'general': 1.0}
     T1 = _EXPERT_TEMPERATURE.get(expert1, 1.0)
     T2 = _EXPERT_TEMPERATURE.get(expert2, 1.0)
 
-    # ── v9 UML 参与组专项参数 ────────────────────────────────────────────────
-    # UML 域参考输出平均约 130-150 tokens（短样本 ~100 tokens，长样本 ~200 tokens）
-    # 需要让 EOS boost 在合理长度范围内有足够强度触发停止，避免 800+ chars 过长输出
+    # ── UML 参与组专项参数 ───────────────────────────────────────────────────
+    # 输入截断修复后，UML 专家可正常感知完整 JSON，输出长度恢复正常（100-200 tokens）。
+    # EOS boost 参数相应恢复接近默认值：soft_limit=50%，rate=0.20（略高于默认 0.15）。
     _is_uml_involved = (expert1 == 'uml' or expert2 == 'uml')
     _DOMAIN_MAX_TOKENS = {'text': 200, 'image': 200, 'uml': 220, 'general': 200}
     if _is_uml_involved:
-        # UML 参与组：更紧凑的上限 + 更早、更强的 EOS 推进
         max_new_tokens = 220
-        _SOFT_LIMIT = int(max_new_tokens * 0.45)  # 99 tokens，比默认 50% 更早
-        _EOS_BOOST_RATE = 0.30  # 每步 EOS +0.30，是默认 0.15 的 2 倍
-        # 在 130 tokens 时 boost=9.3，在 150 tokens 时 boost=15.3，
-        # 足以压过 UML 专家极负的 EOS logit，强制在合理长度内停止
+        _SOFT_LIMIT = int(max_new_tokens * 0.5)   # 110 tokens，与非 UML 组一致
+        _EOS_BOOST_RATE = 0.20  # 略高于默认 0.15，温和收束，不再需要强力干预
     else:
         max_new_tokens = max(
             _DOMAIN_MAX_TOKENS.get(expert1, 200),
@@ -1347,15 +1343,34 @@ def _process_minibatch(
     # ── Left-padding tokenize，与 KV Cache decode 兼容 ──────────────────────
     # 必须 left-pad：right-pad 时 KV Cache 最后一个有效位置对每条样本不同，
     # 导致 decode 第一个 token 的 position id 错位。
+    #
+    # 修复：按专家类型动态决定 max_length，解决 UML prompt 被硬截断到 512 tokens 的根本问题。
+    # 数据集长度统计：
+    #   text  平均 351 tokens（95%分位 551），512 已足够
+    #   image 平均 533 tokens（95%分位 622），768 覆盖绝大多数
+    #   uml   平均 1063 tokens（99%分位 1807），需要 2048
+    # UML JSON 被截断到 512 时，结构残缺（括号未闭合）、专家无法理解输入，
+    # 导致 format_ok 仅 8%、ROUGE-L 仅 0.19，是 UML 加权输出质量差的根本原因。
+    # 显存估算（4090 24GB）：4bit 基础模型 ~6GB + GQA(8头) + B=12 + seq=2048
+    #   → KV Cache ~7.6GB，峰值约 13.6GB，安全。
+    _EXPERT_MAX_LENGTH = {'text': 512, 'image': 768, 'uml': 2048, 'general': 768}
+    tokenize_max_length = max(
+        _EXPERT_MAX_LENGTH.get(expert1, 768),
+        _EXPERT_MAX_LENGTH.get(expert2, 768),
+    )
     orig_padding_side = tokenizer.padding_side
     tokenizer.padding_side = 'left'
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token_id = tokenizer.eos_token_id
     encoded = tokenizer(
         prompts, return_tensors='pt', padding=True,
-        truncation=True, max_length=512,
+        truncation=True, max_length=tokenize_max_length,
     )
     tokenizer.padding_side = orig_padding_side
+    logger.debug(
+        f"    [tokenize] expert1={expert1}, expert2={expert2}, "
+        f"max_length={tokenize_max_length}, actual_seq_len={encoded['input_ids'].shape[1]}"
+    )
 
     device = (
         model_with_adapters.base_model.model.device
@@ -1562,8 +1577,8 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
     import torch
     import torch.nn.functional as F
 
-    # v9: 与 _process_minibatch 保持一致的温度和长度参数
-    _EXPERT_TEMPERATURE = {'text': 1.0, 'image': 1.0, 'uml': 4.0, 'general': 1.0}
+    # 与 _process_minibatch 保持一致的温度和长度参数
+    _EXPERT_TEMPERATURE = {'text': 1.0, 'image': 1.0, 'uml': 1.5, 'general': 1.0}
     T1 = _EXPERT_TEMPERATURE.get(expert1, 1.0)
     T2 = _EXPERT_TEMPERATURE.get(expert2, 1.0)
 
@@ -1571,8 +1586,8 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
     _DOMAIN_MAX_TOKENS = {'text': 200, 'image': 200, 'uml': 220, 'general': 200}
     if _is_uml_involved:
         max_new_tokens = 220
-        _SOFT_LIMIT = int(max_new_tokens * 0.45)  # 99 tokens，更早触发
-        _EOS_BOOST_RATE = 0.30  # 更强的 EOS 推进
+        _SOFT_LIMIT = int(max_new_tokens * 0.5)   # 110 tokens，与非 UML 组一致
+        _EOS_BOOST_RATE = 0.20  # 略高于默认 0.15，温和收束
     else:
         max_new_tokens = max(
             _DOMAIN_MAX_TOKENS.get(expert1, 200),
@@ -1589,12 +1604,21 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
         stop_ids.add(tokenizer.pad_token_id)
 
     # 核心修复：直接使用调用方传入的 prompt_str，不再调用 GeneralInstructionTemplate
+    # 同步修复：按专家类型动态设置 max_length，与 _process_minibatch 保持一致
+    _EXPERT_MAX_LENGTH = {'text': 512, 'image': 768, 'uml': 2048, 'general': 768}
+    tokenize_max_length = max(
+        _EXPERT_MAX_LENGTH.get(expert1, 768),
+        _EXPERT_MAX_LENGTH.get(expert2, 768),
+    )
     device = (
         model_with_adapters.base_model.model.device
         if hasattr(model_with_adapters, 'base_model')
         else next(model_with_adapters.parameters()).device
     )
-    prompt_ids = tokenizer(prompt_str, return_tensors='pt').input_ids.to(device)
+    prompt_ids = tokenizer(
+        prompt_str, return_tensors='pt',
+        truncation=True, max_length=tokenize_max_length,
+    ).input_ids.to(device)
 
     # ── Prefill 阶段：完整 prompt 各过一次两个专家，建立各自 KV Cache ──
     # 注意：两个专家的 KV Cache 独立存储，切换 adapter 时彼此不干扰
