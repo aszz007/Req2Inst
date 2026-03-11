@@ -2236,7 +2236,7 @@ def _plot_ensemble_vs_single(phase2_results, exp9_strategies):
     router_rougeL = phase2_results.get('learned_router', {}).get('rougeL', 0)
     ensemble_rougeL = phase2_results.get('output_ensemble', {}).get('rougeL', 0)
 
-    labels = ['Hard Routing\n(Exp9基线)', 'Learned Router\n(方案B)', 'Output Ensemble\n(方案A)', 'Oracle\n(上界)']
+    labels = ['Hard Routing\n(Exp9 Baseline)', 'Learned Router\n(Plan B)', 'Output Ensemble\n(Plan A)', 'Oracle\n(Upper Bound)']
     values = [hard_general, router_rougeL, ensemble_rougeL, oracle_general]
     colors = ['#3498db', '#9b59b6', '#e67e22', '#2ecc71']
 
@@ -2308,12 +2308,12 @@ def _plot_gap_reduction(hard_rougeL, oracle_rougeL, soft_rougeL, router_rougeL, 
         colors.append('#9b59b6')
 
     if router_rougeL:
-        strategies.append('Learned Router\n(方案B)')
+        strategies.append('Learned Router\n(Plan B)')
         reductions.append((router_rougeL - hard_rougeL) / gap * 100)
         colors.append('#8e44ad')
 
     if ensemble_rougeL:
-        strategies.append('Output Ensemble\n(方案A)')
+        strategies.append('Output Ensemble\n(Plan A)')
         reductions.append((ensemble_rougeL - hard_rougeL) / gap * 100)
         colors.append('#e67e22')
 

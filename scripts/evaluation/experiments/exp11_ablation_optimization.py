@@ -77,56 +77,56 @@ SPECIALIZED_TYPES = ['text', 'image', 'uml']
 
 ABLATION_CONFIGS = {
     'A0': {
-        'name': 'Full v12 (基线)',
-        'description': '完整v12方案',
+        'name': 'Full v12 (Baseline)',
+        'description': 'Complete v12 pipeline',
         'disable_ood_correction': False,
         'disable_cache_redirect': False,
         'disable_quality_gate': False,
         'force_equal_weights': False,
     },
     'A1': {
-        'name': '无OOD修正',
-        'description': '禁用所有OOD因子降权，使用Router原始权重',
+        'name': 'No OOD Correction',
+        'description': 'Disable all OOD factor down-weighting, use raw Router weights',
         'disable_ood_correction': True,
         'disable_cache_redirect': False,
         'disable_quality_gate': False,
         'force_equal_weights': False,
     },
     'A2': {
-        'name': '无缓存重定向',
-        'description': '禁用OOD修正后>=0.95缓存重定向',
+        'name': 'No Cache Redirect',
+        'description': 'Disable OOD-corrected >=0.95 cache redirect',
         'disable_ood_correction': False,
         'disable_cache_redirect': True,
         'disable_quality_gate': False,
         'force_equal_weights': False,
     },
     'A3': {
-        'name': '无质量门控',
-        'description': '禁用ROUGE-L比较择优',
+        'name': 'No Quality Gate',
+        'description': 'Disable ROUGE-L comparison gate',
         'disable_ood_correction': False,
         'disable_cache_redirect': False,
         'disable_quality_gate': True,
         'force_equal_weights': False,
     },
     'A4': {
-        'name': '无缓存重定向+无质量门控',
-        'description': '同时禁用两个v12核心机制',
+        'name': 'No Redirect + No Gate',
+        'description': 'Disable both v12 core mechanisms',
         'disable_ood_correction': False,
         'disable_cache_redirect': True,
         'disable_quality_gate': True,
         'force_equal_weights': False,
     },
     'A5': {
-        'name': '纯ensemble',
-        'description': '禁用所有门控和OOD修正，仅保留模板匹配和动态长度',
+        'name': 'Pure Ensemble',
+        'description': 'Disable all gating and OOD correction, keep only template matching and dynamic length',
         'disable_ood_correction': True,
         'disable_cache_redirect': True,
         'disable_quality_gate': True,
         'force_equal_weights': False,
     },
     'A6': {
-        'name': '等权融合 (w1=w2=0.5)',
-        'description': '忽略Router权重，top-2专家各50%+完整v12门控',
+        'name': 'Equal Weights (w1=w2=0.5)',
+        'description': 'Ignore Router weights, top-2 experts each 50% + full v12 gating',
         'disable_ood_correction': False,
         'disable_cache_redirect': False,
         'disable_quality_gate': False,
@@ -423,7 +423,7 @@ def _run_ablation_ensemble(
     通过ablation_config字典控制各机制的启用/禁用。
     核心推理逻辑（_process_minibatch等）直接从exp10模块导入复用。
     """
-    from experiments.exp10_advanced_routing import (
+    from scripts.evaluation.experiments.exp10_advanced_routing import (
         _logit_ensemble_generate_batched,
     )
 
@@ -633,7 +633,7 @@ def run_phase2(args):
     b0_router = RouterMLP()
     b0_router.load(ROUTER_CKPT_DIR / 'router_mlp_best.pt')
     b0_metrics = _eval_router(b0_router, val_X, val_y, 'B0')
-    router_results['B0'] = {'name': '当前Router', 'metrics': b0_metrics}
+    router_results['B0'] = {'name': 'Current Router', 'metrics': b0_metrics}
     logger.info(f"  B0 当前Router: macro_f1={b0_metrics['macro_f1']:.4f}")
 
     # ── B1: 多层特征拼接 ──
@@ -663,10 +663,10 @@ def run_phase2(args):
         _train_router_variant(b1_router, b1_train_proj, train_y, b1_val_proj, val_y,
                               EXP11_ROUTER_DIR / 'B1', args)
         b1_metrics = _eval_router(b1_router, b1_val_proj, val_y, 'B1')
-        router_results['B1'] = {'name': '多层特征拼接', 'metrics': b1_metrics}
+        router_results['B1'] = {'name': 'Multi-layer Feature Concat', 'metrics': b1_metrics}
         logger.info(f"  B1 多层特征: macro_f1={b1_metrics['macro_f1']:.4f}")
     else:
-        router_results['B1'] = {'name': '多层特征拼接', 'metrics': None, 'skipped': True}
+        router_results['B1'] = {'name': 'Multi-layer Feature Concat', 'metrics': None, 'skipped': True}
 
     # ── B2: 数据增强（general域2x过采样）──
     logger.info("  [B2] 数据增强: general域过采样")
@@ -685,7 +685,7 @@ def run_phase2(args):
     _train_router_variant(b2_router, b2_train_X, b2_train_y, val_X, val_y,
                           EXP11_ROUTER_DIR / 'B2', args)
     b2_metrics = _eval_router(b2_router, val_X, val_y, 'B2')
-    router_results['B2'] = {'name': '数据增强', 'metrics': b2_metrics}
+    router_results['B2'] = {'name': 'Data Augmentation', 'metrics': b2_metrics}
     logger.info(f"  B2 数据增强: macro_f1={b2_metrics['macro_f1']:.4f}")
 
     # ── B3: 后处理校准 ──
@@ -695,7 +695,7 @@ def run_phase2(args):
     _calibrate_router(b3_router, val_X, val_y)
     b3_router.save(EXP11_ROUTER_DIR / 'B3' / 'router_mlp_best.pt')
     b3_metrics = _eval_router(b3_router, val_X, val_y, 'B3')
-    router_results['B3'] = {'name': '后处理校准', 'metrics': b3_metrics}
+    router_results['B3'] = {'name': 'Post-hoc Calibration', 'metrics': b3_metrics}
     logger.info(f"  B3 校准: macro_f1={b3_metrics['macro_f1']:.4f}")
 
     # ── B4: B2+B3组合 ──
@@ -706,7 +706,7 @@ def run_phase2(args):
     _calibrate_router(b4_router, val_X, val_y)
     b4_router.save(EXP11_ROUTER_DIR / 'B4' / 'router_mlp_best.pt')
     b4_metrics = _eval_router(b4_router, val_X, val_y, 'B4')
-    router_results['B4'] = {'name': 'B2+B3组合', 'metrics': b4_metrics}
+    router_results['B4'] = {'name': 'B2+B3 Combined', 'metrics': b4_metrics}
     logger.info(f"  B4 组合: macro_f1={b4_metrics['macro_f1']:.4f}")
 
     # 汇总
@@ -993,7 +993,7 @@ def _plot_ablation_comparison(ablation_results, hard_rougeL, oracle_rougeL):
 def _plot_ablation_per_domain(ablation_results):
     """图3: 消融分域对比（占位，需要per-domain数据）"""
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.text(0.5, 0.5, '需要per-domain数据\n（完整运行时自动填充）',
+    ax.text(0.5, 0.5, 'Requires per-domain data\n(Auto-filled in full run)',
             ha='center', va='center', fontsize=14, color='gray')
     ax.set_title('Ablation Per-Domain Analysis', fontsize=12, fontweight='bold')
     plt.tight_layout()
@@ -1034,7 +1034,7 @@ def _plot_router_optimization(router_results):
 def _plot_confusion_compare(router_results):
     """图5: 混淆矩阵对比（占位）"""
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.text(0.5, 0.5, 'B0 vs Best Router\n混淆矩阵对比',
+    ax.text(0.5, 0.5, 'B0 vs Best Router\nConfusion Matrix Comparison',
             ha='center', va='center', fontsize=14, color='gray')
     ax.set_title('Router Confusion Matrix Comparison', fontsize=12, fontweight='bold')
     plt.tight_layout()
@@ -1054,12 +1054,12 @@ def _plot_final_summary(ablation_results, router_results, exp10_p2):
     lr_r = exp10_p2.get('learned_router', {}).get('rougeL', 0)
     ens_r = exp10_p2.get('output_ensemble', {}).get('rougeL', 0)
 
-    headers = ['策略', 'ROUGE-L', 'Gap缩小率']
+    headers = ['Strategy', 'ROUGE-L', 'Gap Reduction']
     rows = [
-        ['Hard Routing (基线)', f'{hard_r:.4f}', '0%'],
+        ['Hard Routing (Baseline)', f'{hard_r:.4f}', '0%'],
         ['Learned Router (Exp10)', f'{lr_r:.4f}', f'{(lr_r-hard_r)/gap*100:.1f}%' if gap > 0 else '-'],
         ['Output Ensemble (Exp10 v12)', f'{ens_r:.4f}', f'{(ens_r-hard_r)/gap*100:.1f}%' if gap > 0 else '-'],
-        ['Oracle Routing (上界)', f'{oracle_r:.4f}', '100%'],
+        ['Oracle Routing (Upper Bound)', f'{oracle_r:.4f}', '100%'],
     ]
 
     # 添加消融结果
@@ -1116,7 +1116,8 @@ def _generate_report(ablation_results, router_results, exp10_p2):
         for k in ['B0','B1','B2','B3','B4']:
             if k in rr:
                 f1 = rr[k].get('macro_f1')
-                lines.append(f"| {k} | {rr[k]['name']} | {f1:.4f if f1 else 'N/A'} |")
+                f1_str = f"{f1:.4f}" if f1 else "N/A"
+                lines.append(f"| {k} | {rr[k]['name']} | {f1_str} |")
 
     report_path = EXP_DIR / 'report.md'
     with open(report_path, 'w', encoding='utf-8') as f:
