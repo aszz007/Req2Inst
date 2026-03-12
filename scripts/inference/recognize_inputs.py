@@ -6,15 +6,20 @@ Unified Recognition Script for Inference
   - 识别inputs/目录中的原始图像和UML图
   - 支持单文件或批量处理
   - 自动判断图像类型（普通图像/UML图）
-  - 输出JSON格式的识别结果
+  - 输出JSON格式的识别结果到outputs/recognition_results/
 
-环境要求: qwen_vision25 或 qwen_vision3
+环境要求: instruction_generator (统一Conda环境，transformers==4.57.0)
+  运行前请先激活环境: conda activate instruction_generator
+
 用法:
   # 识别单个文件
-  python scripts/run_with_env.py --env image_qwen2.5 --script scripts/inference/recognize_inputs.py --input path/to/image.jpg --type image
+  python scripts/inference/recognize_inputs.py --input path/to/image.jpg --type image
 
   # 批量识别目录
-  python scripts/run_with_env.py --env uml_qwen3 --script scripts/inference/recognize_inputs.py --input path/to/dir --type uml
+  python scripts/inference/recognize_inputs.py --input path/to/dir --type uml
+
+  # 指定视觉模型版本
+  python scripts/inference/recognize_inputs.py --input path/to/image.jpg --type image --version qwen2.5
 
 作者: Inference System
 日期: 2025-02-06
@@ -47,9 +52,9 @@ def parse_args():
     parser.add_argument(
         '--version',
         type=str,
-        default='qwen2.5',
+        default='qwen3',
         choices=['qwen2.5', 'qwen3'],
-        help='Vision model version (default: qwen2.5)'
+        help='Vision model version (default: qwen3, uses Qwen3-VL-8B)'
     )
 
     parser.add_argument(
@@ -261,12 +266,9 @@ def main():
         if args.output:
             output_file = Path(args.output)
         else:
-            # Auto-generate output path
+            # Auto-generate output path: outputs/recognition_results/{type}/
             path_cfg = get_path_config()
-            if args.type == 'image':
-                output_dir = path_cfg.IMAGE_RECOGNITION_DIR
-            else:  # uml
-                output_dir = path_cfg.UML_RECOGNITION_DIR
+            output_dir = path_cfg.PROJECT_ROOT / 'outputs' / 'recognition_results' / args.type
 
             output_dir.mkdir(parents=True, exist_ok=True)
 

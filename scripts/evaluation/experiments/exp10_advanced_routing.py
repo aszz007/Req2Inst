@@ -2338,58 +2338,102 @@ def _plot_gap_reduction(hard_rougeL, oracle_rougeL, soft_rougeL, router_rougeL, 
 
 
 def _plot_general_domain_deep_dive(phase2_results, exp9_phase1):
-    """图7: General域按data_type分组的5策略对比"""
-    # 需要逐类型的分组结果（如果有的话）
-    # 这里用overall结果作为示意
+    """图7: General域深度分析 — 路由分布 + ROUGE-L进展
+
+    左图修复：当 routing_stats 为空时，从 Phase 1 混淆矩阵的 general 行
+    重建 Router 在 General 域上的路由分布，与 Hard Routing（100% general）对比。
+    """
     hard_g = exp9_phase1.get('strategies', {}).get('Hard Routing', {}).get('per_domain', {}).get('general', 0)
     oracle_g = exp9_phase1.get('strategies', {}).get('Oracle Routing', {}).get('per_domain', {}).get('general', 0)
     router_g = phase2_results.get('learned_router', {}).get('rougeL', 0)
     ensemble_g = phase2_results.get('output_ensemble', {}).get('rougeL', 0)
+    gap = oracle_g - hard_g
 
     routing_stats_router = phase2_results.get('learned_router', {}).get('routing_stats', {})
-    routing_stats_ensemble = phase2_results.get('output_ensemble', {}).get('routing_stats', {})
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
-    # 左图：路由分布对比
+    # ── 左图：路由分布对比 ──────────────────────────────────────────
     experts = ALL_TYPES
+    x = np.arange(len(experts))
+    width = 0.35
+
+    # Hard Routing: General域100%路由到general expert
+    hard_dist = [0, 0, 0, 100]
+
     if routing_stats_router:
+        # 优先使用运行时记录的routing_stats
         router_dist = [routing_stats_router.get(e, 0) for e in experts]
         total_r = sum(router_dist) or 1
-        ax1.bar(experts, [v/total_r*100 for v in router_dist], color='#8e44ad', alpha=0.8, label='Learned Router')
-    if routing_stats_ensemble:
-        # Ensemble用expert1统计
-        ens_by_expert = defaultdict(int)
-        for k, v in routing_stats_ensemble.items():
-            e1 = k.split('+')[0] if '+' in k else k
-            ens_by_expert[e1] += v
-        ens_dist = [ens_by_expert.get(e, 0) for e in experts]
-        total_e = sum(ens_dist) or 1
-        ax1.bar([i + 0.35 for i in range(len(experts))],
-                [v/total_e*100 for v in ens_dist], width=0.35,
-                color='#e67e22', alpha=0.8, label='Output Ensemble (top-1)')
+        router_pct = [v / total_r * 100 for v in router_dist]
+    else:
+        # 回退：从Phase 1混淆矩阵的general行重建路由分布
+        p1_path = EXP_DIR / 'phase1_results.json'
+        router_pct = [25, 25, 25, 25]  # 默认均匀分布
+        try:
+            if p1_path.exists():
+                with open(p1_path, 'r') as f:
+                    p1 = json.load(f)
+                cm = np.array(p1.get('confusion_matrix', []))
+                if cm.shape == (4, 4):
+                    general_row = cm[3]  # general域样本被预测为各类别的数量
+                    total = general_row.sum()
+                    if total > 0:
+                        router_pct = (general_row / total * 100).tolist()
+                        logger.info(f"  [修复] 从混淆矩阵重建General域路由分布: {dict(zip(experts, router_pct))}")
+        except Exception as e:
+            logger.warning(f"  [修复] 无法从混淆矩阵重建路由分布: {e}")
 
-    ax1.set_title('Routing Distribution Comparison', fontsize=12)
-    ax1.set_xlabel('Expert')
-    ax1.set_ylabel('Selection Rate (%)')
-    ax1.legend()
+    bars1 = ax1.bar(x - width/2, hard_dist, width, label='Hard Routing',
+                    color='#3498db', alpha=0.8, edgecolor='white')
+    bars2 = ax1.bar(x + width/2, router_pct, width, label='Learned Router',
+                    color='#8e44ad', alpha=0.8, edgecolor='white')
 
-    # 右图：ROUGE-L进展图（类似进度条）
+    ax1.set_xlabel('Expert', fontsize=11)
+    ax1.set_ylabel('Selection Rate (%)', fontsize=11)
+    ax1.set_title('Routing Distribution (General Domain)', fontsize=12)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(experts, fontsize=10)
+    ax1.legend(fontsize=10)
+    ax1.set_ylim(0, 115)
+
+    for bar in bars1:
+        h = bar.get_height()
+        if h > 0:
+            ax1.text(bar.get_x() + bar.get_width()/2, h + 1.5,
+                     f'{h:.0f}%', ha='center', fontsize=9)
+    for bar in bars2:
+        h = bar.get_height()
+        if h > 0:
+            ax1.text(bar.get_x() + bar.get_width()/2, h + 1.5,
+                     f'{h:.1f}%', ha='center', fontsize=9)
+
+    # ── 右图：ROUGE-L进展图 ──────────────────────────────────────
     strategies_g = {
         'Hard': hard_g, 'Router': router_g,
         'Ensemble': ensemble_g, 'Oracle': oracle_g
     }
     ys = list(strategies_g.values())
-    xs = list(strategies_g.keys())
-    ax2.plot(xs, ys, 'o-', color='#2c3e50', linewidth=2.5, markersize=9)
-    ax2.fill_between(range(len(xs)), ys, min(ys) * 0.98, alpha=0.1, color='#3498db')
+    xs_labels = list(strategies_g.keys())
+    ax2.plot(range(len(xs_labels)), ys, 'o-', color='#2c3e50', linewidth=2.5, markersize=9)
+    ax2.fill_between(range(len(xs_labels)), ys, min(ys) * 0.98, alpha=0.1, color='#3498db')
     ax2.set_title('ROUGE-L Progression (General Domain)', fontsize=12)
-    ax2.set_ylabel('ROUGE-L')
-    for i, (x, y) in enumerate(zip(xs, ys)):
-        ax2.annotate(f'{y:.4f}', (x, y), textcoords="offset points",
-                     xytext=(0, 10), ha='center', fontsize=10)
+    ax2.set_ylabel('ROUGE-L', fontsize=11)
+    ax2.set_xticks(range(len(xs_labels)))
+    ax2.set_xticklabels(xs_labels, fontsize=10)
+    for i, (lbl, y) in enumerate(zip(xs_labels, ys)):
+        ax2.annotate(f'{y:.4f}', (i, y), textcoords="offset points",
+                     xytext=(0, 12), ha='center', fontsize=10, fontweight='bold')
 
-    fig.suptitle('General Domain Deep Dive Analysis', fontsize=13, fontweight='bold')
+    # 添加Gap标注
+    if gap > 0:
+        ax2.annotate('',
+                     xy=(len(xs_labels)-1.1, oracle_g), xytext=(len(xs_labels)-1.1, hard_g),
+                     arrowprops=dict(arrowstyle='<->', color='gray', lw=1.5))
+        ax2.text(len(xs_labels)-0.85, (hard_g + oracle_g)/2, f'Gap\n{gap:.4f}',
+                 fontsize=9, color='gray', ha='left', va='center')
+
+    fig.suptitle('General Domain Deep Dive Analysis', fontsize=14, fontweight='bold')
     plt.tight_layout()
     plt.savefig(PLOT_DIR / 'general_domain_deep_dive.png', dpi=150, bbox_inches='tight')
     plt.close()

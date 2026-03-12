@@ -5,25 +5,26 @@ Automated Instruction Generation Script
 功能:
   - 扫描inputs/目录下的所有输入文件
   - 自动识别文件类型（文本/图像/UML）
-  - 对于原始图像/UML：自动调用识别脚本（切换到vision环境）
+  - 对于原始图像/UML：自动调用识别脚本生成JSON描述
   - 对于文本/JSON：直接读取
   - 使用MoE系统生成众包指令
   - 保存结果到outputs/generated_instructions/
 
-环境要求: qwen_text (主脚本在此环境运行，会自动切换环境调用识别脚本)
+环境要求: instruction_generator (统一Conda环境，transformers==4.57.0)
+  运行前请先激活环境: conda activate instruction_generator
 
 用法:
   # 处理inputs/目录下的所有文件
-  python scripts/run_with_env.py --env text --script scripts/inference/generate_instructions.py
+  python scripts/inference/generate_instructions.py
 
   # 处理指定目录
-  python scripts/run_with_env.py --env text --script scripts/inference/generate_instructions.py --input-dir path/to/inputs
+  python scripts/inference/generate_instructions.py --input-dir path/to/inputs
 
   # 指定输出格式
-  python scripts/run_with_env.py --env text --script scripts/inference/generate_instructions.py --output-format json
+  python scripts/inference/generate_instructions.py --output-format json
 
   # 指定vision模型版本
-  python scripts/run_with_env.py --env text --script scripts/inference/generate_instructions.py --vision-version qwen3
+  python scripts/inference/generate_instructions.py --vision-version qwen3
 
 作者: Inference System
 日期: 2025-02-06
@@ -34,7 +35,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional
 from datetime import datetime
 import re
 
@@ -57,16 +58,16 @@ def parse_args():
         epilog="""
 Examples:
   # Process all files in inputs/ directory
-  python scripts/run_with_env.py --env text --script scripts/inference/generate_instructions.py
+  python scripts/inference/generate_instructions.py
 
   # Process specific directory
-  python scripts/run_with_env.py --env text --script scripts/inference/generate_instructions.py --input-dir /path/to/inputs
+  python scripts/inference/generate_instructions.py --input-dir /path/to/inputs
 
   # Specify output format
-  python scripts/run_with_env.py --env text --script scripts/inference/generate_instructions.py --output-format json
+  python scripts/inference/generate_instructions.py --output-format json
 
   # Use Qwen3-VL for recognition
-  python scripts/run_with_env.py --env text --script scripts/inference/generate_instructions.py --vision-version qwen3
+  python scripts/inference/generate_instructions.py --vision-version qwen3
         """
     )
 
@@ -88,9 +89,9 @@ Examples:
     parser.add_argument(
         '--vision-version',
         type=str,
-        default='qwen2.5',
+        default='qwen3',
         choices=['qwen2.5', 'qwen3'],
-        help='Vision model version for image/UML recognition (default: qwen2.5)'
+        help='Vision model version for image/UML recognition (default: qwen3, uses Qwen3-VL-8B)'
     )
 
     parser.add_argument(
@@ -168,7 +169,7 @@ def recognize_images(
         vision_version: str
 ) -> Optional[Path]:
     """
-    Recognize images using vision model (automatically switches environment)
+    Recognize images by calling recognize_inputs.py as subprocess
 
     Args:
         image_files: List of image file paths
@@ -183,25 +184,8 @@ def recognize_images(
 
     logger.info(f"Recognizing {len(image_files)} {rec_type} files using {vision_version}...")
 
-    # Determine environment
-    if vision_version == 'qwen3':
-        env_name = f'{rec_type}_qwen3'
-    else:
-        env_name = f'{rec_type}_qwen2.5'
-
-    # Create temporary directory for recognition
-    temp_dir = Path('/tmp/inference_recognition')
-    temp_dir.mkdir(parents=True, exist_ok=True)
-
-    # Save file list
-    file_list = temp_dir / f'{rec_type}_files.txt'
-    with open(file_list, 'w') as f:
-        for img_file in image_files:
-            f.write(f"{img_file}\n")
-
     # Prepare recognition script path
     recognize_script = project_root / 'scripts' / 'inference' / 'recognize_inputs.py'
-    run_env_script = project_root / 'scripts' / 'run_with_env.py'
 
     # Determine input: if single file, pass file path; if multiple, pass parent directory
     if len(image_files) == 1:
@@ -210,14 +194,13 @@ def recognize_images(
         # All files should be in the same directory
         input_path = str(image_files[0].parent)
 
-    # Build command
+    # Build command (unified environment, no env switching needed)
     cmd = [
         sys.executable,
-        str(run_env_script),
-        '--env', env_name,
-        '--script', str(recognize_script),
+        str(recognize_script),
         '--input', input_path,
-        '--type', rec_type
+        '--type', rec_type,
+        '--version', vision_version
     ]
 
     logger.info(f"Executing recognition command: {' '.join(cmd)}")
@@ -292,18 +275,18 @@ def load_json_input(file_path: Path) -> Dict:
     parent_dir = file_path.parent.name
     if parent_dir == 'image':
         input_type = 'image'
-        content = data.get('description', '')
+        content = data.get('Description', '')
     elif parent_dir == 'uml':
         input_type = 'uml'
-        content = data.get('description', '')
+        content = data.get('Description', '')
     else:
         # Try to infer from content
         if 'actors' in str(data) or 'use_cases' in str(data):
             input_type = 'uml'
-            content = data.get('description', '')
-        elif 'description' in data:
+            content = data.get('Description', '')
+        elif 'Description' in data:
             input_type = 'image'
-            content = data.get('description', '')
+            content = data.get('Description', '')
         else:
             input_type = 'general'
             content = json.dumps(data)
@@ -346,8 +329,8 @@ def load_recognition_results(json_file: Path, rec_type: str) -> List[Dict]:
             logger.warning(f"Skipping failed recognition: {result.get('file_name', 'unknown')}")
             continue
 
-        # Extract description
-        description = result.get('description', '')
+        # Extract description (use 'Description' field per framework spec)
+        description = result.get('Description', '') or result.get('description', '')
         if not description:
             logger.warning(f"No description found in: {result.get('file_name', 'unknown')}")
             continue
@@ -575,7 +558,7 @@ def main():
     logger.info(f"Total Processed: {len(results)}")
     logger.info(f"Successful: {success_count}")
     logger.info(f"Failed: {len(results) - success_count}")
-    logger.info(f"Success Rate: {success_count / len(results) * 100:.1f}%")
+    logger.info(f"Success Rate: {success_count / len(results) * 100:.1f}%" if results else "N/A")
 
     # Expert usage statistics
     stats = generator.get_statistics()
