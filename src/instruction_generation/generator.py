@@ -8,7 +8,7 @@ Instruction Generator - Unified Interface for MoE-based Instruction Generation
   - 支持批量生成
   - 输出格式化(text/json/markdown)
 
-环境要求: qwen_text
+环境要求: instruction_generator
 依赖: MoE系统, 专家模型
 
 作者: Instruction Generation System
@@ -49,7 +49,8 @@ class InstructionGenerator:
         path_cfg = get_path_config()
 
         if lora_weights_dir is None:
-            lora_weights_dir = str(path_cfg.LORA_WEIGHTS_DIR / 'experts')
+            # Use checkpoints/lora_moe/ as the standard weights directory per framework
+            lora_weights_dir = str(path_cfg.PROJECT_ROOT / 'checkpoints' / 'lora_moe')
         if base_models_dir is None:
             base_models_dir = str(path_cfg.BASE_MODELS_DIR)
 

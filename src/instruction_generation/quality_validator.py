@@ -8,7 +8,7 @@ Quality Validator - Instruction Quality Validation
   - 提供详细的验证报告
   - 支持批量验证
 
-环境要求: qwen_text
+环境要求: instruction_generator
 依赖: 无特殊依赖
 
 作者: Quality Validation System

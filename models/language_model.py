@@ -21,14 +21,14 @@ from transformers import (
 )
 from tqdm import tqdm
 
-# 尝试导入流式生成支持（仅qwen_text环境需要）
+# 尝试导入流式生成支持（仅instruction_generator环境需要）
 try:
     from transformers_stream_generator import init_stream_support
     init_stream_support()
     STREAM_SUPPORT = True
 except ImportError:
     STREAM_SUPPORT = False
-    # 在vision环境中这是正常的，不影响使用
+    # 在统一环境中某些可选依赖可能未安装，不影响使用
     pass
 
 from peft import PeftModel
@@ -890,9 +890,13 @@ class InstructionGenerator:
         Returns:
             bool: 是否加载成功
         """
-        # 尝试作为专家名称处理
         path_cfg = get_path_config()
-        lora_path = path_cfg.get_expert_weight_path(expert_name_or_path)
+
+        # First try checkpoints/lora_moe/{expert_name}/ (framework standard path)
+        lora_path = path_cfg.PROJECT_ROOT / 'checkpoints' / 'lora_moe' / expert_name_or_path
+        if not lora_path.exists():
+            # Fallback: try via get_expert_weight_path (legacy compatibility)
+            lora_path = path_cfg.get_expert_weight_path(expert_name_or_path)
 
         # 如果路径不存在，尝试作为完整路径处理
         if not lora_path.exists():

@@ -7,6 +7,7 @@ Qwen视觉模型封装（多版本支持 + GPU性能优化）
   - 通用generate接口
   - 动态精度选择（高端GPU使用FP16，其他GPU使用4bit量化）
   - 置信度计算，优化的生成参数
+环境要求: instruction_generator (统一Conda环境，transformers==4.57.0)
 版本: 4.0（GPU性能优化版）
 更新: 2025-02 - 增加动态精度选择，优化GPU利用率
 """
@@ -37,7 +38,7 @@ logger = get_logger(__name__)
 
 
 class VisionModel:
-    """Qwen2.5-VL模型封装类 - 支持LoRA和通用生成"""
+    """Qwen视觉模型封装类 - 支持多版本LoRA和通用生成"""
 
     def __init__(self, model_path: Optional[str] = None, version: str = None):
         """
@@ -960,13 +961,13 @@ if __name__ == "__main__":
     print(model.get_lora_status())
 
 # 使用示例：
-# 方法1：通过环境名自动推断版本（推荐）
-# python scripts/run_with_env.py --env image_qwen2.5 --script models/vision_model.py inputs/image/000000580505.jpg
-# python scripts/run_with_env.py --env image_qwen3 --script models/vision_model.py inputs/image/000000580505.jpg
+# 方法1：通过统一环境运行（推荐）
+# python scripts/run_with_env.py --env instruction_generator --script models/vision_model.py inputs/image/000000580505.jpg
+# python scripts/run_with_env.py --env instruction_generator --script models/vision_model.py inputs/image/000000580505.jpg --version qwen3
 #
 # 方法2：通过--version参数强制指定版本（最高优先级，会覆盖环境推断）
-# python scripts/run_with_env.py --env image_qwen3 --script models/vision_model.py inputs/image/000000580505.jpg --version qwen2.5
+# python scripts/run_with_env.py --env instruction_generator --script models/vision_model.py inputs/image/000000580505.jpg --version qwen2.5
 #
 # 方法3：直接运行（使用环境变量或默认配置）
-# conda activate qwen_vision3
+# conda activate instruction_generator
 # python models/vision_model.py inputs/image/000000580505.jpg --version qwen3

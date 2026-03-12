@@ -19,11 +19,11 @@ _vision_model = None
 
 
 def get_vision_model() -> VisionModel:
-    """获取视觉模型单例"""
+    """获取视觉模型单例（UML识别使用Qwen3-VL-8B）"""
     global _vision_model
     if _vision_model is None:
-        logger.info("初始化视觉模型...")
-        _vision_model = VisionModel()
+        logger.info("初始化视觉模型（Qwen3-VL-8B for UML recognition）...")
+        _vision_model = VisionModel(version='qwen3')
     return _vision_model
 
 
