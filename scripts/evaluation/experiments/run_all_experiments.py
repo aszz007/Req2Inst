@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Run All Phase 2 Experiments
+Run All Experiments
 
-Orchestrate all 6 experiments sequentially via subprocess, using the same
+Orchestrate all 11 experiments sequentially via subprocess, using the same
 conda environment (instruction_generator).
 
 Usage:
@@ -31,24 +31,38 @@ logger = get_logger('experiments.run_all')
 EXP_DIR = Path(__file__).parent
 
 EXP_SCRIPTS = {
-    1: 'exp1_baseline_comparison.py',
-    2: 'exp2_compare_finetuning_methods.py',
-    3: 'exp3_moe_architecture_validation.py',
-    4: 'exp4_lora_hyperparameter_optimization.py',
-    5: 'exp5_data_efficiency_analysis.py',
-    6: 'exp6_fewshot_vs_finetuning.py',
+    1:  'exp1_baseline_comparison.py',
+    2:  'exp2_compare_finetuning_methods.py',
+    3:  'exp3_moe_architecture_validation.py',
+    4:  'exp4_lora_hyperparameter_optimization.py',
+    5:  'exp5_data_efficiency_analysis.py',
+    6:  'exp6_fewshot_vs_finetuning.py',
+    7:  'exp7_uml_hyperparameter_optimization.py',
+    8:  'exp8_inference_efficiency.py',
+    9:  'exp9_routing_strategy.py',
+    10: 'exp10_advanced_routing.py',
+    11: 'exp11_ablation_optimization.py',
 }
 
-# 注意：exp1 文件原名为 exp1_baseline_comarison.py（拼写有误），
-# 正确文件名应为 exp1_baseline_comparison.py，请确保服务器上文件名一致。
+# exp9, exp10, exp11 需要附加 --all 参数
+EXP_EXTRA_ARGS = {
+    9:  ['--all'],
+    10: ['--all'],
+    11: ['--all'],
+}
 
 EXP_NAMES = {
-    1: '基线方法对比',
-    2: '微调方法对比',
-    3: 'MoE架构验证',
-    4: 'LoRA超参数优化',
-    5: '数据效率分析',
-    6: 'Few-Shot vs 微调对比',
+    1:  '基线方法对比',
+    2:  '微调方法对比',
+    3:  'MoE架构验证',
+    4:  'LoRA超参数优化',
+    5:  '数据效率分析',
+    6:  'Few-Shot vs 微调对比',
+    7:  'UML超参数优化',
+    8:  '推理效率分析',
+    9:  '路由策略对比',
+    10: '高级路由策略',
+    11: '消融实验优化',
 }
 
 STATUS_PASS = 'PASS'
@@ -73,6 +87,9 @@ def run_experiment(exp_num, args, skip_failed, previously_failed):
         return STATUS_FAIL, 0.0
 
     cmd = [sys.executable, str(script)]
+
+    # 附加各实验专属参数（如 --all）
+    cmd.extend(EXP_EXTRA_ARGS.get(exp_num, []))
 
     if args.from_cache:
         cmd.append('--from-cache')
@@ -117,7 +134,7 @@ def parse_int_list(s):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Run all Phase 2 comparison experiments',
+        description='Run all comparison experiments (exp1–exp11)',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -141,7 +158,7 @@ Examples:
         """
     )
     parser.add_argument('--experiments', type=str, default=None,
-                        help='Comma-separated experiment numbers to run (default: all 1-6)')
+                        help='Comma-separated experiment numbers to run (default: all 1-11)')
     parser.add_argument('--skip', type=str, default=None,
                         help='Comma-separated experiment numbers to skip')
     parser.add_argument('--skip-failed', action='store_true',
@@ -174,7 +191,7 @@ Examples:
         sys.exit(0)
 
     logger.info('=' * 80)
-    logger.info('阶段2实验执行器')
+    logger.info('实验执行器')
     logger.info('=' * 80)
     logger.info(f'待执行实验: {to_run}')
     if skip_set:
