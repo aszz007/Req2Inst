@@ -7,8 +7,9 @@ UML用例图识别脚本（简化版）
   - 直接调用VisionModel，无冗余代码
 
 用法：
-  python scripts/preprocessing/uml/recognize_uml.py --version qwen2.5
-  python scripts/preprocessing/uml/recognize_uml.py --version qwen3
+  python scripts/preprocessing/raw_to_interim/uml/recognize_uml.py --version qwen3
+  python scripts/preprocessing/raw_to_interim/uml/recognize_uml.py --version qwen2.5
+  python scripts/preprocessing/raw_to_interim/uml/recognize_uml.py --version qwen3 --input /path/to/images
 """
 
 import argparse
@@ -20,8 +21,10 @@ from datetime import datetime
 from typing import List, Dict
 
 # 添加项目根目录到Python路径
-current_dir = Path(__file__).parent
-project_root = current_dir.parent.parent.parent
+# 脚本位于: scripts/preprocessing/raw_to_interim/uml/recognize_uml.py
+# 需要向上4层到达项目根目录
+current_dir = Path(__file__).resolve().parent
+project_root = current_dir.parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from models.vision_model import VisionModel
@@ -73,9 +76,9 @@ def parse_args():
     parser.add_argument(
         '--version',
         type=str,
-        default='qwen2.5',
+        default='qwen3',
         choices=['qwen2.5', 'qwen3'],
-        help='选择视觉模型版本（默认: qwen2.5）'
+        help='选择视觉模型版本（默认: qwen3）'
     )
     parser.add_argument(
         '--input',
@@ -103,7 +106,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def recognize_single_uml(image_path: str, version: str = 'qwen2.5', streaming: bool = False) -> Dict:
+def recognize_single_uml(image_path: str, version: str = 'qwen3', streaming: bool = False) -> Dict:
     """
     识别单张UML用例图
 
@@ -178,7 +181,7 @@ def recognize_single_uml(image_path: str, version: str = 'qwen2.5', streaming: b
 
 def batch_recognize_uml(
     image_folder: str,
-    version: str = 'qwen2.5',
+    version: str = 'qwen3',
     output_file: str = None,
     streaming: bool = False
 ) -> List[Dict]:
@@ -187,7 +190,7 @@ def batch_recognize_uml(
 
     Args:
         image_folder: 图片文件夹路径
-        version: 模型版本（'qwen2.5' 或 'qwen3'）
+        version: 模型版本（'qwen3' 或 'qwen2.5'）
         output_file: 输出JSON文件路径（None则自动生成）
 
     Returns:
@@ -441,25 +444,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# 用法示例:
-# 使用 Qwen2.5-VL 模型批量识别
-# python scripts/run_with_env.py --env uml_qwen2.5 --script scripts/preprocessing/uml/recognize_uml.py
-
-# 使用 Qwen3-VL 模型批量识别
-# python scripts/run_with_env.py --env uml_qwen3 --script scripts/preprocessing/uml/recognize_uml.py
-
-# 使用 Qwen2.5 识别自定义文件夹
-# python scripts/run_with_env.py --env uml_qwen2.5 --script scripts/preprocessing/uml/recognize_uml.py --input /path/to/your/images
-
-# 使用 Qwen3 识别自定义文件夹
-# python scripts/run_with_env.py --env uml_qwen3 --script scripts/preprocessing/uml/recognize_uml.py --input /path/to/your/images
-
-# 使用 Qwen2.5 识别单张UML图
-# python scripts/run_with_env.py --env uml_qwen2.5 --script scripts/preprocessing/uml/recognize_uml.py --single /path/to/single/uml.png
-
-# 使用 Qwen3 识别单张UML图
-# python scripts/run_with_env.py --env uml_qwen3 --script scripts/preprocessing/uml/recognize_uml.py --single /path/to/single/uml.png
-
-# 自定义输出路径
-# python scripts/run_with_env.py --env uml_qwen2.5 --script scripts/preprocessing/uml/recognize_uml.py --output /path/to/output.json
