@@ -135,9 +135,6 @@ class LoRATrainer(BaseTrainer):
         if self.model_version == 'qwen3_8b':
             # Qwen3-8B使用新的注意力层命名
             return ["q_proj", "k_proj", "v_proj", "o_proj"]
-        elif self.model_version == 'qwen7b':
-            # Qwen-7B-Chat使用传统命名
-            return ["c_attn", "c_proj"]
         else:
             # 默认使用Qwen3的命名
             logger.warning(f"未知模型版本 {self.model_version}，使用Qwen3默认配置")
@@ -189,29 +186,3 @@ class LoRATrainer(BaseTrainer):
             import traceback
             logger.error(traceback.format_exc())
             return False
-
-
-
-# 测试代码
-if __name__ == "__main__":
-    print("=" * 80)
-    print("LoRA训练器测试")
-    print("=" * 80)
-
-    print("\n注意：这是一个完整的训练流程示例")
-    print("实际训练请使用 scripts/training/train_*_expert.py 脚本")
-
-    print("\n训练流程：")
-    print("1. 创建LoRATrainer实例")
-    print("2. 调用prepare_data()准备数据")
-    print("3. 调用setup_model()设置模型")
-    print("4. 调用train()执行训练")
-    print("5. LoRA权重自动保存到指定目录")
-
-    print("\n示例代码：")
-    print("trainer = LoRATrainer(expert_type='text')")
-    print("trainer.prepare_data()")
-    print("trainer.setup_model()")
-    print("trainer.train()")
-
-    print("\n测试完成！")

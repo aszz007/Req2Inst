@@ -274,8 +274,6 @@ class BaseTrainer(ABC):
         # 根据模型路径确定模型版本
         if 'Qwen3-8B' in self.base_model_path or 'qwen3-8B' in self.base_model_path:
             self.model_version = 'qwen3_8b'
-        elif 'Qwen-7B-Chat' in self.base_model_path or 'qwen-7B-Chat' in self.base_model_path:
-            self.model_version = 'qwen7b'
         else:
             self.model_version = self.model_cfg.version
             logger.warning(f"无法从路径推断模型版本，使用配置中的版本: {self.model_version}")

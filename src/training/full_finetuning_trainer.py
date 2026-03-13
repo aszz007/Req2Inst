@@ -219,29 +219,3 @@ class FullFineTuningTrainer(BaseTrainer):
             import traceback
             logger.error(traceback.format_exc())
             return False
-
-
-
-# 测试代码
-if __name__ == "__main__":
-    print("=" * 80)
-    print("Full Fine-tuning训练器测试")
-    print("=" * 80)
-
-    print("\n注意：这是一个完整的训练流程示例")
-    print("实际训练请使用 scripts/training/full_finetuning/train_*_expert.py 脚本")
-
-    print("\n训练流程：")
-    print("1. 创建FullFineTuningTrainer实例")
-    print("2. 调用setup_model()设置模型")
-    print("3. 调用prepare_data()准备数据")
-    print("4. 调用train()执行训练")
-    print("5. 权重自动保存到指定目录")
-
-    print("\n示例代码：")
-    print("trainer = FullFineTuningTrainer(expert_type='text')")
-    print("trainer.setup_model()")
-    print("trainer.prepare_data()")
-    print("trainer.train()")
-
-    print("\n测试完成！")
