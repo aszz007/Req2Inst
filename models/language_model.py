@@ -4,9 +4,9 @@
   - 支持LoRA权重动态加载/卸载
   - 4bit量化优化
   - 统一的generate接口
-  - 支持Qwen-7B-Chat和Qwen3-8B
-  - 根据模型类型自动选择target_modules
-支持模型：Qwen-7B-Chat（遗留）、Qwen3-8B（默认）
+  - 基于Qwen3-8B（禁用思考模式）
+环境：instruction_generator（单一Conda环境，transformers==4.57.0）
+支持模型：Qwen3-8B（默认）
 """
 
 import time
@@ -20,16 +20,6 @@ from transformers import (
     LogitsProcessorList,
 )
 from tqdm import tqdm
-
-# 尝试导入流式生成支持（仅instruction_generator环境需要）
-try:
-    from transformers_stream_generator import init_stream_support
-    init_stream_support()
-    STREAM_SUPPORT = True
-except ImportError:
-    STREAM_SUPPORT = False
-    # 在统一环境中某些可选依赖可能未安装，不影响使用
-    pass
 
 from peft import PeftModel
 from pathlib import Path
@@ -89,15 +79,10 @@ class LanguageModel:
             self.model_version = model_cfg.version
         else:
             self.model_path = model_path
-            # 根据路径推断模型版本
-            if 'Qwen3-8B' in model_path or 'qwen3-8B' in model_path:
-                self.model_version = 'qwen3_8b'
-            elif 'Qwen-7B-Chat' in model_path or 'qwen-7B-Chat' in model_path:
-                self.model_version = 'qwen7b'
-            else:
-                # 默认假设是 Qwen3-8B
-                self.model_version = 'qwen3_8b'
-                logger.warning(f"无法从路径推断模型版本，假设为 Qwen3-8B: {model_path}")
+            # 统一视为Qwen3-8B（当前唯一支持的文本模型）
+            self.model_version = 'qwen3_8b'
+            if 'Qwen3-8B' not in model_path and 'qwen3-8B' not in model_path:
+                logger.warning(f"路径不含Qwen3-8B标识，仍以qwen3_8b版本处理: {model_path}")
 
         self.device = device_cfg.get_device()
         self.device_cfg = device_cfg
@@ -180,21 +165,12 @@ class LanguageModel:
 
     def get_target_modules(self) -> list:
         """
-        根据模型版本返回适当的LoRA target_modules
+        返回Qwen3-8B的LoRA target_modules
 
         Returns:
             list: target_modules列表
         """
-        if self.model_version == 'qwen7b':
-            # Qwen-7B-Chat使用concatenated attention
-            return ["c_attn"]
-        elif self.model_version == 'qwen3_8b':
-            # Qwen3-8B使用标准Transformers架构
-            return ["q_proj", "k_proj", "v_proj", "o_proj"]
-        else:
-            # 默认使用Qwen3-8B的配置
-            logger.warning(f"未知模型版本 {self.model_version}，使用Qwen3-8B的target_modules")
-            return ["q_proj", "k_proj", "v_proj", "o_proj"]
+        return ["q_proj", "k_proj", "v_proj", "o_proj"]
 
     def _clean_lora_config(self, lora_path: Path) -> Optional[Path]:
         """
@@ -416,7 +392,7 @@ class LanguageModel:
             if im_end_id is not None and im_end_id != self.tokenizer.unk_token_id:
                 stop_tokens.append(im_end_id)
 
-            # 添加<|endoftext|>作为停止token（Qwen-7B-Chat的文档结束标记）
+            # 添加<|endoftext|>作为停止token（文档结束标记）
             endoftext_id = self.tokenizer.convert_tokens_to_ids('<|endoftext|>')
             if endoftext_id is not None and endoftext_id != self.tokenizer.unk_token_id:
                 stop_tokens.append(endoftext_id)

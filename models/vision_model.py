@@ -1,15 +1,14 @@
 """
-Qwen视觉模型封装（多版本支持 + GPU性能优化）
+Qwen视觉模型封装（Qwen3-VL-8B + GPU性能优化）
 功能：
-  - 支持 Qwen2.5-VL-7B 和 Qwen3-VL-8B 两个版本
-  - 图像识别和UML图识别（预处理阶段）
+  - 图像识别和UML图识别（数据准备阶段）
   - 支持LoRA动态加载（推理阶段）
   - 通用generate接口
   - 动态精度选择（高端GPU使用FP16，其他GPU使用4bit量化）
   - 置信度计算，优化的生成参数
-环境要求: instruction_generator (统一Conda环境，transformers==4.57.0)
-版本: 4.0（GPU性能优化版）
-更新: 2025-02 - 增加动态精度选择，优化GPU利用率
+环境：instruction_generator（单一Conda环境，transformers==4.57.0）
+支持模型：Qwen3-VL-8B-Instruct
+版本: 4.1
 """
 
 import torch
@@ -45,32 +44,20 @@ class VisionModel:
         初始化模型
 
         Args:
-        model_path: 模型路径（None则使用配置，优先级高于version）
-        version: 模型版本（'qwen2.5' 或 'qwen3'，None则使用配置）
+            model_path: 模型路径（None则使用配置）
+            version: 保留参数以维持接口兼容性，当前固定使用 'qwen3'
         """
         # 获取配置
         path_cfg = get_path_config()
         device_cfg = get_device_config()
 
-        # 确定使用的模型版本
+        # 固定使用Qwen3-VL-8B
+        self.version = "qwen3"
         if model_path is None:
-            if version is None:
-                vision_cfg = get_vision_model_config()
-                self.version = vision_cfg.version
-            else:
-                self.version = version
-
-            self.model_path = str(path_cfg.get_vision_model_path(self.version))
-            self.model_name = get_vision_model_config(self.version).get_model_name()
+            self.model_path = str(path_cfg.get_vision_model_path('qwen3'))
         else:
             self.model_path = model_path
-            # 从路径推断版本
-            if "Qwen3" in model_path or "qwen3" in model_path:
-                self.version = "qwen3"
-                self.model_name = "Qwen3-VL-8B-Instruct"
-            else:
-                self.version = "qwen2.5"
-                self.model_name = "Qwen2.5-VL-7B-Instruct"
+        self.model_name = "Qwen3-VL-8B-Instruct"
 
         self.device = device_cfg.get_device()
         self.device_cfg = device_cfg
@@ -934,15 +921,13 @@ if __name__ == "__main__":
     import sys
     import argparse
 
-    parser = argparse.ArgumentParser(description='Qwen视觉模型测试')
+    parser = argparse.ArgumentParser(description='Qwen3-VL视觉模型测试')
     parser.add_argument('image_path', help='图像路径')
-    parser.add_argument('--version', choices=['qwen2.5', 'qwen3'],
-                       help='强制指定模型版本（覆盖环境变量）')
 
     args = parser.parse_args()
 
-    # 初始化模型（支持命令行参数覆盖）
-    model = VisionModel(version=args.version)
+    # 初始化模型
+    model = VisionModel()
 
     # 显示模型信息
     info = model.get_model_info()
@@ -961,13 +946,5 @@ if __name__ == "__main__":
     print(model.get_lora_status())
 
 # 使用示例：
-# 方法1：通过统一环境运行（推荐）
-# python scripts/run_with_env.py --env instruction_generator --script models/vision_model.py inputs/image/000000580505.jpg
-# python scripts/run_with_env.py --env instruction_generator --script models/vision_model.py inputs/image/000000580505.jpg --version qwen3
-#
-# 方法2：通过--version参数强制指定版本（最高优先级，会覆盖环境推断）
-# python scripts/run_with_env.py --env instruction_generator --script models/vision_model.py inputs/image/000000580505.jpg --version qwen2.5
-#
-# 方法3：直接运行（使用环境变量或默认配置）
 # conda activate instruction_generator
-# python models/vision_model.py inputs/image/000000580505.jpg --version qwen3
+# python models/vision_model.py inputs/image/000000580505.jpg

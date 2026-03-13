@@ -1,60 +1,36 @@
 """
 项目配置中心
 功能：统一管理所有路径、超参数、训练配置
-作者：System Configuration
-日期：2025-01-26（修复版）
+环境：instruction_generator（单一Conda环境，transformers==4.57.0）
 """
 
 import torch
 from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Optional
-import os
-
 
 @dataclass
 class ModelConfig:
     """文本模型配置（用于Expert训练和推理）"""
 
-    # 当前使用的文本模型版本（'qwen7b' 或 'qwen3_8b'）
-    version: str = "qwen3_8b"  # 默认使用Qwen3-8B
-
-    # 支持的版本列表
-    SUPPORTED_VERSIONS: List[str] = None
-
-    def __post_init__(self):
-        """初始化支持的版本列表"""
-        if self.SUPPORTED_VERSIONS is None:
-            self.SUPPORTED_VERSIONS = ["qwen7b", "qwen3_8b"]
-
-        # 验证版本
-        if self.version not in self.SUPPORTED_VERSIONS:
-            raise ValueError(
-                f"不支持的文本模型版本: {self.version}，"
-                f"支持的版本: {self.SUPPORTED_VERSIONS}"
-            )
+    # 统一使用Qwen3-8B，所有Expert均基于此模型
+    version: str = "qwen3_8b"
 
     def get_model_name(self) -> str:
         """获取完整模型名称"""
-        return {
-            "qwen7b": "Qwen-7B-Chat",
-            "qwen3_8b": "Qwen3-8B"
-        }[self.version]
+        return "Qwen3-8B"
 
     def get_model_size(self) -> str:
         """获取模型大小描述"""
-        return {
-            "qwen7b": "7B",
-            "qwen3_8b": "8B"
-        }[self.version]
+        return "8B"
 
 
 @dataclass
 class VisionModelConfig:
     """视觉模型版本配置"""
 
-    # 当前使用的视觉模型版本（'qwen2.5' 或 'qwen3'）
-    version: str = "qwen2.5"  # 默认使用qwen2.5作为baseline
+    # 统一使用Qwen3-VL-8B
+    version: str = "qwen3"
 
     # 支持的版本列表
     SUPPORTED_VERSIONS: List[str] = None
@@ -62,7 +38,7 @@ class VisionModelConfig:
     def __post_init__(self):
         """初始化支持的版本列表"""
         if self.SUPPORTED_VERSIONS is None:
-            self.SUPPORTED_VERSIONS = ["qwen2.5", "qwen3"]
+            self.SUPPORTED_VERSIONS = ["qwen3"]
 
         # 验证版本
         if self.version not in self.SUPPORTED_VERSIONS:
@@ -73,17 +49,11 @@ class VisionModelConfig:
 
     def get_model_name(self) -> str:
         """获取完整模型名称"""
-        return {
-            "qwen2.5": "Qwen2.5-VL-7B-Instruct",
-            "qwen3": "Qwen3-VL-8B-Instruct"
-        }[self.version]
+        return "Qwen3-VL-8B-Instruct"
 
     def get_model_size(self) -> str:
         """获取模型大小描述"""
-        return {
-            "qwen2.5": "7B",
-            "qwen3": "8B"
-        }[self.version]
+        return "8B"
 
 class PathConfig:
     """路径配置类 - 管理所有项目路径"""
@@ -96,35 +66,23 @@ class PathConfig:
         # ==================== 基础模型路径 ====================
         self.BASE_MODELS_DIR = self.PROJECT_ROOT / "base_models"
 
-        # Qwen3-8B模型路径（默认文本模型）
+        # Qwen3-8B模型路径（默认文本模型，所有Expert统一使用）
         self.QWEN3_8B_PATH = (
             self.BASE_MODELS_DIR / "qwen3-8B" / "Qwen" / "Qwen3-8B"
         )
 
-        # Qwen-7B-Chat模型路径（遗留支持）
-        self.QWEN_7B_CHAT_PATH = (
-            self.BASE_MODELS_DIR / "qwen-7B-Chat" / "Qwen" / "Qwen-7B-Chat"
-        )
-
-        # 文本模型路径映射（集中配置）
+        # 文本模型路径映射
         self.TEXT_MODEL_PATHS = {
-            'qwen7b': self.QWEN_7B_CHAT_PATH,
             'qwen3_8b': self.QWEN3_8B_PATH,
         }
 
-        # Qwen2.5-VL-7B模型路径
-        self.QWEN_VL_7B_PATH = (
-            self.BASE_MODELS_DIR / "qwen2.5-VL-7B" / "qwen" / "Qwen2.5-VL-7B-Instruct"
-        )
-
-        # Qwen3-VL-8B模型路径
+        # Qwen3-VL-8B模型路径（视觉模型，仅用于数据准备阶段的图像/UML识别）
         self.QWEN_VL_3_PATH = (
                 self.BASE_MODELS_DIR / "qwen3-VL-8B" / "qwen" / "Qwen3-VL-8B-Instruct"
         )
 
-        # 视觉模型路径映射（集中配置）
+        # 视觉模型路径映射
         self.VISION_MODEL_PATHS = {
-            'qwen2.5': self.QWEN_VL_7B_PATH,
             'qwen3': self.QWEN_VL_3_PATH,
         }
 
@@ -150,7 +108,8 @@ class PathConfig:
         self.INTERIM_UML_DIR = self.INTERIM_DATA_DIR / "uml"
 
         # ==================== 数据集路径 ====================
-        self.DATASET_DIR = self.PROJECT_ROOT / "dataset"
+        # 最终训练数据集位于 data/dataset/ 下（与 raw/ 和 interim/ 同级）
+        self.DATASET_DIR = self.DATA_DIR / "dataset"
         self.TEXT_DATASET_DIR = self.DATASET_DIR / "text"
         self.IMAGE_DATASET_DIR = self.DATASET_DIR / "image"
         self.UML_DATASET_DIR = self.DATASET_DIR / "uml"
@@ -283,7 +242,7 @@ class PathConfig:
         获取文本模型路径
 
         Args:
-            version: 模型版本（'qwen7b' 或 'qwen3_8b'），None则使用配置中的版本
+            version: 模型版本（当前仅支持 'qwen3_8b'），None则使用默认版本
 
         Returns:
             Path: 模型路径
@@ -305,7 +264,7 @@ class PathConfig:
         获取视觉模型路径
 
         Args:
-            version: 模型版本（'qwen2.5' 或 'qwen3'），None则使用配置中的版本
+            version: 模型版本（当前仅支持 'qwen3'），None则使用默认版本
 
         Returns:
             Path: 模型路径
@@ -425,16 +384,11 @@ class LoRAConfig:
         """
         设置默认目标模块
 
-        注意：不同模型使用不同的注意力层命名：
-        - Qwen-7B-Chat: 使用 ["c_attn"] (concatenated attention)
-        - Qwen3-8B: 使用 ["q_proj", "k_proj", "v_proj", "o_proj"]（默认）
-        - Qwen2.5-VL/Qwen3-VL: 使用 ["q_proj", "k_proj", "v_proj", "o_proj"]
-
-        ExpertTrainer会根据模型类型自动选择正确的target_modules，
-        此处默认值主要用于Qwen3-8B和视觉模型的兼容性。
+        注意：Qwen3-8B 使用 ["q_proj", "k_proj", "v_proj", "o_proj"]
+        所有Expert统一使用此配置。
         """
         if self.target_modules is None:
-            # 默认使用Qwen3-8B和视觉模型的标准命名
+            # Qwen3-8B 标准注意力层命名
             self.target_modules = [
                 "q_proj",  # Query投影层
                 "k_proj",  # Key投影层
@@ -1053,81 +1007,39 @@ def set_streaming_mode(enable: bool):
 
 def get_model_config(version: str = None) -> ModelConfig:
     """
-    获取文本模型配置（支持多级优先级）
-
-    优先级：命令行参数 > 环境变量 > 配置默认值
+    获取文本模型配置（始终返回Qwen3-8B配置）
 
     Args:
-        version: 强制指定版本（可选），None则按优先级自动选择
+        version: 保留参数以维持接口兼容性，实际忽略（固定使用qwen3_8b）
     """
     global _model_config
-
-    # 优先级1：命令行参数（最高优先级）
-    if version is not None:
-        _model_config = ModelConfig(version=version)
-        return _model_config
-
-    # 优先级2：环境变量
-    env_version = os.environ.get('QWEN_TEXT_VERSION')
-    if env_version:
-        _model_config = ModelConfig(version=env_version)
-        return _model_config
-
-    # 优先级3：配置默认值（如果未初始化）
     if _model_config is None:
-        _model_config = ModelConfig()  # 使用dataclass默认值qwen3_8b
-
+        _model_config = ModelConfig()
     return _model_config
 
 
-def set_model_version(version: str):
-    """
-    切换文本模型版本（用于遗留兼容）
 
-    Args:
-        version: 'qwen7b' 或 'qwen3_8b'
-    """
-    global _model_config
-    _model_config = ModelConfig(version=version)
-    print(f"✓ 已切换文本模型版本: {version}")
-    print(f"  模型: {_model_config.get_model_name()}")
 
 
 def get_vision_model_config(version: str = None) -> VisionModelConfig:
     """
-    获取视觉模型配置（支持多级优先级）
-
-    优先级：命令行参数 > 环境变量 > 配置默认值
+    获取视觉模型配置（始终返回Qwen3-VL-8B配置）
 
     Args:
-        version: 强制指定版本（可选），None则按优先级自动选择
+        version: 保留参数以维持接口兼容性，实际忽略（固定使用qwen3）
     """
     global _vision_model_config
-
-    # 优先级1：命令行参数（最高优先级）
-    if version is not None:
-        _vision_model_config = VisionModelConfig(version=version)
-        return _vision_model_config
-
-    # 优先级2：环境变量
-    env_version = os.environ.get('QWEN_VISION_VERSION')
-    if env_version:
-        _vision_model_config = VisionModelConfig(version=env_version)
-        return _vision_model_config
-
-    # 优先级3：配置默认值（如果未初始化）
     if _vision_model_config is None:
-        _vision_model_config = VisionModelConfig()  # 使用dataclass默认值qwen2.5
-
+        _vision_model_config = VisionModelConfig()
     return _vision_model_config
 
 
 def set_vision_model_version(version: str):
     """
-    切换视觉模型版本（用于实验对比）
+    切换视觉模型版本
 
     Args:
-        version: 'qwen2.5' 或 'qwen3'
+        version: 当前仅支持 'qwen3'
     """
     global _vision_model_config
     _vision_model_config = VisionModelConfig(version=version)
@@ -1160,23 +1072,15 @@ def validate_config() -> tuple:
         messages.append(f"❌ Qwen3-8B模型未找到: {qwen3_8b_path}")
         is_valid = False
     else:
-        print(f"✓ Qwen3-8B模型路径正确（默认）")
+        print(f"✓ Qwen3-8B模型路径正确")
 
-    # 检查遗留模型（Qwen-7B-Chat）
-    if not path_cfg.QWEN_7B_CHAT_PATH.exists():
-        messages.append(f"⚠ Qwen-7B-Chat模型未找到（遗留支持）: {path_cfg.QWEN_7B_CHAT_PATH}")
-        print(f"⚠ Qwen-7B-Chat模型未找到（如不需要遗留支持可忽略）")
+    # 检查视觉模型（Qwen3-VL-8B）
+    vision_path = path_cfg.get_vision_model_path('qwen3')
+    if not vision_path.exists():
+        messages.append(f"⚠ Qwen3-VL-8B 模型未找到: {vision_path}")
+        print(f"⚠ Qwen3-VL-8B 模型未找到（如暂未下载可忽略）")
     else:
-        print(f"✓ Qwen-7B-Chat模型路径正确（遗留支持）")
-
-    # 检查两个版本的视觉模型
-    for version in ['qwen2.5', 'qwen3']:
-        model_path = path_cfg.get_vision_model_path(version)
-        if not model_path.exists():
-            messages.append(f"⚠ {version.upper()} 模型未找到: {model_path}")
-            print(f"⚠ {version.upper()} 模型未找到（如暂未下载可忽略）")
-        else:
-            print(f"✓ {version.upper()} 视觉模型路径正确")
+        print(f"✓ Qwen3-VL-8B 视觉模型路径正确")
 
     # 2. 验证数据集
     print("\n[2/5] 检查数据集...")
@@ -1253,9 +1157,8 @@ if __name__ == "__main__":
     path_cfg = get_path_config()
     print("\n[路径配置]")
     print(f"项目根目录: {path_cfg.PROJECT_ROOT}")
-    print(f"Qwen3-8B（默认）: {path_cfg.QWEN3_8B_PATH}")
-    print(f"Qwen-7B-Chat（遗留）: {path_cfg.QWEN_7B_CHAT_PATH}")
-    print(f"Qwen2.5-VL: {path_cfg.QWEN_VL_7B_PATH}")
+    print(f"Qwen3-8B: {path_cfg.QWEN3_8B_PATH}")
+    print(f"Qwen3-VL-8B: {path_cfg.QWEN_VL_3_PATH}")
     print(f"\n专家LoRA路径:")
     for expert in ['text', 'image', 'uml', 'general']:
         print(f"  {expert}: {path_cfg.get_expert_weight_path(expert)}")
