@@ -914,37 +914,3 @@ class VisionModel:
             'current_path': self.current_lora_path,
             'base_model': self.model_path
         }
-
-
-# ==================== 测试代码 ====================
-if __name__ == "__main__":
-    import sys
-    import argparse
-
-    parser = argparse.ArgumentParser(description='Qwen3-VL视觉模型测试')
-    parser.add_argument('image_path', help='图像路径')
-
-    args = parser.parse_args()
-
-    # 初始化模型
-    model = VisionModel()
-
-    # 显示模型信息
-    info = model.get_model_info()
-    print(f"\n使用模型: {info['model_name']}")
-    print(f"模型版本: {info['version']}")
-    print(f"模型路径: {info['model_path']}")
-    print("-" * 60)
-
-    # 测试图像识别
-    result = model.recognize_image(args.image_path)
-    print("\n识别结果:")
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-
-    # 测试LoRA状态
-    print("\nLoRA状态:")
-    print(model.get_lora_status())
-
-# 使用示例：
-# conda activate instruction_generator
-# python models/vision_model.py inputs/image/000000580505.jpg
