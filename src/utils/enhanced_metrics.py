@@ -31,12 +31,12 @@ class EvaluationThresholds:
     """评估阈值配置类"""
 
     # 语义相似度阈值
-    # ROUGE_L: 0.4 fits the actual result distribution (avg range 0.34-0.57 across methods);
-    # 0.5 cuts too aggressively through mid-range methods causing extreme F1 values.
-    # BERTSCORE_F1: 0.82 sits below the typical distribution center (0.83-0.88) so that
-    # strong methods still pass while weak ones are filtered, without threshold masking.
-    ROUGE_L_THRESHOLD = 0.4   # ROUGE-L threshold (lowered from 0.5)
-    BERTSCORE_F1_THRESHOLD = 0.82  # BERTScore F1 threshold (lowered from 0.85)
+    # ROUGE_L取0.4以契合各方法实际分布区间（均值约0.34-0.57）；
+    # 取0.5会对中间段方法过度裁切，导致F1值两极分化。
+    # BERTSCORE_F1取0.82低于典型分布中心（0.83-0.88），
+    # 既能让强方法通过，又能过滤弱方法，避免阈值遮蔽效应。
+    ROUGE_L_THRESHOLD = 0.4   # ROUGE-L阈值（从0.5下调）
+    BERTSCORE_F1_THRESHOLD = 0.82  # BERTScore F1阈值（从0.85下调）
 
     # 组合逻辑
     USE_AND_LOGIC = True  # True=AND逻辑(两个都需满足), False=OR逻辑(满足一个即可)
@@ -701,10 +701,10 @@ class EnhancedMetrics:
             'use_bertscore': self.use_bertscore and len(bertscore_f1_scores) > 0
         }
 
-        logger.info(f"Binary classification metrics computed:")
+        logger.info(f"二分类指标计算完成:")
         logger.info(f"  TP: {tp}, FP: {fp}, FN: {fn}, TN: {tn}")
-        logger.info(f"  Precision: {precision:.4f}, Recall: {recall:.4f}")
-        logger.info(f"  F1 Score: {f1_score:.4f}, Accuracy: {accuracy:.4f}")
+        logger.info(f"  精确率: {precision:.4f}, 召回率: {recall:.4f}")
+        logger.info(f"  F1分数: {f1_score:.4f}, 准确率: {accuracy:.4f}")
 
         return results
 
@@ -954,66 +954,3 @@ class EnhancedMetrics:
                 print(f"  {expert}: {pct:.1f}%")
 
         print("=" * 80 + "\n")
-
-
-if __name__ == "__main__":
-    print("=" * 60)
-    print("增强评估指标模块测试")
-    print("=" * 60)
-
-    # 创建评估器（默认开启BERTScore）
-    metrics = EnhancedMetrics(use_bertscore=True)
-
-    # 测试数据
-    predictions = [
-        "Definition: In this task, draw bounding boxes around objects.\nEmphasis & Caution: Be accurate.\nThings to Avoid: Do not annotate backgrounds.",
-        "Definition: In this task, implement login functionality.\nEmphasis & Caution: -\nThings to Avoid: Do not skip validation.",
-        "Definition: -\nEmphasis & Caution: Test thoroughly.\nThings to Avoid: -"
-    ]
-
-    references = [
-        "Definition: In this task, annotate all visible objects with bounding boxes.\nEmphasis & Caution: Focus on foreground objects.\nThings to Avoid: Avoid partial objects.",
-        "Definition: In this task, create user authentication system.\nEmphasis & Caution: Ensure security.\nThings to Avoid: Do not store plain passwords.",
-        "Definition: In this task, test the login feature.\nEmphasis & Caution: Cover edge cases.\nThings to Avoid: Do not skip error handling."
-    ]
-
-    print("\n测试1: 格式指标")
-    print("-" * 60)
-    format_results = metrics.calculate_format_metrics(predictions)
-    print(f"格式验证通过率: {format_results['valid_rate']:.2%}")
-    print(f"平均格式分数: {format_results['avg_format_score']:.4f}")
-
-    print("\n测试2: 生成质量指标")
-    print("-" * 60)
-    try:
-        quality_results = metrics.calculate_generation_quality(predictions, references)
-        print(f"BLEU: {quality_results['bleu']:.4f}")
-        print(f"ROUGE-L: {quality_results['rougeL']:.4f}")
-        print(f"METEOR: {quality_results['meteor']:.4f}")
-        if 'bertscore_f1' in quality_results:
-            print(f"BERTScore F1: {quality_results['bertscore_f1']:.4f}")
-    except Exception as e:
-        print(f"生成质量指标计算失败(可能缺少依赖): {e}")
-
-    print("\n测试3: 统计指标")
-    print("-" * 60)
-    expert_usage = {'text_expert': 1, 'image_expert': 1, 'uml_expert': 1}
-    stats_results = metrics.calculate_statistical_metrics(predictions, expert_usage)
-    print(f"平均字符长度: {stats_results['char_length']['mean']:.1f}")
-    print(f"平均单词数: {stats_results['word_count']['mean']:.1f}")
-
-    print("\n测试4: 二分类指标（TP/TN/FP/FN）")
-    print("-" * 60)
-    try:
-        binary_results = metrics.calculate_binary_classification_metrics(
-            predictions, references
-        )
-        print(f"TP: {binary_results['TP']}, FP: {binary_results['FP']}")
-        print(f"FN: {binary_results['FN']}, TN: {binary_results['TN']}")
-        print(f"Precision: {binary_results['precision']:.4f}")
-        print(f"Recall: {binary_results['recall']:.4f}")
-        print(f"F1 Score: {binary_results['f1_score']:.4f}")
-    except Exception as e:
-        print(f"二分类指标计算失败: {e}")
-
-    print("\n测试完成!")
