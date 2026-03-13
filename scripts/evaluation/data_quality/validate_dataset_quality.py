@@ -829,7 +829,7 @@ def main():
 
     parser = argparse.ArgumentParser(description='验证UML数据集质量')
     parser.add_argument('--dataset', type=str,
-                       default='dataset/uml/uml_dataset.csv',
+                       default='data/dataset/uml/uml_dataset.csv',
                        help='数据集CSV文件路径')
     parser.add_argument('--enable-period-check', action='store_true',
                        help='启用句子结尾句号检查')
@@ -889,7 +889,7 @@ def main():
         if len(validator.get_error_rows()) > 20:
             print(f"... 还有 {len(validator.get_error_rows()) - 20} 行有错误")
         print(f"\n修复错误请运行:")
-        print(f"python scripts/dataset_preparation/uml_dataset_regenerate.py")
+        print(f"python scripts/data_preparation/uml_dataset_regenerate.py")
 
     if warning_count > 0:
         print(f"\n警告行号: {validator.get_warning_rows()[:20]}")

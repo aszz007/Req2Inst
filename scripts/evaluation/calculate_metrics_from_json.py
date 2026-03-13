@@ -8,7 +8,7 @@ Calculate Metrics from JSON - Fast Metric Recalculation
   - 支持调整评估阈值
   - 避免重复生成指令，节省时间
 
-环境要求: qwen_text
+环境要求: instruction_generator
 运行方式: python scripts/evaluation/calculate_metrics_from_json.py --input path/to/predictions.json
 
 使用场景:

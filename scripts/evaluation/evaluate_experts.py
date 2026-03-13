@@ -8,8 +8,8 @@ Evaluate Experts - Comprehensive Expert Performance Evaluation
   - 生成详细的评估报告
   - 支持单个专家或批量评估
 
-环境要求: qwen_text
-运行方式: python scripts/run_with_env.py --env text --script scripts/evaluation/evaluate_experts.py
+环境要求: instruction_generator
+运行方式: python scripts/evaluation/evaluate_experts.py
 
 作者: Evaluation System
 日期: 2025-02-06
@@ -815,12 +815,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# 快速测试所有专家（推荐）
-# python scripts/evaluation/evaluate_experts.py --test-mode --show-samples --expert all
-
-# 测试单个专家
-# python scripts/evaluation/evaluate_experts.py --test-mode --expert text
-
-# 查看General专家的样本数据
-# python scripts/evaluation/evaluate_experts.py --show-samples --expert general --num-samples 20
