@@ -4,11 +4,10 @@
   - 统一的专家接口定义
   - LoRA权重管理
   - 指令生成和验证
-  - 支持Qwen3-8B（默认）和Qwen-7B-Chat（遗留）
+  - 模型: Qwen3-8B
 
 作者: Expert System
 日期: 2025-02-13
-更新: 支持Qwen3-8B作为默认模型
 """
 
 import os
@@ -50,11 +49,11 @@ class BaseExpert(ABC):
         初始化专家
 
         Args:
-            expert_name: 专家名称(如'text_expert', 'image_expert_qwen25')
+            expert_name: 专家名称(如'text_expert', 'image_expert')
             base_model_path: 基础模型路径
             lora_path: LoRA权重路径(None则不加载)
             use_4bit: 是否使用4bit量化
-            version: 模型版本(如'qwen2.5', 'qwen3'),用于Image/UML专家
+            version: 模型版本标识（可选，用于日志区分）
         """
         self.expert_name = expert_name
         self.base_model_path = base_model_path
@@ -921,19 +920,3 @@ Things to Avoid: {avoid}"""
         except Exception as e:
             logger.error(f"卸载失败: {e}")
             return False
-
-
-if __name__ == "__main__":
-    print("=" * 60)
-    print("专家基类测试")
-    print("=" * 60)
-
-    print("\n注意: BaseExpert是抽象类,不能直接实例化")
-    print("需要实现具体的专家类(TextExpert, ImageExpert等)")
-    print("\n预期的专家类结构:")
-    print("  - TextExpert: 继承BaseExpert,实现文本指令生成")
-    print("  - ImageExpert: 继承BaseExpert,实现图像指令生成")
-    print("  - UMLExpert: 继承BaseExpert,实现UML指令生成")
-    print("  - GeneralExpert: 继承BaseExpert,通用兜底专家")
-
-    print("\n测试完成!")

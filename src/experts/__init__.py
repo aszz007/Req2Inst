@@ -6,9 +6,6 @@
   - ImageExpert: 图像描述 -> 图像标注指令
   - UMLExpert: UML用例图 -> 业务逻辑指令
   - GeneralExpert: 混合多模态 -> 通用指令(兜底)
-
-版本: 1.0.0
-日期: 2025-02-03
 """
 
 from src.experts.base_expert import BaseExpert
