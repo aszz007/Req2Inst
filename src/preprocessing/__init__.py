@@ -24,6 +24,3 @@ __all__ = [
     'convert_uml_to_json',
     'batch_convert_umls',
 ]
-
-# 版本信息
-__version__ = '0.1.0'

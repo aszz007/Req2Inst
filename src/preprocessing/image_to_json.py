@@ -19,11 +19,11 @@ _vision_model = None
 
 
 def get_vision_model() -> VisionModel:
-    """获取视觉模型单例（图像识别使用Qwen2.5-VL-7B）"""
+    """获取视觉模型单例（图像识别使用Qwen3-VL-8B）"""
     global _vision_model
     if _vision_model is None:
-        logger.info("初始化视觉模型（Qwen2.5-VL-7B for image recognition）...")
-        _vision_model = VisionModel(version='qwen2.5')
+        logger.info("初始化视觉模型（Qwen3-VL-8B for image recognition）...")
+        _vision_model = VisionModel(version='qwen3')
     return _vision_model
 
 
@@ -121,17 +121,3 @@ def batch_convert_images(
         'total': len(image_paths),
         'results': results
     }
-
-
-# 测试代码
-if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) < 2:
-        print("用法: python image_to_json.py <图片路径>")
-        sys.exit(1)
-
-    result = convert_image_to_json(sys.argv[1])
-    print("\n识别结果:")
-    import json
-    print(json.dumps(result, ensure_ascii=False, indent=2))

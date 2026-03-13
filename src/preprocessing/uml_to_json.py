@@ -132,17 +132,3 @@ def batch_convert_umls(
         'total': len(uml_paths),
         'results': results
     }
-
-
-# 测试代码
-if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) < 2:
-        print("用法: python uml_to_json.py <UML图路径>")
-        sys.exit(1)
-
-    result = convert_uml_to_json(sys.argv[1])
-    print("\n识别结果:")
-    import json
-    print(json.dumps(result, ensure_ascii=False, indent=2))
