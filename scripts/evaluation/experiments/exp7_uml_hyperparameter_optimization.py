@@ -47,6 +47,7 @@ from src.baselines.inference_utils import (
     compute_all_metrics, save_experiment_results,
 )
 from src.utils.logger import get_logger
+from . import _exp_utils
 
 logger = get_logger('experiments.exp7')
 
@@ -204,10 +205,7 @@ def run_inference(rank, alpha, dropout, test_data, args):
         # finally保证无论成功还是异常都释放显存，避免双重unload
         expert.unload_model()
 
-    samples = [
-        {'index': i, 'input': inp, 'prediction': pred, 'reference': ref}
-        for i, (inp, pred, ref) in enumerate(zip(inputs, predictions, references))
-    ]
+    samples = _exp_utils.make_samples(inputs, predictions, references)
     save_predictions_cache(
         samples, 'lora_moe_exp7', 'uml',
         {'rank': rank, 'alpha': alpha, 'dropout': dropout},
@@ -673,30 +671,16 @@ def main():
     parser = argparse.ArgumentParser(
         description='Exp7: UML Expert LoRA hyperparameter optimization'
     )
-    parser.add_argument('--force-regenerate', action='store_true',
-                        help='即使缓存存在也重新推理')
+    _exp_utils.add_common_args(parser)
     parser.add_argument('--force-retrain', action='store_true',
                         help='即使检查点存在也重新训练')
-    parser.add_argument('--from-cache', action='store_true',
-                        help='仅从缓存加载，不训练不推理')
-    parser.add_argument('--no-bertscore', action='store_true',
-                        help='跳过BERTScore计算（加速调试）')
-    parser.add_argument('--test-mode', action='store_true',
-                        help='每个配置仅用10个样本（快速验证流程正确性）')
-    parser.add_argument('--only-missing', action='store_true',
-                        help='跳过已有完整缓存的配置（test-mode缓存视为缺失，自动重跑）')
     parser.add_argument('--rerun-configs', type=str, default='',
                         help='强制重跑指定配置（逗号分隔），如 '
                              '"uml_r32_a64_d0.05,uml_r16_a32_d0.0"；'
                              '配合 --force-retrain 可同时从头重新训练')
-    args = parser.parse_args()
-
-    if args.from_cache:
-        args.force_regenerate = False
-        args.force_retrain    = False
+    args = _exp_utils.finalize_args(parser.parse_args())
     if args.rerun_configs:
         _delete_caches_for_rerun(args.rerun_configs)
-
     run(args)
 
 

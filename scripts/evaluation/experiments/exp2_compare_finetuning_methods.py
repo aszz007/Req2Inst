@@ -33,6 +33,7 @@ from src.baselines.inference_utils import (
     compute_all_metrics, save_experiment_results,
 )
 from src.utils.logger import get_logger
+from . import _exp_utils
 
 logger = get_logger('experiments.exp2')
 
@@ -66,29 +67,9 @@ METHOD_CKPT_MAP = {
 EXPERT_CLASS_MAP = None  # Imported lazily to avoid loading torch at module level
 
 
-def _get_expert_class(expert_type):
-    from src.experts import TextExpert, ImageExpert, UMLExpert, GeneralExpert
-    return {
-        'text': TextExpert,
-        'image': ImageExpert,
-        'uml': UMLExpert,
-        'general': GeneralExpert,
-    }[expert_type]
-
-
 def _load_test_data(expert_type):
     """Load and split data for the given expert type, return test set."""
-    if expert_type == 'text':
-        data = TextDatasetLoader().load_csv_files()
-    elif expert_type == 'image':
-        data = ImageDatasetLoader().load_csv_file()
-    elif expert_type == 'uml':
-        data = UMLDatasetLoader().load_csv_file()
-    else:  # general
-        data = GeneralDatasetLoader().load_all_data()
-
-    _, _, test_data = split_dataset_for_expert(data, expert_type)
-    return test_data
+    return _exp_utils.load_test_data(expert_type)
 
 
 def _get_checkpoint_info(method, expert_type):
@@ -123,9 +104,9 @@ def run_inference_for_method_expert(method, expert_type, test_data, args):
     logger.info(f'{method}/{expert_type}: running inference...')
     ckpt_path = METHOD_CKPT_MAP[method](expert_type)
 
-    ExpertClass = _get_expert_class(expert_type)
+    ExpertClass = None  # Unused — expert is now created via _exp_utils.get_expert
     use_4bit = method not in METHODS_REQUIRE_FP16
-    expert = ExpertClass(lora_path=ckpt_path, use_4bit=use_4bit)
+    expert = _exp_utils.get_expert(expert_type, lora_path=ckpt_path, use_4bit=use_4bit)
     # Soft prompt methods (p_tuning/prompt_tuning) require batch_size=1.
     # Their virtual tokens are position-sensitive; padding in larger batches
     # causes embedding misalignment and produces garbage output.
@@ -151,10 +132,7 @@ def run_inference_for_method_expert(method, expert_type, test_data, args):
     finally:
         expert.unload_model()
 
-    samples = [
-        {'index': i, 'input': inp, 'prediction': pred, 'reference': ref}
-        for i, (inp, pred, ref) in enumerate(zip(inputs, predictions, references))
-    ]
+    samples = _exp_utils.make_samples(inputs, predictions, references)
     save_predictions_cache(
         samples, method, expert_type, {'ckpt': ckpt_path, 'test_mode': args.test_mode},
         cache_subdir, cache_filename
@@ -230,20 +208,11 @@ def run(args):
             # Test-mode caches (test_mode=true in metadata) are treated as missing
             # so a subsequent full run always regenerates them automatically.
             if getattr(args, 'only_missing', False):
-                import json as _json
-                cache_file = CACHE_DIR / method / f'{expert_type}_predictions.json'
-                if cache_file.exists():
-                    try:
-                        _raw = _json.loads(cache_file.read_text())
-                        _is_test = (
-                            _raw.get('test_mode', False)
-                            or _raw.get('metadata', {}).get('test_mode', False)
-                        )
-                    except Exception:
-                        _is_test = False
-                    if not _is_test:
-                        logger.info(f'{label}: cache exists, skipping (--only-missing)')
-                        continue
+                cache_file_path = CACHE_DIR / method / f'{expert_type}_predictions.json'
+                if _exp_utils.is_full_run_cache(cache_file_path.parent, cache_file_path.name):
+                    logger.info(f'{label}: cache exists, skipping (--only-missing)')
+                    continue
+                elif cache_file_path.exists():
                     logger.info(f'{label}: test-mode cache detected, will re-run inference')
 
             try:
@@ -318,17 +287,8 @@ def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description='Exp2: Fine-tuning method comparison')
-    parser.add_argument('--force-regenerate', action='store_true')
-    parser.add_argument('--from-cache', action='store_true')
-    parser.add_argument('--no-bertscore', action='store_true')
-    parser.add_argument('--test-mode', action='store_true',
-                        help='Use 10 samples only')
-    parser.add_argument('--only-missing', action='store_true',
-                        help='Skip method/expert combos that already have a full-run cache. '
-                             'Test-mode caches are treated as missing and re-run automatically.')
-    args = parser.parse_args()
-    if args.from_cache:
-        args.force_regenerate = False
+    _exp_utils.add_common_args(parser)
+    args = _exp_utils.finalize_args(parser.parse_args())
     run(args)
 
 

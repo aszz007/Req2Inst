@@ -52,6 +52,7 @@ from src.baselines.inference_utils import (
     compute_all_metrics, save_experiment_results,
 )
 from src.utils.logger import get_logger
+from . import _exp_utils
 from src.routing.learned_router import (
     RouterMLP, HiddenStateExtractor,
     EXPERT_TO_IDX, IDX_TO_EXPERT,
@@ -149,16 +150,7 @@ def _get_rougeL(metrics_dict):
 
 
 def _load_test_data(expert_type):
-    if expert_type == 'text':
-        data = TextDatasetLoader().load_csv_files()
-    elif expert_type == 'image':
-        data = ImageDatasetLoader().load_csv_file()
-    elif expert_type == 'uml':
-        data = UMLDatasetLoader().load_csv_file()
-    else:
-        data = GeneralDatasetLoader().load_all_data()
-    _, _, test_data = split_dataset_for_expert(data, expert_type)
-    return test_data
+    return _exp_utils.load_test_data(expert_type)
 
 
 def _load_exp9_results():

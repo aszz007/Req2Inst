@@ -43,6 +43,7 @@ from src.baselines.inference_utils import (
 )
 from src.utils.logger import get_logger
 from src.utils.group_split import group_split_by_input
+from . import _exp_utils
 
 logger = get_logger('experiments.exp1')
 
@@ -53,27 +54,9 @@ EXP_DIR = path_cfg.OUTPUTS_DIR / 'evaluations' / 'experiments' / 'exp1_baseline_
 METHODS = ['bm25', 'lsa', 'template', 'zeroshot', 'lora_moe']
 
 
-def _make_samples(inputs, predictions, references):
-    return [
-        {'index': i, 'input': inp, 'prediction': pred, 'reference': ref}
-        for i, (inp, pred, ref) in enumerate(zip(inputs, predictions, references))
-    ]
-
-
 def _is_full_run_cache(cache_dir, filename):
-    """Return True if a non-test-mode cache file exists for this combination."""
-    import json as _json
-    filepath = Path(cache_dir) / filename
-    if not filepath.exists():
-        return False
-    try:
-        raw = _json.loads(filepath.read_text(encoding='utf-8'))
-        return not (
-            raw.get('test_mode', False)
-            or raw.get('metadata', {}).get('test_mode', False)
-        )
-    except Exception:
-        return False
+    """Delegate to shared utility."""
+    return _exp_utils.is_full_run_cache(cache_dir, filename)
 
 
 def run_bm25(train_data, test_data, args):
@@ -94,7 +77,7 @@ def run_bm25(train_data, test_data, args):
         inputs, references = inputs[:10], references[:10]
 
     predictions = retriever.batch_retrieve(inputs)
-    samples = _make_samples(inputs, predictions, references)
+    samples = _exp_utils.make_samples(inputs, predictions, references)
     save_predictions_cache(samples, 'bm25', 'text', {}, cache_path.parent, cache_path.name)
     return load_predictions_cache(cache_path.parent, cache_path.name)
 
@@ -117,7 +100,7 @@ def run_lsa(train_data, test_data, args):
         inputs, references = inputs[:10], references[:10]
 
     predictions = retriever.batch_retrieve(inputs)
-    samples = _make_samples(inputs, predictions, references)
+    samples = _exp_utils.make_samples(inputs, predictions, references)
     save_predictions_cache(samples, 'lsa', 'text', {}, cache_path.parent, cache_path.name)
     return load_predictions_cache(cache_path.parent, cache_path.name)
 
@@ -138,7 +121,7 @@ def run_template(test_data, args):
         inputs, references = inputs[:10], references[:10]
 
     predictions = filler.batch_fill(inputs)
-    samples = _make_samples(inputs, predictions, references)
+    samples = _exp_utils.make_samples(inputs, predictions, references)
     save_predictions_cache(samples, 'template', 'text', {}, cache_path.parent, cache_path.name)
     return load_predictions_cache(cache_path.parent, cache_path.name)
 
@@ -167,7 +150,7 @@ def run_zeroshot(test_data, args):
     finally:
         generator.unload_model()
 
-    samples = _make_samples(inputs, predictions, references)
+    samples = _exp_utils.make_samples(inputs, predictions, references)
     save_predictions_cache(samples, 'zero_shot', 'text', {}, cache_path.parent, cache_path.name)
     return load_predictions_cache(cache_path.parent, cache_path.name)
 
@@ -198,7 +181,7 @@ def run_lora_moe(test_data, args):
     finally:
         expert.unload_model()
 
-    samples = _make_samples(inputs, predictions, references)
+    samples = _exp_utils.make_samples(inputs, predictions, references)
     save_predictions_cache(samples, 'lora_moe', 'text', {}, cache_path.parent, cache_path.name)
     return load_predictions_cache(cache_path.parent, cache_path.name)
 
@@ -369,22 +352,8 @@ def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description='Exp1: Baseline comparison')
-    parser.add_argument('--force-regenerate', action='store_true',
-                        help='Re-run inference even if cache exists')
-    parser.add_argument('--from-cache', action='store_true',
-                        help='Skip inference, load from cache only')
-    parser.add_argument('--no-bertscore', action='store_true',
-                        help='Disable BERTScore for faster evaluation')
-    parser.add_argument('--test-mode', action='store_true',
-                        help='Use 10 samples only (quick validation)')
-    parser.add_argument('--only-missing', action='store_true',
-                        help='Skip methods that already have a full-run cache. '
-                             'Test-mode caches are treated as missing and re-run automatically.')
-    args = parser.parse_args()
-
-    if args.from_cache:
-        args.force_regenerate = False
-
+    _exp_utils.add_common_args(parser)
+    args = _exp_utils.finalize_args(parser.parse_args())
     run(args)
 
 
