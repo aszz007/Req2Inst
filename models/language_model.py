@@ -32,7 +32,7 @@ import tempfile
 import shutil
 warnings.filterwarnings('ignore')
 
-from config.settings import get_path_config, get_device_config, get_model_config
+from config.settings import get_path_config, get_device_config, get_model_config, get_inference_config
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -335,6 +335,74 @@ class LanguageModel:
             self.is_lora_loaded = False
             return False
 
+    def _get_stop_tokens(self) -> list:
+        """
+        获取停止tokens列表（复用方法，避免generate/generate_batch中重复构建）
+
+        Returns:
+            list: 去重后的停止token ID列表
+        """
+        stop_tokens = []
+        if self.tokenizer.eos_token_id is not None:
+            stop_tokens.append(self.tokenizer.eos_token_id)
+
+        im_end_id = self.tokenizer.convert_tokens_to_ids('<|im_end|>')
+        if im_end_id is not None and im_end_id != self.tokenizer.unk_token_id:
+            stop_tokens.append(im_end_id)
+
+        endoftext_id = self.tokenizer.convert_tokens_to_ids('<|endoftext|>')
+        if endoftext_id is not None and endoftext_id != self.tokenizer.unk_token_id:
+            stop_tokens.append(endoftext_id)
+
+        return list(set(stop_tokens))
+
+    def _build_generation_config(self, max_new_tokens: int, temperature: float,
+                                  top_p: float, top_k: int,
+                                  repetition_penalty: float) -> dict:
+        """
+        构建生成配置字典（复用方法，避免generate/generate_batch中重复构建）
+
+        Args:
+            max_new_tokens: 最大生成token数
+            temperature: 温度参数
+            top_p: nucleus sampling
+            top_k: top-k sampling
+            repetition_penalty: 重复惩罚
+
+        Returns:
+            dict: 生成配置
+        """
+        return {
+            "max_new_tokens": max_new_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+            "top_k": top_k,
+            "repetition_penalty": repetition_penalty,
+            "do_sample": True if temperature > 0 else False,
+            "pad_token_id": self.tokenizer.pad_token_id,
+            "eos_token_id": self._get_stop_tokens(),
+            "use_cache": True,
+            "logits_processor": LogitsProcessorList([SanitizeLogitsProcessor()]),
+        }
+
+    def _model_generate(self, inputs: dict, generation_config: dict) -> torch.Tensor:
+        """
+        执行模型生成（统一处理4bit/FP16的精度分支）
+
+        Args:
+            inputs: 编码后的输入
+            generation_config: 生成配置
+
+        Returns:
+            torch.Tensor: 生成的输出
+        """
+        with torch.no_grad():
+            if self.use_4bit:
+                return self.model.generate(**inputs, **generation_config)
+            else:
+                with torch.cuda.amp.autocast():
+                    return self.model.generate(**inputs, **generation_config)
+
     def _suppress_thinking(self, prompt: str) -> str:
         """
         For Qwen3-8B, append an empty think block to the prompt to disable
@@ -382,46 +450,11 @@ class LanguageModel:
             _tok_end = time.perf_counter()
             logger.info(f"[TIMING][generate] tokenize 1 sample: {_tok_end - _tok_start:.3f}s | input_len={input_length}")
 
-            # 准备停止tokens
-            stop_tokens = []
-            if self.tokenizer.eos_token_id is not None:
-                stop_tokens.append(self.tokenizer.eos_token_id)
-
-            # 添加<|im_end|>作为停止token
-            im_end_id = self.tokenizer.convert_tokens_to_ids('<|im_end|>')
-            if im_end_id is not None and im_end_id != self.tokenizer.unk_token_id:
-                stop_tokens.append(im_end_id)
-
-            # 添加<|endoftext|>作为停止token（文档结束标记）
-            endoftext_id = self.tokenizer.convert_tokens_to_ids('<|endoftext|>')
-            if endoftext_id is not None and endoftext_id != self.tokenizer.unk_token_id:
-                stop_tokens.append(endoftext_id)
-
-            stop_tokens = list(set(stop_tokens))
-
-            # 生成配置（启用use_cache优化）
-            generation_config = {
-                "max_new_tokens": max_new_tokens,
-                "temperature": temperature,
-                "top_p": top_p,
-                "top_k": top_k,
-                "repetition_penalty": repetition_penalty,
-                "do_sample": True if temperature > 0 else False,
-                "pad_token_id": self.tokenizer.pad_token_id,
-                "eos_token_id": stop_tokens,
-                "use_cache": True,  # 启用KV cache加速
-                "logits_processor": LogitsProcessorList([SanitizeLogitsProcessor()]),
-            }
-
-            # GPU性能优化：高端GPU使用混合精度推理
-            with torch.no_grad():
-                if self.use_4bit:
-                    # 4bit量化：不使用autocast避免精度冲突
-                    outputs = self.model.generate(**inputs, **generation_config)
-                else:
-                    # FP16（高端GPU）：使用autocast加速
-                    with torch.cuda.amp.autocast():
-                        outputs = self.model.generate(**inputs, **generation_config)
+            # 构建生成配置并执行生成
+            generation_config = self._build_generation_config(
+                max_new_tokens, temperature, top_p, top_k, repetition_penalty
+            )
+            outputs = self._model_generate(inputs, generation_config)
 
             # 解码输出
             generated_ids = outputs[0][input_length:]
@@ -430,10 +463,7 @@ class LanguageModel:
             # 清理特殊标记和多余内容
             _gpu_done = time.perf_counter()
             logger.info(f"[TIMING][generate] GPU done: {_gpu_done - _gen_start:.3f}s | new_tokens={len(generated_ids)}")
-            generated_text = self._clean_generated_text(generated_text)
-
-            # 检测并截断三段式指令后的多余内容
-            generated_text = self._truncate_after_three_parts(generated_text)
+            generated_text = self._post_process_text(generated_text)
 
             _post_done = time.perf_counter()
             logger.info(
@@ -485,6 +515,11 @@ class LanguageModel:
             bp = [self._suppress_thinking(p) for p in prompts[i:i + batch_size]]
             all_batches.append(bp)
 
+        # 构建生成配置（所有batch共用，避免重复构建）
+        generation_config = self._build_generation_config(
+            max_new_tokens, temperature, top_p, top_k, repetition_penalty
+        )
+
         # tokenization函数，用于异步预取
         def _tokenize(batch):
             return self.tokenizer(
@@ -517,68 +552,22 @@ class LanguageModel:
                 _tok_end = time.perf_counter()
                 logger.info(
                     f"[TIMING][batch] tok_fetch+H2D {len(batch_prompts)} samples: {_tok_end - _tok_fetch_start:.3f}s | seq_len={input_lengths}")
-                i = batch_idx * batch_size  # 用于后续错误日志保持兼容
 
-                # 准备停止tokens
-                stop_tokens = []
-                if self.tokenizer.eos_token_id is not None:
-                    stop_tokens.append(self.tokenizer.eos_token_id)
-
-                im_end_id = self.tokenizer.convert_tokens_to_ids('<|im_end|>')
-                if im_end_id is not None and im_end_id != self.tokenizer.unk_token_id:
-                    stop_tokens.append(im_end_id)
-
-                endoftext_id = self.tokenizer.convert_tokens_to_ids('<|endoftext|>')
-                if endoftext_id is not None and endoftext_id != self.tokenizer.unk_token_id:
-                    stop_tokens.append(endoftext_id)
-
-                stop_tokens = list(set(stop_tokens))
-
-                # 生成配置
-                _sanitize_lp = LogitsProcessorList([SanitizeLogitsProcessor()])
-                generation_config = {
-                    "max_new_tokens": max_new_tokens,
-                    "temperature": temperature,
-                    "top_p": top_p,
-                    "top_k": top_k,
-                    "repetition_penalty": repetition_penalty,
-                    "do_sample": True if temperature > 0 else False,
-                    "pad_token_id": self.tokenizer.pad_token_id,
-                    "eos_token_id": stop_tokens,
-                    "use_cache": True,
-                    "logits_processor": _sanitize_lp,
-                }
-
+                # 执行生成、解码、后处理
                 _infer_start = time.perf_counter()
-                # 批量生成
-                with torch.no_grad():
-                    if self.use_4bit:
-                        outputs = self.model.generate(**inputs, **generation_config)
-                    else:
-                        with torch.cuda.amp.autocast():
-                            outputs = self.model.generate(**inputs, **generation_config)
-
-                # 批量解码（Rust层并行，替代串行decode循环）
-                generated_ids_list = [output[input_lengths:] for output in outputs]
-                decoded_texts = self.tokenizer.batch_decode(generated_ids_list, skip_special_tokens=True)
+                batch_results = self._generate_and_decode_batch(
+                    inputs, input_lengths, generation_config
+                )
                 _infer_end = time.perf_counter()
                 logger.info(
                     f"[TIMING][batch] model.generate {len(batch_prompts)} samples: {_infer_end - _infer_start:.3f}s")
 
-                def _post_process_one(text):
-                    text = self._clean_generated_text(text)
-                    return self._truncate_after_three_parts(text)
-
-                with ThreadPoolExecutor(max_workers=min(len(decoded_texts), os.cpu_count() or 16)) as _exec:
-                    results.extend(_exec.map(_post_process_one, decoded_texts))
-                    _pp_end = time.perf_counter()
-                    logger.info(f"[TIMING][batch] post-process: {_pp_end - _infer_end:.3f}s")
-
-                # 更新进度条
+                results.extend(batch_results)
                 pbar.update(len(batch_prompts))
 
             except Exception as e:
                 error_str = str(e)
+                i = batch_idx * batch_size
                 if 'out of memory' in error_str.lower() and len(batch_prompts) > 1:
                     # CUDA OOM：对该batch逐步降低batch_size重试
                     logger.warning(
@@ -586,77 +575,13 @@ class LanguageModel:
                         f"当前batch_size={len(batch_prompts)}，尝试降级重试..."
                     )
                     torch.cuda.empty_cache()
-                    retry_size = max(1, len(batch_prompts) // 2)
-                    retry_results = []
-                    retry_failed = False
-                    for r in range(0, len(batch_prompts), retry_size):
-                        retry_batch = batch_prompts[r:r + retry_size]
-                        try:
-                            retry_inputs = self.tokenizer(
-                                retry_batch,
-                                return_tensors="pt",
-                                padding=True,
-                                truncation=True,
-                                max_length=8192
-                            )
-                            retry_input_lengths = retry_inputs['input_ids'].shape[1]
-                            retry_inputs = {k: v.to(self.model.device) for k, v in retry_inputs.items()}
-
-                            stop_tokens = []
-                            if self.tokenizer.eos_token_id is not None:
-                                stop_tokens.append(self.tokenizer.eos_token_id)
-                            im_end_id = self.tokenizer.convert_tokens_to_ids('<|im_end|>')
-                            if im_end_id is not None and im_end_id != self.tokenizer.unk_token_id:
-                                stop_tokens.append(im_end_id)
-                            endoftext_id = self.tokenizer.convert_tokens_to_ids('<|endoftext|>')
-                            if endoftext_id is not None and endoftext_id != self.tokenizer.unk_token_id:
-                                stop_tokens.append(endoftext_id)
-                            stop_tokens = list(set(stop_tokens))
-
-                            retry_gen_config = {
-                                "max_new_tokens": max_new_tokens,
-                                "temperature": temperature,
-                                "top_p": top_p,
-                                "top_k": top_k,
-                                "repetition_penalty": repetition_penalty,
-                                "do_sample": True if temperature > 0 else False,
-                                "pad_token_id": self.tokenizer.pad_token_id,
-                                "eos_token_id": stop_tokens,
-                                "use_cache": True,
-                                "logits_processor": LogitsProcessorList([SanitizeLogitsProcessor()]),
-                            }
-
-                            with torch.no_grad():
-                                if self.use_4bit:
-                                    retry_outputs = self.model.generate(**retry_inputs, **retry_gen_config)
-                                else:
-                                    with torch.cuda.amp.autocast():
-                                        retry_outputs = self.model.generate(**retry_inputs, **retry_gen_config)
-
-                            retry_ids_list = [o[retry_input_lengths:] for o in retry_outputs]
-                            retry_decoded = self.tokenizer.batch_decode(retry_ids_list, skip_special_tokens=True)
-
-                            def _post_process_retry(t):
-                                t = self._clean_generated_text(t)
-                                return self._truncate_after_three_parts(t)
-
-                            with ThreadPoolExecutor(max_workers=min(len(retry_decoded), os.cpu_count() or 16)) as _exec:
-                                retry_results.extend(_exec.map(_post_process_retry, retry_decoded))
-
-                            torch.cuda.empty_cache()
-
-                        except Exception as retry_e:
-                            logger.error(
-                                f"降级重试失败 (retry_size={retry_size}): {retry_e}"
-                            )
-                            retry_results.extend([""] * len(retry_batch))
-                            retry_failed = True
-
+                    retry_results = self._retry_batch_with_smaller_size(
+                        batch_prompts, generation_config
+                    )
                     results.extend(retry_results)
-                    if not retry_failed:
+                    if all(r != "" for r in retry_results):
                         logger.info(
-                            f"batch {i//batch_size + 1}/{num_batches} 降级重试成功，"
-                            f"retry_size={retry_size}"
+                            f"batch {i//batch_size + 1}/{num_batches} 降级重试成功"
                         )
                 else:
                     logger.error(f"批量生成失败 (batch {i//batch_size + 1}/{num_batches}): {e}")
@@ -666,6 +591,82 @@ class LanguageModel:
         pbar.close()
         tok_executor.shutdown(wait=False)
         return results
+
+    def _generate_and_decode_batch(self, inputs: dict, input_lengths: int,
+                                    generation_config: dict) -> list:
+        """
+        对单个batch执行生成、解码和后处理（复用方法，避免主流程和OOM重试中重复代码）
+
+        Args:
+            inputs: 已移至设备的编码输入
+            input_lengths: 输入序列长度
+            generation_config: 生成配置
+
+        Returns:
+            list: 后处理后的文本列表
+        """
+        outputs = self._model_generate(inputs, generation_config)
+
+        # 批量解码（Rust层并行，替代串行decode循环）
+        generated_ids_list = [output[input_lengths:] for output in outputs]
+        decoded_texts = self.tokenizer.batch_decode(generated_ids_list, skip_special_tokens=True)
+
+        # 并行后处理
+        with ThreadPoolExecutor(max_workers=min(len(decoded_texts), os.cpu_count() or 16)) as _exec:
+            return list(_exec.map(self._post_process_text, decoded_texts))
+
+    def _retry_batch_with_smaller_size(self, batch_prompts: list,
+                                        generation_config: dict) -> list:
+        """
+        OOM降级重试：将batch拆分为更小的子batch重新生成
+
+        Args:
+            batch_prompts: 需要重试的prompt列表
+            generation_config: 生成配置
+
+        Returns:
+            list: 生成结果列表（失败的位置为空字符串）
+        """
+        retry_size = max(1, len(batch_prompts) // 2)
+        retry_results = []
+
+        for r in range(0, len(batch_prompts), retry_size):
+            retry_batch = batch_prompts[r:r + retry_size]
+            try:
+                retry_inputs = self.tokenizer(
+                    retry_batch,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
+                    max_length=8192
+                )
+                retry_input_lengths = retry_inputs['input_ids'].shape[1]
+                retry_inputs = {k: v.to(self.model.device) for k, v in retry_inputs.items()}
+
+                chunk_results = self._generate_and_decode_batch(
+                    retry_inputs, retry_input_lengths, generation_config
+                )
+                retry_results.extend(chunk_results)
+                torch.cuda.empty_cache()
+
+            except Exception as retry_e:
+                logger.error(f"降级重试失败 (retry_size={retry_size}): {retry_e}")
+                retry_results.extend([""] * len(retry_batch))
+
+        return retry_results
+
+    def _post_process_text(self, text: str) -> str:
+        """
+        后处理生成文本：清理特殊标记 + 截断三段式后多余内容
+
+        Args:
+            text: 原始生成文本
+
+        Returns:
+            str: 后处理后的文本
+        """
+        text = self._clean_generated_text(text)
+        return self._truncate_after_three_parts(text)
 
     def _clean_generated_text(self, text: str) -> str:
         """
@@ -840,6 +841,7 @@ class InstructionGenerator:
     - 移除硬编码的expert映射
     - 支持外部传入prompt
     - 支持从路径加载LoRA
+    - 默认参数从 InferenceConfig 统一读取
     """
 
     def __init__(self, model_path: Optional[str] = None, use_4bit: bool = True):
@@ -854,6 +856,8 @@ class InstructionGenerator:
             model_path=model_path,
             use_4bit=use_4bit
         )
+        # 从配置中读取推理参数默认值
+        self._inference_cfg = get_inference_config()
         logger.info("指令生成器初始化完成")
 
     def load_expert(self, expert_name_or_path: str) -> bool:
@@ -884,61 +888,68 @@ class InstructionGenerator:
         """卸载当前专家"""
         return self.language_model.unload_lora()
 
-    def generate(self, prompt: str, max_new_tokens: int = 2048,
-                 temperature: float = 0.7, top_p: float = 0.9,
-                 top_k: int = 50, repetition_penalty: float = 1.1) -> str:
+    def generate(self, prompt: str, max_new_tokens: int = None,
+                 temperature: float = None, top_p: float = None,
+                 top_k: int = None, repetition_penalty: float = None) -> str:
         """
         生成众包指令（接受外部构建的prompt）
 
+        参数默认值从 config.settings.InferenceConfig 读取，
+        调用方可按需覆盖单个参数而不影响其他参数的灵活性。
+
         Args:
             prompt: 已构建好的完整prompt（由外部Prompt模板生成）
-            max_new_tokens: 最大生成token数
-            temperature: 温度参数
-            top_p: nucleus sampling
-            top_k: top-k sampling
-            repetition_penalty: 重复惩罚
+            max_new_tokens: 最大生成token数（默认从InferenceConfig读取）
+            temperature: 温度参数（默认从InferenceConfig读取）
+            top_p: nucleus sampling（默认从InferenceConfig读取）
+            top_k: top-k sampling（默认从InferenceConfig读取）
+            repetition_penalty: 重复惩罚（默认从InferenceConfig读取）
 
         Returns:
             str: 生成的指令
         """
+        cfg = self._inference_cfg
         return self.language_model.generate(
             prompt=prompt,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-            repetition_penalty=repetition_penalty
+            max_new_tokens=max_new_tokens if max_new_tokens is not None else cfg.max_new_tokens,
+            temperature=temperature if temperature is not None else cfg.temperature,
+            top_p=top_p if top_p is not None else cfg.top_p,
+            top_k=top_k if top_k is not None else cfg.top_k,
+            repetition_penalty=repetition_penalty if repetition_penalty is not None else cfg.repetition_penalty,
         )
 
     def get_expert_status(self) -> dict:
         """获取当前专家状态"""
         return self.language_model.get_lora_status()
 
-    def generate_batch(self, prompts: list, max_new_tokens: int = 2048,
-                      temperature: float = 0.7, top_p: float = 0.9,
-                      top_k: int = 50, repetition_penalty: float = 1.1,
+    def generate_batch(self, prompts: list, max_new_tokens: int = None,
+                      temperature: float = None, top_p: float = None,
+                      top_k: int = None, repetition_penalty: float = None,
                       batch_size: int = None) -> list:
         """
         批量生成众包指令
 
+        参数默认值从 config.settings.InferenceConfig 读取。
+
         Args:
             prompts: prompt列表
-            max_new_tokens: 最大生成token数
-            temperature: 温度参数
-            top_p: nucleus sampling
-            top_k: top-k sampling
-            repetition_penalty: 重复惩罚
+            max_new_tokens: 最大生成token数（默认从InferenceConfig读取）
+            temperature: 温度参数（默认从InferenceConfig读取）
+            top_p: nucleus sampling（默认从InferenceConfig读取）
+            top_k: top-k sampling（默认从InferenceConfig读取）
+            repetition_penalty: 重复惩罚（默认从InferenceConfig读取）
             batch_size: 批处理大小（None则自动选择）
 
         Returns:
             list: 生成的指令列表
         """
+        cfg = self._inference_cfg
         return self.language_model.generate_batch(
             prompts=prompts,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-            repetition_penalty=repetition_penalty,
+            max_new_tokens=max_new_tokens if max_new_tokens is not None else cfg.max_new_tokens,
+            temperature=temperature if temperature is not None else cfg.temperature,
+            top_p=top_p if top_p is not None else cfg.top_p,
+            top_k=top_k if top_k is not None else cfg.top_k,
+            repetition_penalty=repetition_penalty if repetition_penalty is not None else cfg.repetition_penalty,
             batch_size=batch_size
         )

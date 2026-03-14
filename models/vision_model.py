@@ -177,6 +177,146 @@ class VisionModel:
             logger.error(f"模型加载失败: {e}")
             raise
 
+    # ==================== 复用工具方法 ====================
+
+    def _build_messages(self, prompt: str, image_path: Optional[str] = None) -> list:
+        """
+        构建统一的消息结构（复用方法，避免generate/recognize_image/recognize_uml中重复构建）
+
+        Args:
+            prompt: 文本提示词
+            image_path: 图像路径（可选）
+
+        Returns:
+            list: messages列表
+        """
+        content = []
+        if image_path:
+            content.append({"type": "image", "image": image_path})
+        content.append({"type": "text", "text": prompt})
+        return [{"role": "user", "content": content}]
+
+    def _prepare_inputs(self, messages: list):
+        """
+        从messages构建模型输入（apply_chat_template + to device）
+
+        Args:
+            messages: 消息列表
+
+        Returns:
+            模型输入张量
+        """
+        inputs = self.processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt"
+        )
+        if torch.cuda.is_available():
+            inputs = inputs.to("cuda")
+        return inputs
+
+    def _model_generate_vision(self, inputs, gen_kwargs: dict):
+        """
+        执行模型生成（统一处理4bit/FP16精度分支，复用方法）
+
+        Args:
+            inputs: 模型输入
+            gen_kwargs: 生成参数字典
+
+        Returns:
+            生成的输出张量
+        """
+        with torch.no_grad():
+            if self.use_quantization:
+                return self.model.generate(**inputs, **gen_kwargs)
+            else:
+                with torch.amp.autocast('cuda'):
+                    return self.model.generate(**inputs, **gen_kwargs)
+
+    def _decode_output(self, inputs, generated_ids) -> str:
+        """
+        解码生成输出（trim input + batch_decode，复用方法）
+
+        Args:
+            inputs: 原始输入（用于获取input_ids长度）
+            generated_ids: 生成的token ids
+
+        Returns:
+            str: 解码后的文本
+        """
+        generated_ids_trimmed = [
+            out_ids[len(in_ids):]
+            for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+        ]
+        response = self.processor.batch_decode(
+            generated_ids_trimmed,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False
+        )[0]
+        return response
+
+    def _cleanup_gpu(self, *tensors):
+        """
+        清理GPU显存（复用方法）
+
+        Args:
+            *tensors: 需要删除的张量对象
+        """
+        for t in tensors:
+            del t
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+
+    def _build_gen_kwargs(self, gen_config: dict, extra_kwargs: dict = None) -> dict:
+        """
+        构建生成参数字典（复用方法，避免_generate_standard/_generate_streaming等重复构建）
+
+        Args:
+            gen_config: 来自DeviceConfig的生成配置（max_new_tokens, temperature等）
+            extra_kwargs: 额外参数（如return_dict_in_generate, output_scores等）
+
+        Returns:
+            dict: 完整的生成参数字典
+        """
+        eos_token_id = self.processor.tokenizer.eos_token_id
+        kwargs = {
+            'max_new_tokens': gen_config['max_new_tokens'],
+            'min_new_tokens': 1,
+            'temperature': gen_config['temperature'],
+            'do_sample': True,
+            'top_p': gen_config['top_p'],
+            'use_cache': gen_config['use_cache'],
+            'num_beams': 1,
+            'pad_token_id': self.processor.tokenizer.pad_token_id,
+            'eos_token_id': eos_token_id,
+        }
+        if extra_kwargs:
+            kwargs.update(extra_kwargs)
+        return kwargs
+
+    def _extract_json(self, response: str) -> Optional[str]:
+        """
+        从响应文本中提取JSON字符串（复用方法，避免_parse_image_response/_parse_uml_response重复提取）
+
+        Args:
+            response: 模型响应文本
+
+        Returns:
+            Optional[str]: 提取到的JSON字符串，未找到则返回None
+        """
+        # 优先匹配 ```json ... ``` 格式
+        json_match = re.search(r'```json\s*(\{.*?\})\s*```', response, re.DOTALL)
+        if json_match:
+            return json_match.group(1)
+        # 其次匹配裸JSON
+        json_match = re.search(r'\{.*\}', response, re.DOTALL)
+        if json_match:
+            return json_match.group(0)
+        return None
+
     def load_lora_from_path(self, lora_path: str) -> bool:
         """
         从路径动态加载LoRA权重
@@ -268,85 +408,25 @@ class VisionModel:
             str: 生成的文本
         """
         try:
-            # 使用 Transformers 原生接口构建输入
-            messages = [
+            messages = self._build_messages(prompt, image_path)
+            inputs = self._prepare_inputs(messages)
+
+            # 构建生成参数
+            gen_kwargs = self._build_gen_kwargs(
                 {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt}
-                    ]
-                }
-            ]
-
-            # 如果有图像，添加到content开头
-            if image_path:
-                messages[0]["content"].insert(0, {
-                    "type": "image",
-                    "image": image_path
-                })
-
-            # 使用 processor 的 apply_chat_template（无需 process_vision_info）
-            inputs = self.processor.apply_chat_template(
-                messages,
-                tokenize=True,
-                add_generation_prompt=True,
-                return_dict=True,
-                return_tensors="pt"
+                    'max_new_tokens': max_new_tokens,
+                    'temperature': temperature if do_sample else 1.0,
+                    'top_p': top_p if do_sample else 1.0,
+                    'use_cache': True,
+                },
+                extra_kwargs={'do_sample': do_sample}
             )
 
-            if torch.cuda.is_available():
-                inputs = inputs.to("cuda")
-
-            # 正确处理eos_token_id
-            eos_token_id = self.processor.tokenizer.eos_token_id
-
-            # 生成（优化参数）
-            with torch.no_grad():
-                # 重要：4bit量化时不使用autocast，避免精度冲突
-                if self.use_quantization:
-                    generated_ids = self.model.generate(
-                        **inputs,
-                        max_new_tokens=max_new_tokens,
-                        min_new_tokens=1,
-                        temperature=temperature if do_sample else 1.0,
-                        top_p=top_p if do_sample else 1.0,
-                        do_sample=do_sample,
-                        use_cache=True,
-                        num_beams=1,
-                        pad_token_id=self.processor.tokenizer.pad_token_id,
-                        eos_token_id=eos_token_id,
-                    )
-                else:
-                    with torch.amp.autocast('cuda'):
-                        generated_ids = self.model.generate(
-                            **inputs,
-                            max_new_tokens=max_new_tokens,
-                            min_new_tokens=1,
-                            temperature=temperature if do_sample else 1.0,
-                            top_p=top_p if do_sample else 1.0,
-                            do_sample=do_sample,
-                            use_cache=True,
-                            num_beams=1,
-                            pad_token_id=self.processor.tokenizer.pad_token_id,
-                            eos_token_id=eos_token_id,
-                        )
-
-            # 解码
-            generated_ids_trimmed = [
-                out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-            ]
-
-            response = self.processor.batch_decode(
-                generated_ids_trimmed,
-                skip_special_tokens=True,
-                clean_up_tokenization_spaces=False
-            )[0]
+            generated_ids = self._model_generate_vision(inputs, gen_kwargs)
+            response = self._decode_output(inputs, generated_ids)
 
             # 清理
-            del inputs, generated_ids, generated_ids_trimmed
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            gc.collect()
+            self._cleanup_gpu(inputs, generated_ids)
 
             return response
 
@@ -371,37 +451,14 @@ class VisionModel:
         logger.info(f"识别图像: {Path(image_path).name}")
 
         try:
-            # 使用 Transformers 原生接口
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "image": image_path},
-                        {"type": "text", "text": prompt},
-                    ],
-                }
-            ]
-
-            # 使用 processor 的 apply_chat_template
-            inputs = self.processor.apply_chat_template(
-                messages,
-                tokenize=True,
-                add_generation_prompt=True,
-                return_dict=True,
-                return_tensors="pt"
-            )
-
-            if torch.cuda.is_available():
-                inputs = inputs.to("cuda")
+            messages = self._build_messages(prompt, image_path)
+            inputs = self._prepare_inputs(messages)
 
             # 生成并计算置信度
             response, confidence = self._generate_with_confidence(inputs)
 
             # 清理显存
-            del inputs
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            gc.collect()
+            self._cleanup_gpu(inputs)
 
             # 解析响应
             result = self._parse_image_response(response, image_path)
@@ -451,28 +508,8 @@ class VisionModel:
 
         for attempt in range(max_retries):
             try:
-                # 使用 Transformers 原生接口
-                messages = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "image", "image": uml_path},
-                            {"type": "text", "text": prompt},
-                        ],
-                    }
-                ]
-
-                # 使用 processor 的 apply_chat_template
-                inputs = self.processor.apply_chat_template(
-                    messages,
-                    tokenize=True,
-                    add_generation_prompt=True,
-                    return_dict=True,
-                    return_tensors="pt"
-                )
-
-                if torch.cuda.is_available():
-                    inputs = inputs.to("cuda")
+                messages = self._build_messages(prompt, uml_path)
+                inputs = self._prepare_inputs(messages)
 
                 # 根据配置选择生成模式
                 if use_streaming:
@@ -481,10 +518,7 @@ class VisionModel:
                     response = self._generate_standard(inputs, task_type='uml')
 
                 # 清理
-                del inputs
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                gc.collect()
+                self._cleanup_gpu(inputs)
 
                 # 解析
                 result = self._parse_uml_response(response, uml_path)
@@ -524,70 +558,24 @@ class VisionModel:
         """
         gen_config = self.uml_gen_config if task_type == 'uml' else self.image_gen_config
 
-        # 正确处理eos_token_id（可能是列表）
-        eos_token_id = self.processor.tokenizer.eos_token_id
-        if isinstance(eos_token_id, list):
-            logger.info(f"[标准生成] eos_token_id是列表: {eos_token_id}")
-        else:
-            logger.info(f"[标准生成] eos_token_id: {eos_token_id}")
-
         logger.info(f"[标准生成] pad_token_id: {self.processor.tokenizer.pad_token_id}")
         logger.info(f"[标准生成] 模型eval模式: {not self.model.training}")
         logger.info(f"[标准生成] 输入input_ids长度: {inputs.input_ids.shape[1]}")
         logger.info(f"[标准生成] max_new_tokens: {gen_config['max_new_tokens']}")
         logger.info(f"[标准生成] 使用量化: {self.use_quantization}")
 
-        with torch.no_grad():
-            # 重要：4bit量化时不使用autocast，避免精度冲突
-            if self.use_quantization:
-                logger.info("[标准生成] 4bit量化模式，不使用autocast")
-                logger.info("[标准生成] 开始调用model.generate()...")
-                generated_ids = self.model.generate(
-                    **inputs,
-                    max_new_tokens=gen_config['max_new_tokens'],
-                    min_new_tokens=1,
-                    temperature=gen_config['temperature'],
-                    do_sample=True,
-                    top_p=gen_config['top_p'],
-                    use_cache=gen_config['use_cache'],
-                    num_beams=1,
-                    pad_token_id=self.processor.tokenizer.pad_token_id,
-                    eos_token_id=eos_token_id,
-                )
-            else:
-                logger.info("[标准生成] FP16模式，使用autocast")
-                logger.info("[标准生成] 开始调用model.generate()...")
-                with torch.amp.autocast('cuda'):
-                    generated_ids = self.model.generate(
-                        **inputs,
-                        max_new_tokens=gen_config['max_new_tokens'],
-                        min_new_tokens=1,
-                        temperature=gen_config['temperature'],
-                        do_sample=True,
-                        top_p=gen_config['top_p'],
-                        use_cache=gen_config['use_cache'],
-                        num_beams=1,
-                        pad_token_id=self.processor.tokenizer.pad_token_id,
-                        eos_token_id=eos_token_id,
-                    )
-            logger.info("[标准生成] model.generate()调用完成")
+        gen_kwargs = self._build_gen_kwargs(gen_config)
+
+        logger.info("[标准生成] 开始调用model.generate()...")
+        generated_ids = self._model_generate_vision(inputs, gen_kwargs)
+        logger.info("[标准生成] model.generate()调用完成")
 
         logger.info(f"[标准生成] 生成完成，generated_ids shape: {generated_ids.shape}")
         logger.info(f"[标准生成] 输入长度: {inputs.input_ids.shape[1]}, 输出长度: {generated_ids.shape[1]}")
         logger.info(f"[标准生成] 新生成的token数: {generated_ids.shape[1] - inputs.input_ids.shape[1]}")
 
         # 解码
-        generated_ids_trimmed = [
-            out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-        ]
-
-        logger.info(f"[标准生成] 裁剪后的token数: {len(generated_ids_trimmed[0])}")
-
-        response = self.processor.batch_decode(
-            generated_ids_trimmed,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=False
-        )[0]
+        response = self._decode_output(inputs, generated_ids)
 
         logger.info(f"[标准生成] 解码完成，生成文本长度: {len(response)}")
         if len(response) > 0:
@@ -596,7 +584,7 @@ class VisionModel:
             logger.error("[标准生成] 生成的文本为空！")
 
         # 清理
-        del generated_ids, generated_ids_trimmed
+        del generated_ids
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
@@ -623,9 +611,6 @@ class VisionModel:
         # 用于捕获线程内异常
         thread_error = {'error': None}
 
-        # 正确处理eos_token_id（可能是列表）
-        eos_token_id = self.processor.tokenizer.eos_token_id
-
         try:
             # 创建流式输出器
             streamer = TextIteratorStreamer(
@@ -635,20 +620,9 @@ class VisionModel:
                 timeout=5.0
             )
 
-            # 构建生成参数
-            generation_kwargs = {
-                **inputs,
-                'max_new_tokens': gen_config['max_new_tokens'],
-                'min_new_tokens': 1,  # 确保至少生成1个token
-                'temperature': gen_config['temperature'],
-                'do_sample': True,
-                'top_p': gen_config['top_p'],
-                'use_cache': gen_config['use_cache'],
-                'num_beams': 1,
-                'pad_token_id': self.processor.tokenizer.pad_token_id,
-                'eos_token_id': eos_token_id,
-                'streamer': streamer,
-            }
+            # 构建生成参数（复用_build_gen_kwargs，添加streamer）
+            gen_kwargs = self._build_gen_kwargs(gen_config, extra_kwargs={'streamer': streamer})
+            generation_kwargs = {**inputs, **gen_kwargs}
 
             # 定义线程包装函数以捕获异常
             def generate_with_error_capture():
@@ -740,42 +714,12 @@ class VisionModel:
 
     def _generate_with_confidence(self, inputs) -> Tuple[str, float]:
         """生成文本并计算置信度（基于熵，使用动态配置）"""
-        # 正确处理eos_token_id
-        eos_token_id = self.processor.tokenizer.eos_token_id
+        gen_kwargs = self._build_gen_kwargs(
+            self.image_gen_config,
+            extra_kwargs={'return_dict_in_generate': True, 'output_scores': True}
+        )
 
-        with torch.no_grad():
-            # 重要：4bit量化时不使用autocast，避免精度冲突
-            if self.use_quantization:
-                outputs = self.model.generate(
-                    **inputs,
-                    max_new_tokens=self.image_gen_config['max_new_tokens'],
-                    min_new_tokens=1,
-                    temperature=self.image_gen_config['temperature'],
-                    do_sample=True,
-                    top_p=self.image_gen_config['top_p'],
-                    use_cache=self.image_gen_config['use_cache'],
-                    num_beams=1,
-                    return_dict_in_generate=True,
-                    output_scores=True,
-                    pad_token_id=self.processor.tokenizer.pad_token_id,
-                    eos_token_id=eos_token_id,
-                )
-            else:
-                with torch.cuda.amp.autocast():
-                    outputs = self.model.generate(
-                        **inputs,
-                        max_new_tokens=self.image_gen_config['max_new_tokens'],
-                        min_new_tokens=1,
-                        temperature=self.image_gen_config['temperature'],
-                        do_sample=True,
-                        top_p=self.image_gen_config['top_p'],
-                        use_cache=self.image_gen_config['use_cache'],
-                        num_beams=1,
-                        return_dict_in_generate=True,
-                        output_scores=True,
-                        pad_token_id=self.processor.tokenizer.pad_token_id,
-                        eos_token_id=eos_token_id,
-                    )
+        outputs = self._model_generate_vision(inputs, gen_kwargs)
 
         # 计算置信度
         scores = outputs.scores
@@ -791,32 +735,14 @@ class VisionModel:
         confidence = 1.0 - avg_entropy
 
         # 解码
-        generated_ids_trimmed = [
-            out_ids[len(in_ids):]
-            for in_ids, out_ids in zip(inputs.input_ids, outputs.sequences)
-        ]
-        response = self.processor.batch_decode(
-            generated_ids_trimmed,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=False
-        )[0]
+        response = self._decode_output(inputs, outputs.sequences)
 
         return response, float(confidence)
 
     def _parse_image_response(self, response: str, image_path: str) -> Dict:
         """解析图像识别响应"""
         try:
-            # 提取JSON
-            json_match = re.search(r'```json\s*(\{.*?\})\s*```', response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                json_match = re.search(r'\{.*\}', response, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(0)
-                else:
-                    json_str = response
-
+            json_str = self._extract_json(response) or response
             result = json.loads(json_str)
 
             # 确保必需字段
@@ -846,16 +772,7 @@ class VisionModel:
     def _parse_uml_response(self, response: str, uml_path: str) -> Dict:
         """解析UML识别响应"""
         try:
-            # 提取JSON
-            json_match = re.search(r'```json\s*(\{.*?\})\s*```', response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                json_match = re.search(r'\{.*\}', response, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(0)
-                else:
-                    json_str = response
+            json_str = self._extract_json(response) or response
 
             # 修复截断的JSON
             json_str = self._fix_truncated_json(json_str)
