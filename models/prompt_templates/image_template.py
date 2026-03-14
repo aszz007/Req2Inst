@@ -8,6 +8,11 @@
 import json
 from typing import Union
 
+from ._base import (
+    build_qwen_prompt, validate_three_part_format,
+    build_batch_prompts, process_json_input, compress_json,
+)
+
 
 class ImageInstructionTemplate:
     """图像描述 → 图像标注指令 的Prompt模板"""
@@ -71,51 +76,25 @@ CRITICAL RULES:
             str: 完整的prompt（Qwen对话格式）
 
         Example:
-            >>> # 方式1: 传入完整JSON字符串
             >>> json_str = '{"description": "A street scene", "details": {...}}'
             >>> prompt = ImageInstructionTemplate.build_prompt(json_str)
 
-            >>> # 方式2: 传入dict对象
             >>> data = {"description": "A street scene", "details": {...}}
             >>> prompt = ImageInstructionTemplate.build_prompt(data)
-
-            >>> # 方式3: 传入纯文本description
-            >>> desc = "A street scene with cars and pedestrians"
-            >>> prompt = ImageInstructionTemplate.build_prompt(desc)
         """
-        # 处理输入格式
-        if isinstance(image_description, dict):
-            # 过滤元数据字段（confidence、recognition_status、processing_time等）
-            filtered_data = {
-                k: v for k, v in image_description.items()
-                if k not in ['confidence', 'recognition_status', 'processing_time']
-            }
-            # 转为压缩JSON字符串（无空格、无换行）
-            json_str = json.dumps(filtered_data, ensure_ascii=False, separators=(',', ':'))
-        elif isinstance(image_description, str):
-            # 尝试解析为JSON
-            try:
-                parsed = json.loads(image_description)
-                # 过滤元数据字段
-                filtered_data = {
-                    k: v for k, v in parsed.items()
-                    if k not in ['confidence', 'recognition_status', 'processing_time']
+        # 处理输入格式（过滤元数据，压缩JSON）
+        json_str = process_json_input(image_description, filter_meta=True, filter_positions=False)
+
+        # 如果process_json_input返回的是非JSON纯文本，包装为标准结构
+        if not json_str.startswith('{'):
+            json_str = compress_json({
+                "description": json_str,
+                "details": {
+                    "objects": [],
+                    "scene": "unknown",
+                    "spatial_info": ""
                 }
-                # 转为压缩JSON字符串（无空格、无换行）
-                json_str = json.dumps(filtered_data, ensure_ascii=False, separators=(',', ':'))
-            except json.JSONDecodeError:
-                # 如果不是JSON，当作纯文本description处理
-                # 构建一个简单的JSON结构（压缩格式）
-                json_str = json.dumps({
-                    "description": image_description,
-                    "details": {
-                        "objects": [],
-                        "scene": "unknown",
-                        "spatial_info": ""
-                    }
-                }, ensure_ascii=False, separators=(',', ':'))
-        else:
-            raise TypeError("image_description必须是str或dict类型")
+            })
 
         # 构建用户消息
         user_message = f"""Image analysis structured data (JSON format):
@@ -125,19 +104,7 @@ CRITICAL RULES:
 
 {ImageInstructionTemplate.FORMAT_INSTRUCTIONS}"""
 
-        # 构建完整的Qwen格式prompt（assistant部分使用空think块禁用Qwen3思考模式）
-        prompt = f"""<|im_start|>system
-{ImageInstructionTemplate.SYSTEM_PROMPT}<|im_end|>
-<|im_start|>user
-{user_message}<|im_end|>
-<|im_start|>assistant
-<think>
-
-</think>
-
-"""
-
-        return prompt
+        return build_qwen_prompt(ImageInstructionTemplate.SYSTEM_PROMPT, user_message)
 
     @staticmethod
     def build_batch_prompt(image_descriptions: list) -> list:
@@ -150,10 +117,7 @@ CRITICAL RULES:
         Returns:
             list: prompt列表
         """
-        return [
-            ImageInstructionTemplate.build_prompt(desc)
-            for desc in image_descriptions
-        ]
+        return build_batch_prompts(image_descriptions, ImageInstructionTemplate.build_prompt)
 
     @staticmethod
     def extract_description_from_json(json_data: Union[str, dict]) -> str:
@@ -181,74 +145,19 @@ CRITICAL RULES:
         """
         验证生成的指令是否符合图像标注三段式格式
 
-        修复：检查结构而非仅关键词存在性
-
         Args:
             instruction: 生成的指令文本
 
         Returns:
             dict: 验证结果
         """
-        result = {
-            'is_valid': True,
-            'has_definition': False,
-            'has_bounding_boxes': False,
-            'has_emphasis': False,
-            'has_avoid': False,
-            'errors': []
-        }
-
-        # 按行分割
-        lines = [line.strip() for line in instruction.strip().split('\n') if line.strip()]
-
-        # 至少要有3行
-        if len(lines) < 3:
-            result['errors'].append(f'指令行数不足，期望至少3行，实际{len(lines)}行')
-            result['is_valid'] = False
-            return result
-
-        # 检查每一行的格式
-        for line in lines:
-            line_lower = line.lower()
-
-            # 检查Definition行
-            if line.startswith('Definition:'):
-                content = line[len('Definition:'):].strip()
-                if content:
-                    result['has_definition'] = True
-                    # 检查是否包含bounding box要求（图像标注的核心任务）
-                    if 'bounding box' in line_lower or 'draw box' in line_lower:
-                        result['has_bounding_boxes'] = True
-                else:
-                    result['errors'].append('Definition部分内容为空')
-
-            # 检查Emphasis & Caution行
-            elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
-                result['has_emphasis'] = True
-
-            # 检查Things to Avoid行
-            elif line.startswith('Things to Avoid:'):
-                result['has_avoid'] = True
-
-        # 检查缺失的部分
-        if not result['has_definition']:
-            result['errors'].append('缺少"Definition:"部分或格式错误')
-
-        if not result['has_bounding_boxes']:
-            result['errors'].append('Definition未明确要求画边框（draw bounding boxes）')
-
-        if not result['has_emphasis']:
-            result['errors'].append('缺少"Emphasis & Caution:"部分或格式错误')
-
-        if not result['has_avoid']:
-            result['errors'].append('缺少"Things to Avoid:"部分或格式错误')
-
-        # 综合判断
-        result['is_valid'] = all([
-            result['has_definition'],
-            result['has_bounding_boxes'],
-            result['has_emphasis'],
-            result['has_avoid']
-        ])
-
-        return result
+        extra_checks = [
+            {
+                'key': 'has_bounding_boxes',
+                'check_fn': lambda line, ll: 'bounding box' in ll or 'draw box' in ll,
+                'section': 'definition',
+                'error_msg': 'Definition未明确要求画边框（draw bounding boxes）',
+                'required': True,
+            }
+        ]
+        return validate_three_part_format(instruction, extra_checks=extra_checks)

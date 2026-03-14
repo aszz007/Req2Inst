@@ -8,6 +8,11 @@ UML业务逻辑指令生成Prompt模板
 import json
 from typing import Union
 
+from ._base import (
+    build_qwen_prompt, validate_three_part_format,
+    build_batch_prompts, process_json_input,
+)
+
 
 class UMLInstructionTemplate:
     """UML JSON → 业务逻辑实现指令 的Prompt模板"""
@@ -99,11 +104,9 @@ CRITICAL RULES:
             str: 完整的prompt（Qwen对话格式）
 
         Example:
-            >>> # 方式1: 传入JSON字符串
             >>> json_str = '{"actors": [...], "use_cases": [...], "relationships": [...]}'
             >>> prompt = UMLInstructionTemplate.build_prompt(json_str)
 
-            >>> # 方式2: 传入dict对象
             >>> uml_data = {
             ...     "actors": [{"name": "User", "position": "left"}],
             ...     "use_cases": [{"name": "Login", "description": "User login"}],
@@ -111,54 +114,11 @@ CRITICAL RULES:
             ... }
             >>> prompt = UMLInstructionTemplate.build_prompt(uml_data)
         """
-        # 处理输入格式
-        if isinstance(uml_json, dict):
-            # 过滤元数据字段和actor中的position字段
-            filtered_data = {
-                k: v for k, v in uml_json.items()
-                if k not in ['confidence', 'recognition_status', 'processing_time']
-            }
-            # 过滤actor中的position字段
-            if 'actors' in filtered_data and isinstance(filtered_data['actors'], list):
-                filtered_actors = []
-                for actor in filtered_data['actors']:
-                    if isinstance(actor, dict):
-                        # 移除position字段
-                        filtered_actor = {k: v for k, v in actor.items() if k != 'position'}
-                        filtered_actors.append(filtered_actor)
-                    else:
-                        filtered_actors.append(actor)
-                filtered_data['actors'] = filtered_actors
+        # 统一处理：过滤元数据 + 过滤actor position + 压缩JSON
+        json_str = process_json_input(uml_json, filter_meta=True, filter_positions=True)
 
-            # 转为压缩JSON字符串（无空格、无换行）
-            json_str = json.dumps(filtered_data, ensure_ascii=False, separators=(',', ':'))
-        elif isinstance(uml_json, str):
-            # 尝试解析为JSON以验证格式
-            try:
-                parsed = json.loads(uml_json)
-                # 过滤元数据字段和actor中的position字段
-                filtered_data = {
-                    k: v for k, v in parsed.items()
-                    if k not in ['confidence', 'recognition_status', 'processing_time']
-                }
-                # 过滤actor中的position字段
-                if 'actors' in filtered_data and isinstance(filtered_data['actors'], list):
-                    filtered_actors = []
-                    for actor in filtered_data['actors']:
-                        if isinstance(actor, dict):
-                            # 移除position字段
-                            filtered_actor = {k: v for k, v in actor.items() if k != 'position'}
-                            filtered_actors.append(filtered_actor)
-                        else:
-                            filtered_actors.append(actor)
-                    filtered_data['actors'] = filtered_actors
-
-                # 转为压缩JSON字符串（无空格、无换行）
-                json_str = json.dumps(filtered_data, ensure_ascii=False, separators=(',', ':'))
-            except json.JSONDecodeError:
-                # 如果不是有效JSON，直接使用
-                json_str = uml_json
-        else:
+        # 非JSON字符串直接使用
+        if not isinstance(uml_json, (str, dict)):
             raise TypeError("uml_json必须是str或dict类型")
 
         # 构建用户消息
@@ -169,19 +129,7 @@ CRITICAL RULES:
 
 {UMLInstructionTemplate.FORMAT_INSTRUCTIONS}"""
 
-        # 构建完整的Qwen格式prompt（assistant部分使用空think块禁用Qwen3思考模式）
-        prompt = f"""<|im_start|>system
-{UMLInstructionTemplate.SYSTEM_PROMPT}<|im_end|>
-<|im_start|>user
-{user_message}<|im_end|>
-<|im_start|>assistant
-<think>
-
-</think>
-
-"""
-
-        return prompt
+        return build_qwen_prompt(UMLInstructionTemplate.SYSTEM_PROMPT, user_message)
 
     @staticmethod
     def build_batch_prompt(uml_jsons: list) -> list:
@@ -194,10 +142,7 @@ CRITICAL RULES:
         Returns:
             list: prompt列表
         """
-        return [
-            UMLInstructionTemplate.build_prompt(uml)
-            for uml in uml_jsons
-        ]
+        return build_batch_prompts(uml_jsons, UMLInstructionTemplate.build_prompt)
 
     @staticmethod
     def extract_key_elements(uml_data: Union[str, dict]) -> dict:
@@ -209,13 +154,6 @@ CRITICAL RULES:
 
         Returns:
             dict: 提取的关键元素
-                {
-                    'actors': list,
-                    'use_cases': list,
-                    'include_relations': list,
-                    'extend_relations': list,
-                    'associations': list
-                }
         """
         if isinstance(uml_data, str):
             try:
@@ -249,12 +187,11 @@ CRITICAL RULES:
                 use_cases.append({'name': str(uc), 'description': ''})
 
         # 按类型分类relationships
-        relationships = data.get('relationships', [])
         include_relations = []
         extend_relations = []
         associations = []
 
-        for rel in relationships:
+        for rel in data.get('relationships', []):
             if isinstance(rel, dict):
                 rel_type = rel.get('type', '').lower()
                 relation_info = {
@@ -262,7 +199,6 @@ CRITICAL RULES:
                     'to': rel.get('to', ''),
                     'description': rel.get('description', '')
                 }
-
                 if 'include' in rel_type:
                     include_relations.append(relation_info)
                 elif 'extend' in rel_type:
@@ -283,81 +219,24 @@ CRITICAL RULES:
         """
         验证生成的指令是否符合UML业务逻辑三段式格式
 
-        修复：检查结构而非仅关键词存在性
-
         Args:
             instruction: 生成的指令文本
 
         Returns:
             dict: 验证结果
         """
-        result = {
-            'is_valid': True,
-            'has_definition': False,
-            'has_business_logic': False,
-            'has_emphasis': False,
-            'has_avoid': False,
-            'errors': []
-        }
-
-        # 按行分割
-        lines = [line.strip() for line in instruction.strip().split('\n') if line.strip()]
-
-        # 至少要有3行
-        if len(lines) < 3:
-            result['errors'].append(f'指令行数不足，期望至少3行，实际{len(lines)}行')
-            result['is_valid'] = False
-            return result
-
-        # 检查每一行的格式
-        for line in lines:
-            line_lower = line.lower()
-
-            # 检查Definition行
-            if line.startswith('Definition:'):
-                content = line[len('Definition:'):].strip()
-                if content:
-                    result['has_definition'] = True
-                    # 检查是否包含业务逻辑关键词（UML任务的核心）
-                    # 注意：使用子串匹配，需包含模型实际生成的动词变体
-                    # interact/interacts/interacting 均不含 interaction，需单独列出
-                    business_keywords = [
-                        'implement', 'functionality', 'workflow', 'process',
-                        'interaction', 'interact', 'trigger', 'system',
-                        'analyze', 'manage', 'execute', 'perform'
-                    ]
-                    if any(keyword in line_lower for keyword in business_keywords):
-                        result['has_business_logic'] = True
-                else:
-                    result['errors'].append('Definition部分内容为空')
-
-            # 检查Emphasis & Caution行
-            elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
-                result['has_emphasis'] = True
-
-            # 检查Things to Avoid行
-            elif line.startswith('Things to Avoid:'):
-                result['has_avoid'] = True
-
-        # 检查缺失的部分
-        if not result['has_definition']:
-            result['errors'].append('缺少"Definition:"部分或格式错误')
-
-        if not result['has_business_logic']:
-            result['errors'].append('Definition未体现业务逻辑实现要求')
-
-        if not result['has_emphasis']:
-            result['errors'].append('缺少"Emphasis & Caution:"部分或格式错误')
-
-        if not result['has_avoid']:
-            result['errors'].append('缺少"Things to Avoid:"部分或格式错误')
-
-        # 综合判断
-        result['is_valid'] = all([
-            result['has_definition'],
-            result['has_business_logic'],
-            result['has_emphasis'],
-            result['has_avoid']
-        ])
-
-        return result
+        business_keywords = [
+            'implement', 'functionality', 'workflow', 'process',
+            'interaction', 'interact', 'trigger', 'system',
+            'analyze', 'manage', 'execute', 'perform'
+        ]
+        extra_checks = [
+            {
+                'key': 'has_business_logic',
+                'check_fn': lambda line, ll: any(kw in ll for kw in business_keywords),
+                'section': 'definition',
+                'error_msg': 'Definition未体现业务逻辑实现要求',
+                'required': True,
+            }
+        ]
+        return validate_three_part_format(instruction, extra_checks=extra_checks)
