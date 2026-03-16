@@ -31,6 +31,16 @@ v13 (2026-03-16): 诊断版
   - D5: 按专家对分层 format_ok
   - 诊断结果保存到 exp10_advanced_routing/debug_ensemble_diagnostics.json
   - 不修改任何混合公式，仅添加观测代码
+
+v14 (2026-03-17): PoE log-linear interpolation
+  - 诊断结论: D2 Jaccard=0.19(真实融合组), 两专家top-10几乎不重叠
+    MoE线性混合产生双峰平坦分布, 贪婪argmax不稳定(质量门控缓存胜率64%)
+  - 修复: 将 4 处融合公式从 MoE 线性混合改为 PoE log-linear:
+    旧: fused_prob = w1*softmax(L1/T1) + w2*softmax(L2/T2)
+    新: fused_logits = w1*(L1/T1) + w2*(L2/T2)
+    PoE仅给两个专家都认可的token高分, 产生单峰锐利分布
+  - 修改位置: _process_minibatch prefill+decode, _logit_ensemble_generate prefill+decode
+  - 预期: A5裸跑ROUGE-L应超过0.5515 (Hard Routing基线)
 """
 
 import sys
@@ -2002,18 +2012,20 @@ def _process_minibatch(
     elif logits2_init is None:
         logits_fused = logits1_init
     else:
-        # ── MoE 概率空间混合 + 温度缩放（v5）────────────────────────────────
-        # 温度 T>1 拉平专家的概率分布，减少"过自信"专家的主导效应
-        # 温度 T=1 保持原始分布不变
-        prob1 = F.softmax(logits1_init / T1, dim=-1)   # (B, vocab)
-        prob2 = F.softmax(logits2_init / T2, dim=-1)   # (B, vocab)
-        fused_prob = w1_t * prob1 + w2_t * prob2   # (B, vocab)
-        # 转回 log 空间供 argmax（log 单调，argmax 等价）
-        logits_fused = torch.log(fused_prob + 1e-10)
+        # ── v14: PoE log-linear interpolation（替代 v5 MoE 线性混合）────────
+        # 诊断依据（v13 D2）：真实融合组 Jaccard=0.19，两专家 top-10 几乎不重叠。
+        # MoE 线性混合 w1*softmax(L1)+w2*softmax(L2) 产生双峰平坦分布，
+        # 贪婪 argmax 在双峰间不稳定（质量门控中缓存胜率64%）。
+        # PoE: fused ∝ p1^w1 * p2^w2 = softmax(w1*L1 + w2*L2)，
+        # 仅给两个专家都认可的 token 高分，产生单峰锐利分布，argmax 更稳定。
+        logits_fused = w1_t * (logits1_init / T1) + w2_t * (logits2_init / T2)
 
         # ── v13 诊断：prefill step 的分布指标 ──
         if _DEBUG_ENSEMBLE_STATS['enabled']:
             with torch.no_grad():
+                prob1 = F.softmax(logits1_init / T1, dim=-1)
+                prob2 = F.softmax(logits2_init / T2, dim=-1)
+                fused_prob = F.softmax(logits_fused, dim=-1)
                 h1 = _entropy(prob1).cpu().tolist()       # (B,)
                 h2 = _entropy(prob2).cpu().tolist()       # (B,)
                 hf = _entropy(fused_prob).cpu().tolist()   # (B,)
@@ -2087,15 +2099,15 @@ def _process_minibatch(
         elif logits2 is None:
             logits_fused = logits1
         else:
-            # MoE 概率空间混合 + 温度缩放（与 prefill 保持一致）
-            prob1 = F.softmax(logits1 / T1, dim=-1)
-            prob2 = F.softmax(logits2 / T2, dim=-1)
-            fused_prob = w1_t * prob1 + w2_t * prob2
-            logits_fused = torch.log(fused_prob + 1e-10)   # (B, vocab)
+            # v14: PoE log-linear interpolation（与 prefill 保持一致）
+            logits_fused = w1_t * (logits1 / T1) + w2_t * (logits2 / T2)
 
             # ── v13 诊断：decode 每8步采样一次（控制开销） ──
             if _DEBUG_ENSEMBLE_STATS['enabled'] and (decode_step % 8 == 0):
                 with torch.no_grad():
+                    prob1 = F.softmax(logits1 / T1, dim=-1)
+                    prob2 = F.softmax(logits2 / T2, dim=-1)
+                    fused_prob = F.softmax(logits_fused, dim=-1)
                     h1 = _entropy(prob1).cpu().tolist()
                     h2 = _entropy(prob2).cpu().tolist()
                     hf = _entropy(fused_prob).cpu().tolist()
@@ -2280,11 +2292,8 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
         logits_fused_init = logits1_init
     else:
         import torch.nn.functional as F
-        # MoE 概率空间混合 + 温度缩放（v5）
-        prob1 = F.softmax(logits1_init / T1, dim=-1)
-        prob2 = F.softmax(logits2_init / T2, dim=-1)
-        fused_prob = w1 * prob1 + w2 * prob2
-        logits_fused_init = torch.log(fused_prob + 1e-10)
+        # v14: PoE log-linear interpolation（与 _process_minibatch 保持一致）
+        logits_fused_init = w1 * (logits1_init / T1) + w2 * (logits2_init / T2)
 
     next_token = logits_fused_init.argmax(dim=-1, keepdim=True)  # (1, 1)
     fused_tokens = []
@@ -2340,10 +2349,8 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
             logits_fused = logits1
         else:
             import torch.nn.functional as F
-            prob1 = F.softmax(logits1 / T1, dim=-1)
-            prob2 = F.softmax(logits2 / T2, dim=-1)
-            fused_prob = w1 * prob1 + w2 * prob2
-            logits_fused = torch.log(fused_prob + 1e-10)
+            # v14: PoE log-linear interpolation（与 _process_minibatch 保持一致）
+            logits_fused = w1 * (logits1 / T1) + w2 * (logits2 / T2)
 
         # EOS 长度惩罚
         eos_id = tokenizer.eos_token_id
