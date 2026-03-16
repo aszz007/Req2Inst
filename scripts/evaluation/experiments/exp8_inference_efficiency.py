@@ -13,6 +13,8 @@
   CPU基线:  bm25, lsa, template
   GPU方法:  zeroshot, lora_moe, lora_single, p_tuning, prompt_tuning, full_finetuning
 
+所有GPU方法统一使用FP16推理, 消除量化策略差异对延迟/显存对比的干扰。
+推荐在RTX 5090 (32GB VRAM) 上运行以确保FP16下所有方法均有充足显存。
 所有GPU方法统一使用text expert测试集, 确保公平对比。
 
 测试协议:
@@ -49,6 +51,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 import matplotlib
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
@@ -70,15 +73,15 @@ PLOTS_DIR = EXP_DIR / 'plots'
 # ---------------------------------------------------------------------------
 
 COLOR_MAP = {
-    'bm25':             '#4ECDC4',   # CPU基线 - 青色
-    'lsa':              '#45B7A0',   # CPU基线 - 深青色
-    'template':         '#36A882',   # CPU基线 - 绿青色
-    'zeroshot':         '#ff7f0e',   # GPU方法 - 橙色
-    'lora_moe':         '#1f77b4',   # LoRA-MoE (主方法) - 蓝色
-    'lora_single':      '#ff9933',   # GPU方法 - 深橙色
-    'p_tuning':         '#d62728',   # 软提示方法 - 红色
-    'prompt_tuning':    '#e74c3c',   # 软提示方法 - 浅红色
-    'full_finetuning':  '#9467bd',   # 全参数基线 - 紫色
+    'bm25': '#4ECDC4',  # CPU基线 - 青色
+    'lsa': '#45B7A0',  # CPU基线 - 深青色
+    'template': '#36A882',  # CPU基线 - 绿青色
+    'zeroshot': '#ff7f0e',  # GPU方法 - 橙色
+    'lora_moe': '#1f77b4',  # LoRA-MoE (主方法) - 蓝色
+    'lora_single': '#ff9933',  # GPU方法 - 深橙色
+    'p_tuning': '#d62728',  # 软提示方法 - 红色
+    'prompt_tuning': '#e74c3c',  # 软提示方法 - 浅红色
+    'full_finetuning': '#9467bd',  # 全参数基线 - 紫色
 }
 
 
@@ -86,31 +89,32 @@ def _get_method_color(method):
     """根据方法名返回统一配色, 未知方法返回灰色."""
     return COLOR_MAP.get(method, '#999999')
 
+
 # ---------------------------------------------------------------------------
 # 基准测试配置
 # ---------------------------------------------------------------------------
 
-N_WARMUP = 3          # 预热样本数 (丢弃, 稳定GPU时钟频率)
-N_LATENCY = 50        # 延迟测量样本数 (batch=1, 逐条推理)
-N_THROUGHPUT = 100     # 吞吐测量样本数 (按最优batch推理)
-N_LATENCY_TEST = 5    # --test-mode 覆盖值
+N_WARMUP = 3  # 预热样本数 (丢弃, 稳定GPU时钟频率)
+N_LATENCY = 50  # 延迟测量样本数 (batch=1, 逐条推理)
+N_THROUGHPUT = 100  # 吞吐测量样本数 (按最优batch推理)
+N_LATENCY_TEST = 5  # --test-mode 覆盖值
 N_THROUGHPUT_TEST = 10
 
-# 需要FP16推理的方法 (软提示嵌入在FP16/BF16下训练, 不兼容4bit量化)
-METHODS_REQUIRE_FP16 = {'p_tuning', 'prompt_tuning'}
+# 需要FP16推理的方法 —— 统一FP16策略: 所有GPU方法均使用FP16
+# (消除量化策略差异对延迟/显存对比的干扰, 推荐在RTX 5090 32GB VRAM上运行)
 
-# 各方法吞吐测量时的最优batch size
+# 各方法吞吐测量时的最优batch size (FP16, RTX 5090 32GB VRAM)
 # (CPU基线使用批量处理; P-Tuning/Prompt Tuning因位置敏感必须batch=1)
 THROUGHPUT_BATCH = {
     'bm25': 'bulk',
     'lsa': 'bulk',
     'template': 'bulk',
-    'zeroshot': 8,
-    'lora_moe': 16,
-    'lora_single': 16,
-    'p_tuning': 1,          # 必须为1 (位置敏感的软提示, padding导致嵌入对齐错位)
-    'prompt_tuning': 1,     # 必须为1
-    'full_finetuning': 8,   # 保守配置 (7类线性层adapter, 显存占用较高)
+    'zeroshot': 4,  # FP16基础模型, 显存占用较高
+    'lora_moe': 8,  # FP16 + LoRA adapter, 适中配置
+    'lora_single': 8,  # FP16 + LoRA adapter, 适中配置
+    'p_tuning': 1,  # 必须为1 (位置敏感的软提示, padding导致嵌入对齐错位)
+    'prompt_tuning': 1,  # 必须为1
+    'full_finetuning': 4,  # FP16 + 7类线性层adapter, 显存占用较高
 }
 
 METHOD_LABELS = {
@@ -138,6 +142,7 @@ METHOD_ORDER = [
 
 # 有序的方法列表, 与METHOD_ORDER保持一致
 ALL_METHODS = list(METHOD_ORDER)
+
 
 # ---------------------------------------------------------------------------
 # GPU 工具函数
@@ -207,11 +212,13 @@ def _disk_size_mb(method):
     """返回指定方法 (text expert) 的adapter/索引磁盘大小 (MB)."""
     try:
         ckpt_map = {
-            'lora_moe':        path_cfg.LORA_MOE_CKPTS.get('text'),
-            'lora_single':     getattr(path_cfg, 'LORA_SINGLE_CKPT', None),
-            'p_tuning':        path_cfg.PTUNING_CKPTS.get('text') if hasattr(path_cfg, 'PTUNING_CKPTS') else None,
-            'prompt_tuning':   path_cfg.PROMPT_TUNING_CKPTS.get('text') if hasattr(path_cfg, 'PROMPT_TUNING_CKPTS') else None,
-            'full_finetuning': path_cfg.FULL_FINETUNING_CKPTS.get('text') if hasattr(path_cfg, 'FULL_FINETUNING_CKPTS') else None,
+            'lora_moe': path_cfg.LORA_MOE_CKPTS.get('text'),
+            'lora_single': getattr(path_cfg, 'LORA_SINGLE_CKPT', None),
+            'p_tuning': path_cfg.PTUNING_CKPTS.get('text') if hasattr(path_cfg, 'PTUNING_CKPTS') else None,
+            'prompt_tuning': path_cfg.PROMPT_TUNING_CKPTS.get('text') if hasattr(path_cfg,
+                                                                                 'PROMPT_TUNING_CKPTS') else None,
+            'full_finetuning': path_cfg.FULL_FINETUNING_CKPTS.get('text') if hasattr(path_cfg,
+                                                                                     'FULL_FINETUNING_CKPTS') else None,
         }
         ckpt = ckpt_map.get(method)
         if ckpt is None:
@@ -298,19 +305,22 @@ def _infer_batch(gen_obj, inputs, method, batch_size):
 
 
 def _benchmark_gpu_method(method, test_inputs, n_warmup, n_latency, n_throughput):
-    """基准测试GPU方法 (zero-shot / LoRA变体 / P-tuning等)."""
+    """基准测试GPU方法 (zero-shot / LoRA变体 / P-tuning等).
+
+    所有GPU方法统一使用FP16推理, 确保公平对比。
+    """
     import torch
 
-    use_4bit = method not in METHODS_REQUIRE_FP16
-    batch_size = THROUGHPUT_BATCH.get(method, 8)
+    use_4bit = False  # 统一FP16策略: 所有GPU方法均不使用4bit量化
+    batch_size = THROUGHPUT_BATCH.get(method, 4)
 
     # --- 加载模型 ---
     if method == 'zeroshot':
         from src.baselines.zero_shot import ZeroShotGenerator
-        logger.info(f'  [DEBUG] 加载基础模型 (无adapter), use_4bit=True')
+        logger.info(f'  [DEBUG] 加载基础模型 (无adapter), use_4bit=False (统一FP16)')
         _clear_gpu()
         t0 = time.perf_counter()
-        gen = ZeroShotGenerator(use_4bit=True)
+        gen = ZeroShotGenerator(use_4bit=False)
         if not gen.load_model():
             logger.error(f'{method}: 模型加载失败')
             return None, None, None
@@ -319,10 +329,10 @@ def _benchmark_gpu_method(method, test_inputs, n_warmup, n_latency, n_throughput
         # 所有其他GPU方法使用Expert类
         from src.experts import TextExpert
         ckpt_map = {
-            'lora_moe':        lambda: str(path_cfg.LORA_MOE_CKPTS['text']),
-            'lora_single':     lambda: str(getattr(path_cfg, 'LORA_SINGLE_CKPT', '')),
-            'p_tuning':        lambda: str(getattr(path_cfg, 'PTUNING_CKPTS', {}).get('text', '')),
-            'prompt_tuning':   lambda: str(getattr(path_cfg, 'PROMPT_TUNING_CKPTS', {}).get('text', '')),
+            'lora_moe': lambda: str(path_cfg.LORA_MOE_CKPTS['text']),
+            'lora_single': lambda: str(getattr(path_cfg, 'LORA_SINGLE_CKPT', '')),
+            'p_tuning': lambda: str(getattr(path_cfg, 'PTUNING_CKPTS', {}).get('text', '')),
+            'prompt_tuning': lambda: str(getattr(path_cfg, 'PROMPT_TUNING_CKPTS', {}).get('text', '')),
             'full_finetuning': lambda: str(getattr(path_cfg, 'FULL_FINETUNING_CKPTS', {}).get('text', '')),
         }
         ckpt_path = ckpt_map[method]()
@@ -330,7 +340,7 @@ def _benchmark_gpu_method(method, test_inputs, n_warmup, n_latency, n_throughput
             logger.error(f'{method}: 检查点路径不存在或未配置: {ckpt_path}')
             return None, None, None
         logger.info(f'  [DEBUG] 检查点路径: {ckpt_path}')
-        logger.info(f'  [DEBUG] use_4bit={use_4bit}, throughput_batch_size={batch_size}')
+        logger.info(f'  [DEBUG] use_4bit={use_4bit} (统一FP16), throughput_batch_size={batch_size}')
         _clear_gpu()
         t0 = time.perf_counter()
         gen = TextExpert(lora_path=ckpt_path, use_4bit=use_4bit)
@@ -341,8 +351,7 @@ def _benchmark_gpu_method(method, test_inputs, n_warmup, n_latency, n_throughput
 
     # GPU显存快照
     logger.info(f'  [DEBUG] 模型加载后GPU显存: {_gpu_current_mb():.0f} MB (峰值: {_gpu_peak_mb():.0f} MB)')
-    effective_bs = 1 if method in METHODS_REQUIRE_FP16 else batch_size
-    logger.info(f'  [DEBUG] 吞吐测量batch_size: {effective_bs} (配置={batch_size}, FP16强制={"是" if method in METHODS_REQUIRE_FP16 else "否"})')
+    logger.info(f'  [DEBUG] 吞吐测量batch_size: {batch_size} (统一FP16推理)')
 
     # --- 预热 ---
     for inp in test_inputs[:n_warmup]:
@@ -371,13 +380,13 @@ def _benchmark_gpu_method(method, test_inputs, n_warmup, n_latency, n_throughput
         min_len = min(output_lengths)
         max_len = max(output_lengths)
         logger.info(f'  [DEBUG] 输出长度统计: 平均={avg_len:.0f}字符, '
-                     f'最短={min_len}, 最长={max_len}')
+                    f'最短={min_len}, 最长={max_len}')
 
     # --- 吞吐测量 ---
     batch_inputs = test_inputs[:n_throughput]
     _gpu_sync()
     t0 = time.perf_counter()
-    _infer_batch(gen, batch_inputs, method, effective_bs)
+    _infer_batch(gen, batch_inputs, method, batch_size)
     _gpu_sync()
     wall = time.perf_counter() - t0
     # 注意: GPU峰值显存由调用方 run() 在卸载前通过 _gpu_peak_mb() 读取
@@ -388,7 +397,7 @@ def _benchmark_gpu_method(method, test_inputs, n_warmup, n_latency, n_throughput
     throughput_info = {
         'n_samples': len(batch_inputs),
         'wall_time_s': round(wall, 4),
-        'batch_size': effective_bs,
+        'batch_size': batch_size,
         'samples_per_sec': round(len(batch_inputs) / max(wall, 1e-9), 2),
     }
     return load_time, latencies, throughput_info, output_lengths
@@ -531,17 +540,18 @@ def plot_gpu_memory_comparison(results_by_method, test_mode=False):
     legend_labels = []
     if 'lora_moe' in methods:
         legend_handles.append(plt.Rectangle((0, 0), 1, 1, color=COLOR_MAP['lora_moe']))
-        legend_labels.append('LoRA-MoE (4bit)')
-    other_4bit = {'zeroshot', 'lora_single', 'full_finetuning'}
-    if other_4bit & set(methods):
-        legend_handles.append(plt.Rectangle((0, 0), 1, 1, color=COLOR_MAP['lora_single']))
-        legend_labels.append('Other 4bit Methods')
+        legend_labels.append('LoRA-MoE')
     soft_prompt = {'p_tuning', 'prompt_tuning'}
     if soft_prompt & set(methods):
         legend_handles.append(plt.Rectangle((0, 0), 1, 1, color=COLOR_MAP['p_tuning']))
-        legend_labels.append('Soft-Prompt (FP16)')
+        legend_labels.append('Soft-Prompt Methods')
+    other_methods = {'zeroshot', 'lora_single', 'full_finetuning'}
+    if other_methods & set(methods):
+        legend_handles.append(plt.Rectangle((0, 0), 1, 1, color=COLOR_MAP['lora_single']))
+        legend_labels.append('Other Methods')
     if legend_handles:
-        ax.legend(handles=legend_handles, labels=legend_labels, fontsize=8)
+        ax.legend(handles=legend_handles, labels=legend_labels, fontsize=8,
+                  title='All GPU methods: FP16', title_fontsize=7)
     ax.grid(axis='x', alpha=0.3)
     ax.invert_yaxis()
     plt.tight_layout()
@@ -717,8 +727,10 @@ def generate_report(results, results_by_method, test_mode=False):
 
     # 结果汇总表
     lines.append('## 3. 结果汇总\n')
-    lines.append('| 方法 | 设备 | 量化 | 加载(s) | 延迟(ms) | P95(ms) | Min(ms) | Max(ms) | 吞吐(/s) | 显存(MB) | Adapter(MB) |')
-    lines.append('|------|------|------|---------|----------|---------|---------|---------|----------|----------|-------------|')
+    lines.append(
+        '| 方法 | 设备 | 量化 | 加载(s) | 延迟(ms) | P95(ms) | Min(ms) | Max(ms) | 吞吐(/s) | 显存(MB) | Adapter(MB) |')
+    lines.append(
+        '|------|------|------|---------|----------|---------|---------|---------|----------|----------|-------------|')
     for m in METHOD_ORDER:
         if m not in results_by_method:
             continue
@@ -880,8 +892,7 @@ def run(args):
                 'method': method,
                 'label': METHOD_LABELS.get(method, method),
                 'device': 'CPU' if method in CPU_METHODS else 'GPU',
-                'quantisation': 'N/A' if method in CPU_METHODS else
-                                ('FP16' if method in METHODS_REQUIRE_FP16 else '4bit'),
+                'quantisation': 'N/A' if method in CPU_METHODS else 'FP16',
                 'load_time_s': round(load_time, 3),
                 'latency_mean_ms': round(float(np.mean(latencies_arr)), 2),
                 'latency_median_ms': round(float(np.median(latencies_arr)), 2),
