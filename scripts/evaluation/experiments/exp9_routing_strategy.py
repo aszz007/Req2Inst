@@ -73,12 +73,8 @@ def _load_test_data(expert_type):
 
 
 def _is_full_run_cache(cache_dir, filename):
-    """检查缓存是否为完整运行（非test-mode）"""
-    cached = load_predictions_cache(cache_dir, filename)
-    if cached is None:
-        return False
-    n = cached.get('total_samples', 0)
-    return n > 15
+    """Delegate to shared utility."""
+    return _exp_utils.is_full_run_cache(cache_dir, filename)
 
 
 def _metrics_from_cache(cached, use_bertscore=True):

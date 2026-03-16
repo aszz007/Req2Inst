@@ -88,19 +88,8 @@ CONFIGS = [
 # =========================================================================
 
 def _is_full_run_cache(cache_dir, filename):
-    """Return True if a non-test-mode cache file exists for this config."""
-    import json as _json
-    filepath = Path(cache_dir) / filename
-    if not filepath.exists():
-        return False
-    try:
-        raw = _json.loads(filepath.read_text(encoding='utf-8'))
-        return not (
-            raw.get('test_mode', False)
-            or raw.get('metadata', {}).get('test_mode', False)
-        )
-    except Exception:
-        return False
+    """Delegate to shared utility."""
+    return _exp_utils.is_full_run_cache(cache_dir, filename)
 
 
 def _config_name(rank, alpha, dropout):

@@ -57,6 +57,8 @@ def _get_ckpt_path(method, fraction):
     if fraction == 1.00:
         if method == 'lora_moe':
             return path_cfg.LORA_MOE_CKPTS['text']
+        elif method == 'lora_single':
+            return path_cfg.LORA_SINGLE_CKPT
         elif method == 'full_finetuning':
             return path_cfg.FULL_FINETUNING_CKPTS['text']
     return path_cfg.CHECKPOINTS_DIR / f'exp5_{method}' / f'text_{tag}'
@@ -97,12 +99,28 @@ def train_for_fraction(method, fraction, train_data, args):
 
     trainer = None
     try:
-        if method in ('lora_moe', 'lora_single'):
+        if method == 'lora_moe':
             from src.training.lora_trainer import LoRATrainer
-            expert_type = 'text' if method == 'lora_moe' else 'general'
             trainer = LoRATrainer(
-                expert_type=expert_type,
+                expert_type='text',
                 output_dir=str(ckpt_path),
+                debug_samples=False
+            )
+            trainer.prepare_data()
+            trainer._raw_train_data = subset
+            trainer.train_dataset = subset
+            if not trainer.epochs_from_env:
+                trainer.train_cfg.num_epochs = trainer._get_num_epochs_from_data()
+            trainer.setup_model()
+            trainer.train()
+
+        elif method == 'lora_single':
+            from src.training.lora_trainer import LoRATrainer
+            trainer = LoRATrainer(
+                expert_type='general',
+                method_name='lora_single',
+                output_dir=str(ckpt_path),
+                use_domain_templates=True,
                 debug_samples=False
             )
             trainer.prepare_data()
