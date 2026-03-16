@@ -21,6 +21,16 @@ Phase 3: 对比分析与可视化（~15min，必做）
 
 Author: Claude
 Date: 2026-03-08
+
+v13 (2026-03-16): 诊断版
+  - 新增 --debug-ensemble 参数，激活 D1-D5 诊断指标收集
+  - D1: 分布熵对比 H(prob1) vs H(prob2) vs H(fused)
+  - D2: Top-10 token Jaccard 重叠率
+  - D3: 融合token与单专家token吻合率（post-hoc）
+  - D4: 按专家对分层 ROUGE-L
+  - D5: 按专家对分层 format_ok
+  - 诊断结果保存到 exp10_advanced_routing/debug_ensemble_diagnostics.json
+  - 不修改任何混合公式，仅添加观测代码
 """
 
 import sys
@@ -69,6 +79,51 @@ FEATURE_CACHE_DIR = CACHE_DIR / 'exp10_router_features'
 
 ALL_TYPES = ['text', 'image', 'uml', 'general']
 SPECIALIZED_TYPES = ['text', 'image', 'uml']
+
+# ─────────────────────────────────────────────
+# v13 诊断模式：模块级累加器
+# ─────────────────────────────────────────────
+# _process_minibatch 在 debug_ensemble 模式下向此 dict 追加每批次的诊断数据，
+# _run_output_ensemble 在所有批次完成后读取并保存。
+# 使用模块级变量而非修改函数签名，确保 exp11 等外部调用方无需改动。
+_DEBUG_ENSEMBLE_STATS = {
+    'enabled': False,
+    'per_step': [],       # 每步的 {entropy_1, entropy_2, entropy_fused, jaccard_top10}
+    'per_batch': [],      # 每批次的 {expert1, expert2, avg_entropy_ratio, avg_jaccard, ...}
+}
+
+
+def _reset_debug_stats():
+    """重置诊断累加器"""
+    _DEBUG_ENSEMBLE_STATS['per_step'] = []
+    _DEBUG_ENSEMBLE_STATS['per_batch'] = []
+
+
+def _entropy(prob_tensor):
+    """计算概率分布的熵 H = -sum(p * log(p))，单位 nats"""
+    import torch
+    # 避免 log(0)：仅在 p>0 的位置计算
+    log_p = torch.where(prob_tensor > 1e-10,
+                        torch.log(prob_tensor),
+                        torch.zeros_like(prob_tensor))
+    return -(prob_tensor * log_p).sum(dim=-1)  # (B,)
+
+
+def _jaccard_topk(prob1, prob2, k=10):
+    """计算 top-k token 的 Jaccard 相似度，返回 (B,) 张量"""
+    import torch
+    topk1 = prob1.topk(k, dim=-1).indices  # (B, k)
+    topk2 = prob2.topk(k, dim=-1).indices  # (B, k)
+    # 逐样本计算交集大小
+    B = prob1.shape[0]
+    jaccards = []
+    for b in range(B):
+        set1 = set(topk1[b].cpu().tolist())
+        set2 = set(topk2[b].cpu().tolist())
+        inter = len(set1 & set2)
+        union = len(set1 | set2)
+        jaccards.append(inter / union if union > 0 else 0.0)
+    return jaccards
 
 # ─────────────────────────────────────────────
 # 模板工厂（核心修复：避免 GeneralTemplate 一刀切导致专家混淆）
@@ -826,6 +881,12 @@ def _run_output_ensemble(router, features, general_test, args):
     top2_rate = float(need_ensemble / len(probs))
     logger.info(f"  需要双专家融合的样本数: {need_ensemble}/{len(probs)} ({top2_rate*100:.1f}%)")
 
+    # ── v13 诊断模式激活 ──
+    if hasattr(args, 'debug_ensemble') and args.debug_ensemble:
+        _reset_debug_stats()
+        _DEBUG_ENSEMBLE_STATS['enabled'] = True
+        logger.info("  [v13] 诊断模式已激活：将收集 D1-D5 指标")
+
     # 加载基础模型
     import torch
     from peft import PeftModel
@@ -1285,6 +1346,14 @@ def _run_output_ensemble(router, features, general_test, args):
             f"ROUGE-L={np.mean(scores):.4f}"
         )
 
+    # ── v13 诊断：汇总 D1-D5 并保存 JSON ───────────────────────────────────
+    if _DEBUG_ENSEMBLE_STATS['enabled']:
+        _run_diagnostic_analysis(
+            samples, ensemble_results, general_test,
+            preloaded_caches, pair_scores
+        )
+        _DEBUG_ENSEMBLE_STATS['enabled'] = False
+
     save_predictions_cache(
         samples, 'exp10_ensemble', 'general',
         {
@@ -1299,6 +1368,305 @@ def _run_output_ensemble(router, features, general_test, args):
     rougeL = _get_rougeL(m)
     logger.info(f"  Output Ensemble ROUGE-L: {rougeL:.4f}")
     return {'rougeL': rougeL, 'top2_rate': top2_rate, 'routing_stats': dict(routing_stats)}
+
+
+def _run_diagnostic_analysis(samples, ensemble_results, general_test,
+                             preloaded_caches, pair_scores):
+    """
+    v13 诊断分析：汇总 D1-D5 指标并保存到 JSON
+
+    D1: 分布熵对比 — H(fused) vs max(H1, H2)，验证假设A（分布稀释）
+    D2: Top-10 Jaccard — 两专家分布重叠度，验证假设A/E
+    D3: 融合token吻合率（post-hoc近似：通过ensemble输出与单专家缓存的文本重叠估算）
+    D4: 按专家对分层 ROUGE-L — 定位问题组
+    D5: 按专家对 format_ok — 区分格式崩坏 vs 语义退化
+    """
+    from collections import defaultdict
+    from rouge_score import rouge_scorer as rs_mod
+
+    logger.info("\n" + "=" * 60)
+    logger.info("[v13] 诊断分析 D1-D5")
+    logger.info("=" * 60)
+
+    diag = {
+        'version': 'v13',
+        'D1_entropy': {},
+        'D2_jaccard': {},
+        'D3_token_overlap': {},
+        'D4_per_pair_rougeL': {},
+        'D5_per_pair_format': {},
+        'raw_per_step': [],
+        'per_batch_summary': _DEBUG_ENSEMBLE_STATS.get('per_batch', []),
+    }
+
+    # ── D1 & D2：从 per_step 数据聚合 ──
+    step_data = _DEBUG_ENSEMBLE_STATS.get('per_step', [])
+    if step_data:
+        all_h1, all_h2, all_hf, all_jac = [], [], [], []
+        per_pair_entropy = defaultdict(lambda: {'h1': [], 'h2': [], 'hf': [], 'jac': []})
+
+        for sd in step_data:
+            pair_key = f"{sd['expert1']}+{sd['expert2']}"
+            for h1_val, h2_val, hf_val, jac_val in zip(
+                sd['entropy_prob1'], sd['entropy_prob2'],
+                sd['entropy_fused'], sd['jaccard_top10']
+            ):
+                all_h1.append(h1_val)
+                all_h2.append(h2_val)
+                all_hf.append(hf_val)
+                all_jac.append(jac_val)
+                per_pair_entropy[pair_key]['h1'].append(h1_val)
+                per_pair_entropy[pair_key]['h2'].append(h2_val)
+                per_pair_entropy[pair_key]['hf'].append(hf_val)
+                per_pair_entropy[pair_key]['jac'].append(jac_val)
+
+        # D1 全局汇总
+        avg_h1 = np.mean(all_h1) if all_h1 else 0
+        avg_h2 = np.mean(all_h2) if all_h2 else 0
+        avg_hf = np.mean(all_hf) if all_hf else 0
+        avg_max_h = np.mean([max(a, b) for a, b in zip(all_h1, all_h2)]) if all_h1 else 0
+        entropy_ratio = avg_hf / avg_max_h if avg_max_h > 0 else 0
+
+        diag['D1_entropy'] = {
+            'avg_H_prob1': round(float(avg_h1), 4),
+            'avg_H_prob2': round(float(avg_h2), 4),
+            'avg_H_fused': round(float(avg_hf), 4),
+            'avg_max_H_experts': round(float(avg_max_h), 4),
+            'entropy_ratio_fused_vs_max': round(float(entropy_ratio), 4),
+            'hypothesis_A_likely': entropy_ratio > 1.3,
+            'interpretation': (
+                f"H(fused)/max(H1,H2) = {entropy_ratio:.2f}. "
+                f"{'> 1.3 → 分布稀释严重，假设A成立' if entropy_ratio > 1.3 else '≤ 1.3 → 分布稀释不严重'}"
+            ),
+        }
+        logger.info(f"  [D1] H(prob1)={avg_h1:.3f}, H(prob2)={avg_h2:.3f}, H(fused)={avg_hf:.3f}")
+        logger.info(f"  [D1] 熵比 H(fused)/max(H1,H2) = {entropy_ratio:.3f} "
+                     f"{'→ 假设A成立！' if entropy_ratio > 1.3 else ''}")
+
+        # D1 per-pair
+        d1_per_pair = {}
+        for pair_key, vals in per_pair_entropy.items():
+            ph1 = np.mean(vals['h1'])
+            ph2 = np.mean(vals['h2'])
+            phf = np.mean(vals['hf'])
+            pmax = np.mean([max(a, b) for a, b in zip(vals['h1'], vals['h2'])])
+            pratio = phf / pmax if pmax > 0 else 0
+            d1_per_pair[pair_key] = {
+                'avg_H1': round(float(ph1), 4),
+                'avg_H2': round(float(ph2), 4),
+                'avg_Hf': round(float(phf), 4),
+                'ratio': round(float(pratio), 4),
+                'n_steps': len(vals['h1']),
+            }
+            logger.info(f"  [D1] {pair_key}: H1={ph1:.3f}, H2={ph2:.3f}, Hf={phf:.3f}, ratio={pratio:.3f}")
+        diag['D1_entropy']['per_pair'] = d1_per_pair
+
+        # D2 全局汇总
+        avg_jac = np.mean(all_jac) if all_jac else 0
+        diag['D2_jaccard'] = {
+            'avg_jaccard_top10': round(float(avg_jac), 4),
+            'hypothesis_AE_likely': avg_jac < 0.2,
+            'interpretation': (
+                f"avg Jaccard = {avg_jac:.3f}. "
+                f"{'< 0.2 → 两专家分布几乎不重叠，融合无意义' if avg_jac < 0.2 else '≥ 0.2 → 有一定重叠'}"
+            ),
+        }
+        logger.info(f"  [D2] avg Jaccard(top-10) = {avg_jac:.4f} "
+                     f"{'→ 极低重叠！' if avg_jac < 0.2 else ''}")
+
+        # D2 per-pair
+        d2_per_pair = {}
+        for pair_key, vals in per_pair_entropy.items():
+            pjac = np.mean(vals['jac'])
+            d2_per_pair[pair_key] = round(float(pjac), 4)
+            logger.info(f"  [D2] {pair_key}: Jaccard={pjac:.4f}")
+        diag['D2_jaccard']['per_pair'] = d2_per_pair
+
+        # 保留前100条原始 per_step 供深入分析
+        diag['raw_per_step'] = step_data[:100]
+
+    # ── D3: 融合token吻合率（post-hoc文本相似度近似） ──
+    # 无法回溯token级别比较，用 character n-gram 重叠近似
+    d3_data = defaultdict(lambda: {'overlap_e1': [], 'overlap_e2': []})
+    scorer = rs_mod.RougeScorer(['rouge1'], use_stemmer=False)
+
+    for s in samples:
+        idx = s.get('index', 0)
+        if idx not in ensemble_results:
+            continue  # 跳过缓存结果
+        fused_pred = s.get('prediction', '')
+        if not fused_pred:
+            continue
+        e1 = s.get('expert1', '')
+        e2 = s.get('expert2', '')
+        pair_key = f"{e1}+{e2}"
+
+        # 获取单专家缓存预测
+        e1_pred = ''
+        e1_cache = preloaded_caches.get(e1, [])
+        if idx < len(e1_cache):
+            e1_pred = e1_cache[idx].get('prediction', '')
+        e2_pred = ''
+        e2_cache = preloaded_caches.get(e2, [])
+        if idx < len(e2_cache):
+            e2_pred = e2_cache[idx].get('prediction', '')
+
+        if e1_pred:
+            try:
+                sc = scorer.score(e1_pred, fused_pred)['rouge1'].fmeasure
+                d3_data[pair_key]['overlap_e1'].append(sc)
+            except Exception:
+                pass
+        if e2_pred:
+            try:
+                sc = scorer.score(e2_pred, fused_pred)['rouge1'].fmeasure
+                d3_data[pair_key]['overlap_e2'].append(sc)
+            except Exception:
+                pass
+
+    d3_result = {}
+    for pair_key, vals in d3_data.items():
+        oe1 = np.mean(vals['overlap_e1']) if vals['overlap_e1'] else 0
+        oe2 = np.mean(vals['overlap_e2']) if vals['overlap_e2'] else 0
+        d3_result[pair_key] = {
+            'avg_overlap_with_e1': round(float(oe1), 4),
+            'avg_overlap_with_e2': round(float(oe2), 4),
+            'n_samples': len(vals['overlap_e1']),
+            'interpretation': (
+                'fusion≈e1' if oe1 > 0.7 and oe2 < 0.5 else
+                'fusion≈e2' if oe2 > 0.7 and oe1 < 0.5 else
+                'semantic_drift' if oe1 < 0.5 and oe2 < 0.5 else
+                'balanced_fusion'
+            ),
+        }
+        logger.info(f"  [D3] {pair_key}: overlap_e1={oe1:.3f}, overlap_e2={oe2:.3f} "
+                     f"→ {d3_result[pair_key]['interpretation']}")
+    diag['D3_token_overlap'] = d3_result
+
+    # ── D4: 按专家对分层 ROUGE-L（已有 pair_scores，补充单专家对比）──
+    d4_result = {}
+    _scorer_rl = rs_mod.RougeScorer(['rougeL'], use_stemmer=True)
+    for pair_key, fused_scores in pair_scores.items():
+        if not fused_scores:
+            continue
+        # 解析 pair_key = "e1+e2"
+        parts = pair_key.split('+')
+        if len(parts) != 2:
+            continue
+        e1_name, e2_name = parts
+
+        # 计算同组中 e1 单跑和 e2 单跑的 ROUGE-L
+        e1_solos, e2_solos = [], []
+        for s in samples:
+            if f"{s.get('expert1','')}+{s.get('expert2','')}" != pair_key:
+                continue
+            idx = s.get('index', 0)
+            ref = s.get('reference', '')
+            if not ref:
+                continue
+            e1_cache = preloaded_caches.get(e1_name, [])
+            if idx < len(e1_cache):
+                e1_p = e1_cache[idx].get('prediction', '')
+                if e1_p:
+                    try:
+                        e1_solos.append(_scorer_rl.score(ref, e1_p)['rougeL'].fmeasure)
+                    except Exception:
+                        pass
+            e2_cache = preloaded_caches.get(e2_name, [])
+            if idx < len(e2_cache):
+                e2_p = e2_cache[idx].get('prediction', '')
+                if e2_p:
+                    try:
+                        e2_solos.append(_scorer_rl.score(ref, e2_p)['rougeL'].fmeasure)
+                    except Exception:
+                        pass
+
+        fused_avg = np.mean(fused_scores)
+        e1_avg = np.mean(e1_solos) if e1_solos else 0
+        e2_avg = np.mean(e2_solos) if e2_solos else 0
+        best_solo = max(e1_avg, e2_avg)
+        delta = fused_avg - best_solo
+
+        d4_result[pair_key] = {
+            'fused_rougeL': round(float(fused_avg), 4),
+            'e1_solo_rougeL': round(float(e1_avg), 4),
+            'e2_solo_rougeL': round(float(e2_avg), 4),
+            'best_solo': round(float(best_solo), 4),
+            'delta_fused_vs_best_solo': round(float(delta), 4),
+            'n_samples': len(fused_scores),
+            'fusion_helps': delta > 0,
+        }
+        status = '✓ fusion helps' if delta > 0 else '✗ fusion hurts'
+        logger.info(
+            f"  [D4] {pair_key}: fused={fused_avg:.4f}, e1_solo={e1_avg:.4f}, "
+            f"e2_solo={e2_avg:.4f}, delta={delta:+.4f} {status}"
+        )
+    diag['D4_per_pair_rougeL'] = d4_result
+
+    # ── D5: 按专家对 format_ok ──
+    _FMT_KW = {'Definition', 'Emphasis', 'Things to Avoid',
+               'definition', 'emphasis', 'things to avoid'}
+    d5_data = defaultdict(lambda: {'total': 0, 'format_ok': 0})
+    for s in samples:
+        idx = s.get('index', 0)
+        if idx not in ensemble_results:
+            continue
+        pair_key = f"{s.get('expert1','')}+{s.get('expert2','')}"
+        pred = s.get('prediction', '')
+        d5_data[pair_key]['total'] += 1
+        if pred and any(kw in pred for kw in _FMT_KW):
+            d5_data[pair_key]['format_ok'] += 1
+
+    d5_result = {}
+    for pair_key, vals in d5_data.items():
+        rate = vals['format_ok'] / vals['total'] if vals['total'] > 0 else 0
+        d5_result[pair_key] = {
+            'total': vals['total'],
+            'format_ok': vals['format_ok'],
+            'format_ok_rate': round(float(rate), 4),
+        }
+        logger.info(f"  [D5] {pair_key}: format_ok={vals['format_ok']}/{vals['total']} ({rate*100:.1f}%)")
+    diag['D5_per_pair_format'] = d5_result
+
+    # ── 综合判断：哪个假设最可能 ──
+    conclusions = []
+    if diag['D1_entropy'].get('hypothesis_A_likely'):
+        conclusions.append("假设A(分布稀释)很可能成立 → 推荐方向A(PoE log-linear)")
+    if diag['D2_jaccard'].get('hypothesis_AE_likely'):
+        conclusions.append("假设A/E(专家分布不重叠)成立 → 推荐方向A或F(PoE/Reranking)")
+
+    # 检查 D4：多少组 fusion hurts
+    n_hurts = sum(1 for v in d4_result.values() if not v.get('fusion_helps', True))
+    n_total_pairs = len(d4_result)
+    if n_hurts > n_total_pairs * 0.5:
+        conclusions.append(
+            f"D4: {n_hurts}/{n_total_pairs} 组融合后更差 → 当前MoE混合公式确实有问题"
+        )
+
+    # 检查 D5：格式崩坏是否严重
+    low_format_pairs = [k for k, v in d5_result.items() if v['format_ok_rate'] < 0.5]
+    if low_format_pairs:
+        conclusions.append(
+            f"D5: {low_format_pairs} 组格式通过率<50% → 可能需要方向D(Constrained Decoding)"
+        )
+
+    diag['conclusions'] = conclusions
+    diag['recommended_next_version'] = (
+        'v14: PoE log-linear interpolation (方向A)' if any('方向A' in c for c in conclusions)
+        else 'v14: 置信度自适应融合 (方向B)' if conclusions
+        else 'v14: 需要更多样本运行完整诊断'
+    )
+
+    logger.info("\n  [v13] === 诊断结论 ===")
+    for c in conclusions:
+        logger.info(f"  → {c}")
+    logger.info(f"  推荐下一步: {diag['recommended_next_version']}")
+
+    # 保存诊断 JSON
+    diag_path = EXP_DIR / 'debug_ensemble_diagnostics.json'
+    with open(diag_path, 'w', encoding='utf-8') as f:
+        json.dump(diag, f, indent=2, ensure_ascii=False, default=str)
+    logger.info(f"  诊断结果已保存: {diag_path}")
 
 
 def _detect_template_from_prompt(prompt_str: str) -> str:
@@ -1643,6 +2011,19 @@ def _process_minibatch(
         # 转回 log 空间供 argmax（log 单调，argmax 等价）
         logits_fused = torch.log(fused_prob + 1e-10)
 
+        # ── v13 诊断：prefill step 的分布指标 ──
+        if _DEBUG_ENSEMBLE_STATS['enabled']:
+            with torch.no_grad():
+                h1 = _entropy(prob1).cpu().tolist()       # (B,)
+                h2 = _entropy(prob2).cpu().tolist()       # (B,)
+                hf = _entropy(fused_prob).cpu().tolist()   # (B,)
+                jac = _jaccard_topk(prob1, prob2, k=10)    # (B,)
+                _DEBUG_ENSEMBLE_STATS['per_step'].append({
+                    'step': 0, 'expert1': expert1, 'expert2': expert2,
+                    'entropy_prob1': h1, 'entropy_prob2': h2,
+                    'entropy_fused': hf, 'jaccard_top10': jac,
+                })
+
     next_tokens = logits_fused.argmax(dim=-1, keepdim=True)   # (B, 1)
 
     # ── 优化④：向量化 done 更新（无 Python for 循环、无 .item()）────────────
@@ -1712,6 +2093,19 @@ def _process_minibatch(
             fused_prob = w1_t * prob1 + w2_t * prob2
             logits_fused = torch.log(fused_prob + 1e-10)   # (B, vocab)
 
+            # ── v13 诊断：decode 每8步采样一次（控制开销） ──
+            if _DEBUG_ENSEMBLE_STATS['enabled'] and (decode_step % 8 == 0):
+                with torch.no_grad():
+                    h1 = _entropy(prob1).cpu().tolist()
+                    h2 = _entropy(prob2).cpu().tolist()
+                    hf = _entropy(fused_prob).cpu().tolist()
+                    jac = _jaccard_topk(prob1, prob2, k=10)
+                    _DEBUG_ENSEMBLE_STATS['per_step'].append({
+                        'step': decode_step + 1, 'expert1': expert1, 'expert2': expert2,
+                        'entropy_prob1': h1, 'entropy_prob2': h2,
+                        'entropy_fused': hf, 'jaccard_top10': jac,
+                    })
+
         # ── EOS 长度惩罚：超过 soft_limit 后逐步提升 EOS 概率 ────────────
         # 防止 UML 专家的长输出偏好通过 MoE 融合泄露，导致生成过长
         current_step = decode_step + 1  # +1 因为 prefill 已产出第一个 token
@@ -1762,6 +2156,17 @@ def _process_minibatch(
             f"empty={empty_cnt}, format_ok={format_ok}/{len(valid)}, "
             f"write_pos={write_pos}, max_new_tokens={max_new_tokens}"
         )
+
+        # ── v13 诊断：批次级汇总 ──
+        if _DEBUG_ENSEMBLE_STATS['enabled']:
+            _DEBUG_ENSEMBLE_STATS['per_batch'].append({
+                'expert1': expert1, 'expert2': expert2,
+                'batch_size': B,
+                'avg_pred_len': avg_len,
+                'format_ok_rate': format_ok / len(valid) if valid else 0.0,
+                'empty_count': empty_cnt,
+                'write_pos': write_pos,
+            })
 
     return results
 
@@ -2591,12 +2996,17 @@ def main():
                         help='快速测试：每个ensemble组仅采样N条（推荐5-8），'
                              '~3分钟完成，用于调参。设0或不设则全量运行。'
                              '用法: --phase 2 --force-regenerate --quick-ensemble 5')
+    parser.add_argument('--debug-ensemble', action='store_true',
+                        help='v13诊断模式：收集D1-D5诊断指标（分布熵、Jaccard重叠率、'
+                             'token吻合率等），结果保存到debug_ensemble_diagnostics.json。'
+                             '会略微降低推理速度（每步额外2次softmax+topk），'
+                             '建议配合 --quick-ensemble 8 使用。')
     args = parser.parse_args()
 
     logger.info("=" * 80)
     logger.info("实验10：高级路由策略 — 学习路由器 vs 输出集成")
     logger.info(f"开始时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info(f"参数: phase={args.phase}, all={args.all}, test_mode={args.test_mode}, quick_ensemble={args.quick_ensemble}")
+    logger.info(f"参数: phase={args.phase}, all={args.all}, test_mode={args.test_mode}, quick_ensemble={args.quick_ensemble}, debug_ensemble={args.debug_ensemble}")
     logger.info("=" * 80)
 
     # 加载Exp9结果（必须存在）
