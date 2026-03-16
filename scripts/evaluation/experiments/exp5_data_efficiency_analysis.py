@@ -32,7 +32,6 @@ from src.baselines.inference_utils import (
     compute_all_metrics, save_experiment_results,
 )
 from src.utils.logger import get_logger
-from . import _exp_utils
 
 logger = get_logger('experiments.exp5')
 
@@ -45,7 +44,19 @@ METHODS = ['lora_moe', 'lora_single', 'full_finetuning']
 
 
 def _is_full_run_cache(cache_dir, filename):
-    return _exp_utils.is_full_run_cache(cache_dir, filename)
+    """Return True if a non-test-mode cache file exists for this combination."""
+    import json as _json
+    filepath = Path(cache_dir) / filename
+    if not filepath.exists():
+        return False
+    try:
+        raw = _json.loads(filepath.read_text(encoding='utf-8'))
+        return not (
+            raw.get('test_mode', False)
+            or raw.get('metadata', {}).get('test_mode', False)
+        )
+    except Exception:
+        return False
 
 
 def _fraction_tag(fraction):
@@ -57,8 +68,6 @@ def _get_ckpt_path(method, fraction):
     if fraction == 1.00:
         if method == 'lora_moe':
             return path_cfg.LORA_MOE_CKPTS['text']
-        elif method == 'lora_single':
-            return path_cfg.LORA_SINGLE_CKPT
         elif method == 'full_finetuning':
             return path_cfg.FULL_FINETUNING_CKPTS['text']
     return path_cfg.CHECKPOINTS_DIR / f'exp5_{method}' / f'text_{tag}'
@@ -99,28 +108,12 @@ def train_for_fraction(method, fraction, train_data, args):
 
     trainer = None
     try:
-        if method == 'lora_moe':
+        if method in ('lora_moe', 'lora_single'):
             from src.training.lora_trainer import LoRATrainer
+            expert_type = 'text' if method == 'lora_moe' else 'general'
             trainer = LoRATrainer(
-                expert_type='text',
+                expert_type=expert_type,
                 output_dir=str(ckpt_path),
-                debug_samples=False
-            )
-            trainer.prepare_data()
-            trainer._raw_train_data = subset
-            trainer.train_dataset = subset
-            if not trainer.epochs_from_env:
-                trainer.train_cfg.num_epochs = trainer._get_num_epochs_from_data()
-            trainer.setup_model()
-            trainer.train()
-
-        elif method == 'lora_single':
-            from src.training.lora_trainer import LoRATrainer
-            trainer = LoRATrainer(
-                expert_type='general',
-                method_name='lora_single',
-                output_dir=str(ckpt_path),
-                use_domain_templates=True,
                 debug_samples=False
             )
             trainer.prepare_data()
@@ -196,7 +189,10 @@ def run_inference(method, fraction, test_data, args):
     finally:
         expert.unload_model()
 
-    samples = _exp_utils.make_samples(inputs, predictions, references)
+    samples = [
+        {'index': i, 'input': inp, 'prediction': pred, 'reference': ref}
+        for i, (inp, pred, ref) in enumerate(zip(inputs, predictions, references))
+    ]
     save_predictions_cache(
         samples, method, 'text',
         {'fraction': fraction, 'n_train': int(len(train_data_global) * fraction)},
@@ -344,11 +340,20 @@ def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description='Exp5: Data efficiency analysis')
-    _exp_utils.add_common_args(parser)
+    parser.add_argument('--force-regenerate', action='store_true')
     parser.add_argument('--force-retrain', action='store_true')
+    parser.add_argument('--from-cache', action='store_true')
+    parser.add_argument('--no-bertscore', action='store_true')
+    parser.add_argument('--test-mode', action='store_true')
+    parser.add_argument('--only-missing', action='store_true',
+                        help='Skip method/fraction combos that already have a full-run cache. '
+                             'Test-mode caches are treated as missing and re-run automatically.')
     parser.add_argument('--retrain-only', type=str, default=None,
                         help='Comma-separated list of method_fraction to force retrain, e.g. lora_moe_75pct,lora_single_50pct')
-    args = _exp_utils.finalize_args(parser.parse_args())
+    args = parser.parse_args()
+    if args.from_cache:
+        args.force_regenerate = False
+        args.force_retrain = False
     run(args)
 
 

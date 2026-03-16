@@ -404,7 +404,39 @@ class TextDatasetLoader:
             数据列表,每项包含input(Low_Requirements)和output(Instruction)
         """
         all_data = []
-        csv_files = list(Path(self.dataset_dir).glob("*.csv"))
+        dataset_path = Path(self.dataset_dir)
+
+        # ── 修复1: 目录不存在时给出清晰报错，而非静默返回空列表 ──
+        if not dataset_path.exists():
+            logger.error(f"数据集目录不存在: {dataset_path}")
+            logger.error(f"请确认 text_dataset.csv 已放置到该目录下")
+            logger.info(f"文本数据集总计: 0条")
+            return all_data
+
+        if not dataset_path.is_dir():
+            logger.error(f"路径不是目录: {dataset_path}")
+            logger.info(f"文本数据集总计: 0条")
+            return all_data
+
+        # ── 修复2: 大小写不敏感 + 递归搜索 ──
+        # Linux 文件系统大小写敏感，glob("*.csv") 不匹配 *.CSV / *.Csv
+        # rglob 同时搜索当前目录及所有子目录
+        csv_files = []
+        for pattern in ("*.csv", "*.CSV", "*.Csv"):
+            csv_files.extend(dataset_path.rglob(pattern))
+        # 去重（某些 FS 可能大小写重叠）
+        csv_files = list({f.resolve(): f for f in csv_files}.values())
+
+        # ── 修复3: 诊断日志，打印目录实际内容，便于排查 ──
+        if len(csv_files) == 0:
+            all_files = list(dataset_path.rglob("*"))
+            logger.warning(f"在 {dataset_path} 中未找到任何 CSV 文件")
+            if all_files:
+                logger.warning(f"目录中实际存在的文件({len(all_files)}个):")
+                for f in all_files[:20]:  # 最多打印20条
+                    logger.warning(f"  {f.relative_to(dataset_path)}")
+            else:
+                logger.warning(f"目录为空，请将 text_dataset.csv 放入: {dataset_path}")
 
         logger.info(f"找到{len(csv_files)}个CSV文件")
 

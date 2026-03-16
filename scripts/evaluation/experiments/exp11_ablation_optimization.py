@@ -11,8 +11,9 @@ Phase 2: Router优化实验（~30min）
   - 5组Router配置（B0~B4），探索提升分类准确率的方法
   - B0为当前Router基线，B1~B4为优化变体
 
-Phase 3: 可视化与汇总报告（~30min）
-  - 汇总Part A/B结果，生成6张可视化图表 + report.md
+Phase 3: 最优组合评估与可视化（~30min）
+  - 将最优Router接入完整v12 Ensemble
+  - 生成6张可视化图表 + report.md
 
 依赖：Exp10 phase1_results.json + phase2_results.json 必须已存在
 
@@ -846,13 +847,13 @@ def _calibrate_router(router, val_X, val_y):
 
 
 # ─────────────────────────────────────────────
-# Phase 3: 可视化与汇总报告
+# Phase 3: 最优组合评估 + 可视化
 # ─────────────────────────────────────────────
 
 def run_phase3(args, ablation_results=None, router_results=None):
-    """Phase 3: 汇总结果 + 6张可视化图表 + report.md"""
+    """Phase 3: 最优组合 + 6张可视化图表 + report.md"""
     logger.info("=" * 80)
-    logger.info("Phase 3: 可视化与汇总报告")
+    logger.info("Phase 3: 最优组合评估与可视化")
     logger.info("=" * 80)
 
     PLOT_DIR.mkdir(parents=True, exist_ok=True)

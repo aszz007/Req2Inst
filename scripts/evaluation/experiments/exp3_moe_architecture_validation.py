@@ -38,7 +38,6 @@ from src.baselines.inference_utils import (
     compute_all_metrics, save_experiment_results,
 )
 from src.utils.logger import get_logger
-from . import _exp_utils
 
 logger = get_logger('experiments.exp3')
 
@@ -50,11 +49,23 @@ SPECIALIZED_TYPES = ['text', 'image', 'uml']
 
 
 def _get_expert(expert_type, lora_path=None):
-    return _exp_utils.get_expert(expert_type, lora_path=lora_path, use_4bit=True)
+    from src.experts import TextExpert, ImageExpert, UMLExpert, GeneralExpert
+    cls = {'text': TextExpert, 'image': ImageExpert,
+           'uml': UMLExpert, 'general': GeneralExpert}[expert_type]
+    return cls(lora_path=lora_path, use_4bit=True)
 
 
 def _load_test_data(expert_type):
-    return _exp_utils.load_test_data(expert_type)
+    if expert_type == 'text':
+        data = TextDatasetLoader().load_csv_files()
+    elif expert_type == 'image':
+        data = ImageDatasetLoader().load_csv_file()
+    elif expert_type == 'uml':
+        data = UMLDatasetLoader().load_csv_file()
+    else:
+        data = GeneralDatasetLoader().load_all_data()
+    _, _, test_data = split_dataset_for_expert(data, expert_type)
+    return test_data
 
 
 def _run_or_load(cache_subdir, filename, run_fn, args):
@@ -81,7 +92,10 @@ def run_matched_expert(expert_type, test_data, args):
             preds = expert.batch_generate_instruction(inputs, batch_size=4)
         finally:
             expert.unload_model()
-        samples = _exp_utils.make_samples(inputs, preds, refs)
+        samples = [
+            {'index': i, 'input': inp, 'prediction': p, 'reference': r}
+            for i, (inp, p, r) in enumerate(zip(inputs, preds, refs))
+        ]
         save_predictions_cache(samples, 'lora_moe', expert_type, {}, cache_subdir, filename)
         return load_predictions_cache(cache_subdir, filename)
 
@@ -106,7 +120,10 @@ def run_cross_domain(expert_type, eval_domain, test_data, args):
             preds = [''] * len(inputs)
         finally:
             expert.unload_model()
-        samples = _exp_utils.make_samples(inputs, preds, refs)
+        samples = [
+            {'index': i, 'input': inp, 'prediction': p, 'reference': r}
+            for i, (inp, p, r) in enumerate(zip(inputs, preds, refs))
+        ]
         save_predictions_cache(
             samples, 'cross_domain', eval_domain,
             {'expert': expert_type, 'eval_domain': eval_domain},
@@ -145,7 +162,10 @@ def run_general_via_text_expert(test_data, args):
             preds = [''] * len(inputs)
         finally:
             expert.unload_model()
-        samples = _exp_utils.make_samples(inputs, preds, refs)
+        samples = [
+            {'index': i, 'input': inp, 'prediction': p, 'reference': r}
+            for i, (inp, p, r) in enumerate(zip(inputs, preds, refs))
+        ]
         save_predictions_cache(
             samples, 'moe3_general_via_text', 'general',
             {'expert': 'text', 'reason': 'MoE-3 degraded routing fallback'},
@@ -171,7 +191,10 @@ def run_single_model(expert_type, test_data, args):
             preds = expert.batch_generate_instruction(inputs, batch_size=4)
         finally:
             expert.unload_model()
-        samples = _exp_utils.make_samples(inputs, preds, refs)
+        samples = [
+            {'index': i, 'input': inp, 'prediction': p, 'reference': r}
+            for i, (inp, p, r) in enumerate(zip(inputs, preds, refs))
+        ]
         save_predictions_cache(samples, 'lora_single', expert_type, {}, cache_subdir, filename)
         return load_predictions_cache(cache_subdir, filename)
 
@@ -187,7 +210,19 @@ def _metrics_from_cache(cached):
 
 
 def _is_full_run_cache(cache_subdir, filename):
-    return _exp_utils.is_full_run_cache(cache_subdir, filename)
+    """Return True if a non-test-mode cache file exists for this combination."""
+    import json as _json
+    filepath = Path(cache_subdir) / filename
+    if not filepath.exists():
+        return False
+    try:
+        raw = _json.loads(filepath.read_text(encoding='utf-8'))
+        return not (
+            raw.get('test_mode', False)
+            or raw.get('metadata', {}).get('test_mode', False)
+        )
+    except Exception:
+        return False
 
 
 def plot_cross_domain_heatmap(cross_domain_rougeL, exp_dir):
@@ -453,8 +488,16 @@ def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description='Exp3: MoE architecture validation')
-    _exp_utils.add_common_args(parser)
-    args = _exp_utils.finalize_args(parser.parse_args())
+    parser.add_argument('--force-regenerate', action='store_true')
+    parser.add_argument('--from-cache', action='store_true')
+    parser.add_argument('--no-bertscore', action='store_true')
+    parser.add_argument('--test-mode', action='store_true')
+    parser.add_argument('--only-missing', action='store_true',
+                        help='Skip combinations that already have a full-run cache. '
+                             'Test-mode caches are treated as missing and re-run automatically.')
+    args = parser.parse_args()
+    if args.from_cache:
+        args.force_regenerate = False
     run(args)
 
 

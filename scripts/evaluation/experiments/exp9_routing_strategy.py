@@ -47,7 +47,6 @@ from src.baselines.inference_utils import (
     compute_all_metrics, save_experiment_results,
 )
 from src.utils.logger import get_logger
-from . import _exp_utils
 
 logger = get_logger('experiments.exp9')
 
@@ -64,17 +63,35 @@ SPECIALIZED_TYPES = ['text', 'image', 'uml']
 
 def _get_expert(expert_type, lora_path=None):
     """获取专家实例"""
-    return _exp_utils.get_expert(expert_type, lora_path=lora_path, use_4bit=True)
+    from src.experts import TextExpert, ImageExpert, UMLExpert, GeneralExpert
+    cls = {
+        'text': TextExpert, 'image': ImageExpert,
+        'uml': UMLExpert, 'general': GeneralExpert
+    }[expert_type]
+    return cls(lora_path=lora_path, use_4bit=True)
 
 
 def _load_test_data(expert_type):
     """加载指定类型的测试集"""
-    return _exp_utils.load_test_data(expert_type)
+    if expert_type == 'text':
+        data = TextDatasetLoader().load_csv_files()
+    elif expert_type == 'image':
+        data = ImageDatasetLoader().load_csv_file()
+    elif expert_type == 'uml':
+        data = UMLDatasetLoader().load_csv_file()
+    else:
+        data = GeneralDatasetLoader().load_all_data()
+    _, _, test_data = split_dataset_for_expert(data, expert_type)
+    return test_data
 
 
 def _is_full_run_cache(cache_dir, filename):
-    """Delegate to shared utility."""
-    return _exp_utils.is_full_run_cache(cache_dir, filename)
+    """检查缓存是否为完整运行（非test-mode）"""
+    cached = load_predictions_cache(cache_dir, filename)
+    if cached is None:
+        return False
+    n = cached.get('total_samples', 0)
+    return n > 15
 
 
 def _metrics_from_cache(cached, use_bertscore=True):

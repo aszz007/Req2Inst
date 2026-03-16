@@ -38,7 +38,6 @@ from src.baselines.inference_utils import (
     compute_all_metrics, save_experiment_results,
 )
 from src.utils.logger import get_logger
-from . import _exp_utils
 
 logger = get_logger('experiments.exp6')
 
@@ -58,7 +57,19 @@ SEED_MAP = {1: 42, 2: 43, 3: 44}
 
 
 def _is_full_run_cache(cache_dir, filename):
-    return _exp_utils.is_full_run_cache(cache_dir, filename)
+    """Return True if a non-test-mode cache file exists for this combination."""
+    import json as _json
+    filepath = Path(cache_dir) / filename
+    if not filepath.exists():
+        return False
+    try:
+        raw = _json.loads(filepath.read_text(encoding='utf-8'))
+        return not (
+            raw.get('test_mode', False)
+            or raw.get('metadata', {}).get('test_mode', False)
+        )
+    except Exception:
+        return False
 
 
 def _cache_filename(n_shots, run_id):
@@ -121,7 +132,10 @@ def run_few_shot(n_shots, run_id, train_data, test_data, generator, args):
         inputs, input_type='text', n_shots=n_shots, examples=examples
     )
 
-    samples = _exp_utils.make_samples(inputs, predictions, references)
+    samples = [
+        {'index': i, 'input': inp, 'prediction': pred, 'reference': ref}
+        for i, (inp, pred, ref) in enumerate(zip(inputs, predictions, references))
+    ]
     save_predictions_cache(
         samples, f'{n_shots}_shot', 'text',
         {'n_shots': n_shots, 'run_id': run_id, 'seed': seed},
@@ -156,7 +170,10 @@ def run_lora_moe(test_data, args):
     finally:
         expert.unload_model()
 
-    samples = _exp_utils.make_samples(inputs, predictions, references)
+    samples = [
+        {'index': i, 'input': inp, 'prediction': pred, 'reference': ref}
+        for i, (inp, pred, ref) in enumerate(zip(inputs, predictions, references))
+    ]
     save_predictions_cache(samples, 'lora_moe', 'text', {}, cache_subdir, filename)
     return load_predictions_cache(cache_subdir, filename)
 
@@ -348,8 +365,16 @@ def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description='Exp6: Few-shot vs fine-tuning')
-    _exp_utils.add_common_args(parser)
-    args = _exp_utils.finalize_args(parser.parse_args())
+    parser.add_argument('--force-regenerate', action='store_true')
+    parser.add_argument('--from-cache', action='store_true')
+    parser.add_argument('--no-bertscore', action='store_true')
+    parser.add_argument('--test-mode', action='store_true')
+    parser.add_argument('--only-missing', action='store_true',
+                        help='Skip shot/run combos that already have a full-run cache. '
+                             'Test-mode caches are treated as missing and re-run automatically.')
+    args = parser.parse_args()
+    if args.from_cache:
+        args.force_regenerate = False
     run(args)
 
 

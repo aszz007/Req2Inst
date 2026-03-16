@@ -31,7 +31,6 @@ from src.baselines.inference_utils import (
     compute_all_metrics, save_experiment_results,
 )
 from src.utils.logger import get_logger
-from . import _exp_utils
 
 logger = get_logger('experiments.exp4')
 
@@ -55,7 +54,19 @@ CONFIGS = [
 
 
 def _is_full_run_cache(cache_dir, filename):
-    return _exp_utils.is_full_run_cache(cache_dir, filename)
+    """Return True if a non-test-mode cache file exists for this combination."""
+    import json as _json
+    filepath = Path(cache_dir) / filename
+    if not filepath.exists():
+        return False
+    try:
+        raw = _json.loads(filepath.read_text(encoding='utf-8'))
+        return not (
+            raw.get('test_mode', False)
+            or raw.get('metadata', {}).get('test_mode', False)
+        )
+    except Exception:
+        return False
 
 
 def _config_name(rank, alpha, dropout):
@@ -135,7 +146,10 @@ def run_inference(rank, alpha, dropout, test_data, args):
     finally:
         expert.unload_model()
 
-    samples = _exp_utils.make_samples(inputs, predictions, references)
+    samples = [
+        {'index': i, 'input': inp, 'prediction': pred, 'reference': ref}
+        for i, (inp, pred, ref) in enumerate(zip(inputs, predictions, references))
+    ]
     save_predictions_cache(
         samples, 'lora_moe_exp4', 'text',
         {'rank': rank, 'alpha': alpha, 'dropout': dropout},
@@ -436,15 +450,25 @@ def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description='Exp4: LoRA hyperparameter optimization')
-    _exp_utils.add_common_args(parser)
+    parser.add_argument('--force-regenerate', action='store_true',
+                        help='Re-run inference even if cache exists')
     parser.add_argument('--force-retrain', action='store_true',
                         help='Re-train even if checkpoint exists')
+    parser.add_argument('--from-cache', action='store_true')
+    parser.add_argument('--no-bertscore', action='store_true')
+    parser.add_argument('--test-mode', action='store_true')
+    parser.add_argument('--only-missing', action='store_true',
+                        help='Skip configs that already have a full-run cache. '
+                             'Test-mode caches are treated as missing and re-run automatically.')
     parser.add_argument('--rerun-configs', type=str, default='',
                         help='Comma-separated list of config names to force re-run '
                              '(delete cache and re-run inference, e.g. '
                              '"text_r32_a64_d0.05,text_r16_a32_d0.0"). '
                              'Use --force-retrain together to also retrain from scratch.')
-    args = _exp_utils.finalize_args(parser.parse_args())
+    args = parser.parse_args()
+    if args.from_cache:
+        args.force_regenerate = False
+        args.force_retrain = False
     if args.rerun_configs:
         _delete_caches_for_rerun(args.rerun_configs)
     run(args)

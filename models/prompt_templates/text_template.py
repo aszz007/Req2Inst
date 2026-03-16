@@ -5,8 +5,6 @@
 输出：三段式众包指令（Definition / Emphasis & Caution / Things to Avoid）
 """
 
-from ._base import build_qwen_prompt, validate_three_part_format, build_batch_prompts
-
 
 class TextInstructionTemplate:
     """文本需求 → 众包指令 的Prompt模板"""
@@ -46,13 +44,27 @@ CRITICAL RULES:
         Example:
             >>> requirement = "测试系统的登录功能"
             >>> prompt = TextInstructionTemplate.build_prompt(requirement)
+            >>> # 传递给InstructionGenerator
         """
+        # 构建用户消息
         user_message = f"""Requirement text:
 {low_requirement}
 
 {TextInstructionTemplate.FORMAT_INSTRUCTIONS}"""
 
-        return build_qwen_prompt(TextInstructionTemplate.SYSTEM_PROMPT, user_message)
+        # 构建完整的Qwen格式prompt（assistant部分使用空think块禁用Qwen3思考模式）
+        prompt = f"""<|im_start|>system
+{TextInstructionTemplate.SYSTEM_PROMPT}<|im_end|>
+<|im_start|>user
+{user_message}<|im_end|>
+<|im_start|>assistant
+<think>
+
+</think>
+
+"""
+
+        return prompt
 
     @staticmethod
     def build_batch_prompt(low_requirements: list) -> list:
@@ -65,17 +77,81 @@ CRITICAL RULES:
         Returns:
             list: prompt列表
         """
-        return build_batch_prompts(low_requirements, TextInstructionTemplate.build_prompt)
+        return [
+            TextInstructionTemplate.build_prompt(req)
+            for req in low_requirements
+        ]
 
     @staticmethod
     def validate_instruction(instruction: str) -> dict:
         """
         验证生成的指令是否符合三段式格式
 
+        修复：检查结构而非仅关键词存在性
+
         Args:
             instruction: 生成的指令文本
 
         Returns:
             dict: 验证结果
+                {
+                    'is_valid': bool,
+                    'has_definition': bool,
+                    'has_emphasis': bool,
+                    'has_avoid': bool,
+                    'errors': list
+                }
         """
-        return validate_three_part_format(instruction)
+        result = {
+            'is_valid': True,
+            'has_definition': False,
+            'has_emphasis': False,
+            'has_avoid': False,
+            'errors': []
+        }
+
+        # 按行分割
+        lines = [line.strip() for line in instruction.strip().split('\n') if line.strip()]
+
+        # 至少要有3行
+        if len(lines) < 3:
+            result['errors'].append(f'指令行数不足，期望至少3行，实际{len(lines)}行')
+            result['is_valid'] = False
+            return result
+
+        # 检查每一行的格式
+        for i, line in enumerate(lines):
+            # 检查Definition行
+            if line.startswith('Definition:'):
+                content = line[len('Definition:'):].strip()
+                if content:
+                    result['has_definition'] = True
+                else:
+                    result['errors'].append('Definition部分内容为空')
+
+            # 检查Emphasis & Caution行
+            elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
+                result['has_emphasis'] = True
+
+            # 检查Things to Avoid行
+            elif line.startswith('Things to Avoid:'):
+                result['has_avoid'] = True
+
+        # 检查是否所有部分都存在
+        if not result['has_definition']:
+            result['errors'].append('缺少"Definition:"部分或格式错误')
+
+        if not result['has_emphasis']:
+            result['errors'].append('缺少"Emphasis & Caution:"部分或格式错误')
+
+        if not result['has_avoid']:
+            result['errors'].append('缺少"Things to Avoid:"部分或格式错误')
+
+        # 综合判断
+        result['is_valid'] = all([
+            result['has_definition'],
+            result['has_emphasis'],
+            result['has_avoid']
+        ])
+
+        return result

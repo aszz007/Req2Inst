@@ -10,11 +10,6 @@
 import json
 from typing import Union
 
-from ._base import (
-    build_qwen_prompt, validate_three_part_format,
-    build_batch_prompts, process_json_input,
-)
-
 
 class GeneralInstructionTemplate:
     """通用专家Prompt模板 - 自动检测输入类型并调用对应子模板"""
@@ -83,6 +78,7 @@ CRITICAL RULES:
                     return 'text'
 
         except (json.JSONDecodeError, TypeError):
+            # 不是JSON,当作纯文本
             pass
 
         # 默认当作文本需求
@@ -104,15 +100,63 @@ CRITICAL RULES:
             str: 完整的prompt(Qwen对话格式)
 
         Example:
+            >>> # 自动检测
             >>> prompt = GeneralInstructionTemplate.build_prompt("测试登录功能")
+            >>> # 强制指定类型
             >>> prompt = GeneralInstructionTemplate.build_prompt(image_json, force_type='image')
         """
         # 确定输入类型
-        input_type = force_type or GeneralInstructionTemplate.detect_input_type(input_data)
+        if force_type:
+            input_type = force_type
+        else:
+            input_type = GeneralInstructionTemplate.detect_input_type(input_data)
 
-        # 统一处理JSON输入：过滤元数据，UML类型额外过滤actor position
-        is_uml = (input_type == 'uml')
-        input_str = process_json_input(input_data, filter_meta=True, filter_positions=is_uml)
+        # 处理输入数据格式
+        if isinstance(input_data, dict):
+            # 如果是UML类型，过滤actor中的position字段
+            if input_type == 'uml' and 'actors' in input_data:
+                import copy
+                input_data_copy = copy.deepcopy(input_data)
+                if isinstance(input_data_copy['actors'], list):
+                    filtered_actors = []
+                    for actor in input_data_copy['actors']:
+                        if isinstance(actor, dict):
+                            # 移除position字段
+                            filtered_actor = {k: v for k, v in actor.items() if k != 'position'}
+                            filtered_actors.append(filtered_actor)
+                        else:
+                            filtered_actors.append(actor)
+                    input_data_copy['actors'] = filtered_actors
+                input_data = input_data_copy
+
+            # 转为压缩JSON字符串（无空格、无换行）
+            input_str = json.dumps(input_data, ensure_ascii=False, separators=(',', ':'))
+        elif isinstance(input_data, str):
+            try:
+                # 尝试解析并转为压缩JSON（无空格、无换行）
+                parsed = json.loads(input_data)
+                # 如果是UML类型，过滤actor中的position字段
+                if input_type == 'uml' and 'actors' in parsed:
+                    import copy
+                    parsed_copy = copy.deepcopy(parsed)
+                    if isinstance(parsed_copy['actors'], list):
+                        filtered_actors = []
+                        for actor in parsed_copy['actors']:
+                            if isinstance(actor, dict):
+                                # 移除position字段
+                                filtered_actor = {k: v for k, v in actor.items() if k != 'position'}
+                                filtered_actors.append(filtered_actor)
+                            else:
+                                filtered_actors.append(actor)
+                        parsed_copy['actors'] = filtered_actors
+                    parsed = parsed_copy
+
+                input_str = json.dumps(parsed, ensure_ascii=False, separators=(',', ':'))
+            except json.JSONDecodeError:
+                # 纯文本
+                input_str = input_data
+        else:
+            input_str = str(input_data)
 
         # 根据类型构建不同的用户消息
         if input_type == 'image':
@@ -141,7 +185,19 @@ Task: Generate a UML diagram analysis instruction for crowdsourcing workers.
 
 {GeneralInstructionTemplate.FORMAT_INSTRUCTIONS}"""
 
-        return build_qwen_prompt(GeneralInstructionTemplate.SYSTEM_PROMPT, user_message)
+        # 构建完整的Qwen格式prompt（assistant部分使用空think块禁用Qwen3思考模式）
+        prompt = f"""<|im_start|>system
+{GeneralInstructionTemplate.SYSTEM_PROMPT}<|im_end|>
+<|im_start|>user
+{user_message}<|im_end|>
+<|im_start|>assistant
+<think>
+
+</think>
+
+"""
+
+        return prompt
 
     @staticmethod
     def build_batch_prompt(input_data_list: list) -> list:
@@ -154,7 +210,10 @@ Task: Generate a UML diagram analysis instruction for crowdsourcing workers.
         Returns:
             list: prompt列表
         """
-        return build_batch_prompts(input_data_list, GeneralInstructionTemplate.build_prompt)
+        return [
+            GeneralInstructionTemplate.build_prompt(data)
+            for data in input_data_list
+        ]
 
     @staticmethod
     def validate_instruction(instruction: str) -> dict:
@@ -167,4 +226,56 @@ Task: Generate a UML diagram analysis instruction for crowdsourcing workers.
         Returns:
             dict: 验证结果
         """
-        return validate_three_part_format(instruction)
+        result = {
+            'is_valid': True,
+            'has_definition': False,
+            'has_emphasis': False,
+            'has_avoid': False,
+            'errors': []
+        }
+
+        # 按行分割
+        lines = [line.strip() for line in instruction.strip().split('\n') if line.strip()]
+
+        # 至少要有3行
+        if len(lines) < 3:
+            result['errors'].append(f'指令行数不足,期望至少3行,实际{len(lines)}行')
+            result['is_valid'] = False
+            return result
+
+        # 检查每一行的格式
+        for line in lines:
+            # 检查Definition行
+            if line.startswith('Definition:'):
+                content = line[len('Definition:'):].strip()
+                if content:
+                    result['has_definition'] = True
+                else:
+                    result['errors'].append('Definition部分内容为空')
+
+            # 检查Emphasis & Caution行
+            elif line.startswith('Emphasis & Caution:') or line.startswith('Emphasis and Caution:'):
+                result['has_emphasis'] = True
+
+            # 检查Things to Avoid行
+            elif line.startswith('Things to Avoid:'):
+                result['has_avoid'] = True
+
+        # 检查缺失的部分
+        if not result['has_definition']:
+            result['errors'].append('缺少"Definition:"部分或格式错误')
+
+        if not result['has_emphasis']:
+            result['errors'].append('缺少"Emphasis & Caution:"部分或格式错误')
+
+        if not result['has_avoid']:
+            result['errors'].append('缺少"Things to Avoid:"部分或格式错误')
+
+        # 综合判断
+        result['is_valid'] = all([
+            result['has_definition'],
+            result['has_emphasis'],
+            result['has_avoid']
+        ])
+
+        return result
