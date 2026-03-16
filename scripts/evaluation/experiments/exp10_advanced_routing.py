@@ -40,7 +40,18 @@ v14 (2026-03-17): PoE log-linear interpolation
     新: fused_logits = w1*(L1/T1) + w2*(L2/T2)
     PoE仅给两个专家都认可的token高分, 产生单峰锐利分布
   - 修改位置: _process_minibatch prefill+decode, _logit_ensemble_generate prefill+decode
-  - 预期: A5裸跑ROUGE-L应超过0.5515 (Hard Routing基线)
+  - 结果: 整体ROUGE-L=0.5920, 但质量门控缓存胜率升至73%(个体样本不一致)
+
+v15 (2026-03-17): PoE + confidence-adaptive weighting
+  - v14诊断: PoE组级正delta但个体样本缓存胜率73%, 根因是固定权重PoE中
+    低置信专家每步注入w2*L2噪声, 自回归累积后个体偏移
+  - 修复: 在PoE基础上叠加per-step置信度自适应权重:
+    adaptive_w1 = w1*max(prob1) / (w1*max(prob1) + w2*max(prob2))
+    fused_logits = adaptive_w1*(L1/T1) + adaptive_w2*(L2/T2)
+  - 效果: 当一方高置信另一方低置信时, 高置信方权重显著增加, 抑制噪声
+    当两方同时高置信 → 权重近似原始 → 保持PoE共识融合
+  - 修改位置: _process_minibatch prefill+decode, _logit_ensemble_generate prefill+decode
+  - 预期: 缓存胜率降至<50%, A5裸跑ROUGE-L超过0.5515
 """
 
 import sys
@@ -1791,7 +1802,7 @@ def _process_minibatch(
         双向OOD修正（_TEMPLATE_OOD_FACTORS['uml']=0.05，non-UML专家贡献降至~1%），
         max_new_tokens=450，soft_limit=70%（315 tokens），eos_boost_rate=0.08。
     非UML组：T=1.0，soft_limit=50%，eos_boost_rate=0.15（不变）。
-    MoE 概率空间加权 + 温度缩放 + EOS 长度惩罚。
+    v15 PoE + confidence-adaptive weighting + 温度缩放 + EOS 长度惩罚。
     """
     import torch
     import torch.nn.functional as F
@@ -2012,19 +2023,35 @@ def _process_minibatch(
     elif logits2_init is None:
         logits_fused = logits1_init
     else:
-        # ── v14: PoE log-linear interpolation（替代 v5 MoE 线性混合）────────
-        # 诊断依据（v13 D2）：真实融合组 Jaccard=0.19，两专家 top-10 几乎不重叠。
-        # MoE 线性混合 w1*softmax(L1)+w2*softmax(L2) 产生双峰平坦分布，
-        # 贪婪 argmax 在双峰间不稳定（质量门控中缓存胜率64%）。
-        # PoE: fused ∝ p1^w1 * p2^w2 = softmax(w1*L1 + w2*L2)，
-        # 仅给两个专家都认可的 token 高分，产生单峰锐利分布，argmax 更稳定。
-        logits_fused = w1_t * (logits1_init / T1) + w2_t * (logits2_init / T2)
+        # ── v15: PoE + confidence-adaptive weighting ─────────────────────────
+        # v14 诊断发现：PoE 在组级别产生正 delta（群体有效），但在样本级别
+        # 质量不一致（缓存胜率73%）。根因：逐步生成时，若 expert1 对某 token
+        # 高置信（如0.9）而 expert2 低置信（如0.05），固定权重 PoE 仍给 expert2
+        # 贡献 w2*L2 的噪声，累积后导致个体样本偏移。
+        #
+        # v15 修复：在 PoE 基础上，每步根据各专家的 max-probability 置信度
+        # 动态调整权重。高置信专家获得更大的实际权重，抑制低置信专家的噪声。
+        # 数学：adaptive_w1 = w1*conf1 / (w1*conf1 + w2*conf2)
+        #       fused_logits = adaptive_w1*(L1/T1) + adaptive_w2*(L2/T2)
+        # 当两专家同时高置信于同一 token → 权重保持近似原始 → 正常 PoE 融合
+        # 当一方高置信另一方低置信 → 高置信方权重显著增加 → 抑制噪声
+        scaled_L1 = logits1_init / T1
+        scaled_L2 = logits2_init / T2
+        prob1 = F.softmax(scaled_L1, dim=-1)
+        prob2 = F.softmax(scaled_L2, dim=-1)
+        conf1 = prob1.max(dim=-1, keepdim=True).values  # (B, 1)
+        conf2 = prob2.max(dim=-1, keepdim=True).values  # (B, 1)
+        # 置信度加权归一化
+        adaptive_w1 = w1_t * conf1
+        adaptive_w2 = w2_t * conf2
+        w_norm = adaptive_w1 + adaptive_w2 + 1e-8
+        adaptive_w1 = adaptive_w1 / w_norm
+        adaptive_w2 = adaptive_w2 / w_norm
+        logits_fused = adaptive_w1 * scaled_L1 + adaptive_w2 * scaled_L2
 
         # ── v13 诊断：prefill step 的分布指标 ──
         if _DEBUG_ENSEMBLE_STATS['enabled']:
             with torch.no_grad():
-                prob1 = F.softmax(logits1_init / T1, dim=-1)
-                prob2 = F.softmax(logits2_init / T2, dim=-1)
                 fused_prob = F.softmax(logits_fused, dim=-1)
                 h1 = _entropy(prob1).cpu().tolist()       # (B,)
                 h2 = _entropy(prob2).cpu().tolist()       # (B,)
@@ -2099,14 +2126,23 @@ def _process_minibatch(
         elif logits2 is None:
             logits_fused = logits1
         else:
-            # v14: PoE log-linear interpolation（与 prefill 保持一致）
-            logits_fused = w1_t * (logits1 / T1) + w2_t * (logits2 / T2)
+            # v15: PoE + confidence-adaptive weighting（与 prefill 保持一致）
+            scaled_L1 = logits1 / T1
+            scaled_L2 = logits2 / T2
+            prob1 = F.softmax(scaled_L1, dim=-1)
+            prob2 = F.softmax(scaled_L2, dim=-1)
+            conf1 = prob1.max(dim=-1, keepdim=True).values  # (B, 1)
+            conf2 = prob2.max(dim=-1, keepdim=True).values  # (B, 1)
+            adaptive_w1 = w1_t * conf1
+            adaptive_w2 = w2_t * conf2
+            w_norm = adaptive_w1 + adaptive_w2 + 1e-8
+            adaptive_w1 = adaptive_w1 / w_norm
+            adaptive_w2 = adaptive_w2 / w_norm
+            logits_fused = adaptive_w1 * scaled_L1 + adaptive_w2 * scaled_L2
 
             # ── v13 诊断：decode 每8步采样一次（控制开销） ──
             if _DEBUG_ENSEMBLE_STATS['enabled'] and (decode_step % 8 == 0):
                 with torch.no_grad():
-                    prob1 = F.softmax(logits1 / T1, dim=-1)
-                    prob2 = F.softmax(logits2 / T2, dim=-1)
                     fused_prob = F.softmax(logits_fused, dim=-1)
                     h1 = _entropy(prob1).cpu().tolist()
                     h2 = _entropy(prob2).cpu().tolist()
@@ -2119,7 +2155,7 @@ def _process_minibatch(
                     })
 
         # ── EOS 长度惩罚：超过 soft_limit 后逐步提升 EOS 概率 ────────────
-        # 防止 UML 专家的长输出偏好通过 MoE 融合泄露，导致生成过长
+        # 防止 UML 专家的长输出偏好通过融合泄露，导致生成过长
         current_step = decode_step + 1  # +1 因为 prefill 已产出第一个 token
         if current_step > _SOFT_LIMIT and eos_id is not None:
             boost = _EOS_BOOST_RATE * (current_step - _SOFT_LIMIT)
@@ -2186,8 +2222,8 @@ def _process_minibatch(
 def _logit_ensemble_generate(model_with_adapters, tokenizer,
                               prompt_str, expert1, expert2, w1, w2, args):
     """
-    单条双专家 MoE 概率空间加权混合（OOM 回退路径）
-    v11: 与 _process_minibatch 使用相同的双向对称OOD修正 + UML增强参数。
+    单条双专家 PoE confidence-adaptive 加权混合（OOM 回退路径）
+    v15: 与 _process_minibatch 使用相同的 confidence-adaptive PoE + 双向对称OOD修正 + UML增强参数。
     """
     import torch
     import torch.nn.functional as F
@@ -2292,8 +2328,19 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
         logits_fused_init = logits1_init
     else:
         import torch.nn.functional as F
-        # v14: PoE log-linear interpolation（与 _process_minibatch 保持一致）
-        logits_fused_init = w1 * (logits1_init / T1) + w2 * (logits2_init / T2)
+        # v15: PoE + confidence-adaptive weighting（与 _process_minibatch 保持一致）
+        scaled_L1 = logits1_init / T1
+        scaled_L2 = logits2_init / T2
+        prob1_init = F.softmax(scaled_L1, dim=-1)
+        prob2_init = F.softmax(scaled_L2, dim=-1)
+        conf1 = prob1_init.max(dim=-1, keepdim=True).values  # (1, 1)
+        conf2 = prob2_init.max(dim=-1, keepdim=True).values  # (1, 1)
+        adaptive_w1 = w1 * conf1
+        adaptive_w2 = w2 * conf2
+        w_norm = adaptive_w1 + adaptive_w2 + 1e-8
+        adaptive_w1 = adaptive_w1 / w_norm
+        adaptive_w2 = adaptive_w2 / w_norm
+        logits_fused_init = adaptive_w1 * scaled_L1 + adaptive_w2 * scaled_L2
 
     next_token = logits_fused_init.argmax(dim=-1, keepdim=True)  # (1, 1)
     fused_tokens = []
@@ -2340,7 +2387,7 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
                 logger.warning(f"  step={step} expert2={expert2} 推理失败: {e}")
                 past_kv2 = None
 
-        # ── MoE 概率空间混合，与 prefill 保持一致 ──
+        # ── PoE confidence-adaptive 混合，与 prefill 保持一致 ──
         if logits1 is None and logits2 is None:
             break
         elif logits1 is None:
@@ -2349,8 +2396,19 @@ def _logit_ensemble_generate(model_with_adapters, tokenizer,
             logits_fused = logits1
         else:
             import torch.nn.functional as F
-            # v14: PoE log-linear interpolation（与 _process_minibatch 保持一致）
-            logits_fused = w1 * (logits1 / T1) + w2 * (logits2 / T2)
+            # v15: PoE + confidence-adaptive weighting（与 _process_minibatch 保持一致）
+            scaled_L1 = logits1 / T1
+            scaled_L2 = logits2 / T2
+            prob1_step = F.softmax(scaled_L1, dim=-1)
+            prob2_step = F.softmax(scaled_L2, dim=-1)
+            conf1 = prob1_step.max(dim=-1, keepdim=True).values
+            conf2 = prob2_step.max(dim=-1, keepdim=True).values
+            adaptive_w1 = w1 * conf1
+            adaptive_w2 = w2 * conf2
+            w_norm = adaptive_w1 + adaptive_w2 + 1e-8
+            adaptive_w1 = adaptive_w1 / w_norm
+            adaptive_w2 = adaptive_w2 / w_norm
+            logits_fused = adaptive_w1 * scaled_L1 + adaptive_w2 * scaled_L2
 
         # EOS 长度惩罚
         eos_id = tokenizer.eos_token_id
