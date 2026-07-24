@@ -15,7 +15,7 @@ Phase 3: 贡献度分析 + 可视化（~15min，必做）
 
 输出: outputs/evaluations/experiments/exp9_routing_strategy/
 
-Author: Claude
+
 Date: 2026-03-04
 """
 

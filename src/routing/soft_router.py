@@ -9,7 +9,7 @@ Soft Router - 基于PEFT加权融合的软路由实现
 
 依赖：peft >= 0.6.0（add_weighted_adapter 支持）
 
-Author: Claude
+
 Date: 2026-03-04
 """
 
