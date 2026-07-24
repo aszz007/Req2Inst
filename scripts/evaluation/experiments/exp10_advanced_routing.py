@@ -19,7 +19,7 @@ Phase 3: 对比分析与可视化（~15min，必做）
 
 依赖：Exp9 phase1_results.json + phase2_results.json 必须已存在
 
-Author: Claude
+
 Date: 2026-03-08
 
 v13 (2026-03-16): 诊断版

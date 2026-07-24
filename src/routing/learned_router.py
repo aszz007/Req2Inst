@@ -22,7 +22,7 @@ Learned Router: 基于MLP分类器的数据驱动专家路由模块
 权重保存路径：
   - checkpoints/exp10_learned_router/router_mlp_best.pt
 
-Author: Claude
+
 Date: 2026-03-08
 """
 

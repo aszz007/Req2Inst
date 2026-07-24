@@ -7,7 +7,7 @@ MoE Expert Router - Simple Rule-based Routing with Parameterized Expert Selectio
 2. 支持通过参数指定专家变体(用于对比实验)
 3. 使用最优默认变体(对比实验后确定)
 
-Author: Claude
+
 Date: 2026-02-03
 """
 

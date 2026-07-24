@@ -17,7 +17,7 @@ Phase 3: 最优组合评估与可视化（~30min）
 
 依赖：Exp10 phase1_results.json + phase2_results.json 必须已存在
 
-Author: Claude
+
 Date: 2026-03-11
 """
 
