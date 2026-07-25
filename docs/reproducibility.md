@@ -6,15 +6,34 @@ The repository provides source code and a dependency specification. It does not 
 
 ## Environment
 
-Create an isolated Python environment and install the dependencies from the repository root:
+Create an isolated Python environment from the repository root:
 
 ```bash
 python -m venv .venv
+```
+
+Activate it with the command for your platform.
+
+Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Linux or macOS:
+
+```bash
+source .venv/bin/activate
+```
+
+Then install the dependencies:
+
+```bash
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-Activate the virtual environment using the command appropriate for your operating system and shell. If an accelerator-specific PyTorch build is required, install the build appropriate for that platform.
+If an accelerator-specific PyTorch build is required, install the build appropriate for that platform.
 
 The command-line entrypoints import the model runtime during startup. Their `--help` commands therefore require the runtime dependencies to be installed.
 

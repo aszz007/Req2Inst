@@ -67,10 +67,29 @@ The manuscript describes a multimodal requirement dataset assembled from the fol
 
 ## Installation
 
-Create and activate an isolated Python environment, then install the dependencies from the repository root:
+Create an isolated Python environment from the repository root:
 
 ```bash
 python -m venv .venv
+```
+
+Activate it with the command for your platform.
+
+Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Linux or macOS:
+
+```bash
+source .venv/bin/activate
+```
+
+Then install the dependencies:
+
+```bash
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
@@ -79,7 +98,7 @@ Use the PyTorch build appropriate for the target operating system and accelerato
 
 ## Usage
 
-The main entrypoint is `scripts/inference/generate_instructions.py`. After installing the dependencies, inspect its verified command-line interface with:
+The main entrypoint is `scripts/inference/generate_instructions.py`. After installing the dependencies, inspect its command-line interface with:
 
 ```bash
 python scripts/inference/generate_instructions.py --help
