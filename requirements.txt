@@ -1,0 +1,45 @@
+# Project dependency specification. This is not an exact environment lockfile.
+# Install the PyTorch build appropriate for the target platform and accelerator.
+
+# Core model stack
+torch==2.7.1
+torchvision==0.22.1
+torchaudio==2.7.1
+transformers==4.57.0
+peft>=0.10.0,<0.19
+accelerate>=0.26.0,<2
+bitsandbytes>=0.48.1,<0.50
+safetensors>=0.4.3,<1
+sentencepiece>=0.2.0,<1
+tiktoken==0.12.0
+einops==0.8.1
+transformers-stream-generator==0.0.5
+
+# Qwen vision preprocessing
+qwen-vl-utils==0.0.14
+pillow>=10.0,<13
+
+# Data processing and classical baselines
+pandas>=2.0,<3
+numpy>=1.26,<3
+scipy>=1.10,<2
+scikit-learn>=1.3,<2
+rank-bm25>=0.2.2,<1
+chardet>=5.0,<6
+
+# Evaluation
+evaluate>=0.4.0,<1
+datasets>=2.14,<5
+rouge-score>=0.1.2,<1
+bert-score>=0.3.13,<1
+nltk>=3.8,<4
+sacrebleu>=2.3,<3
+
+# Reporting and runtime utilities
+matplotlib>=3.7,<4
+seaborn>=0.13,<1
+tqdm>=4.66,<5
+psutil>=5.9,<8
+
+# Browser-assisted dataset construction scripts
+selenium>=4.15,<5
