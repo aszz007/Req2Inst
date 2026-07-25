@@ -54,3 +54,81 @@ The manuscript describes a multimodal requirement dataset assembled from the fol
 - **Design2Code:** 500 user-interface design screenshots representing software-related visual specifications.
 - **MS COCO:** 500 open-domain images representing general image-based crowdsourcing tasks.
 - **Roboflow:** 1,500 flowchart images representing procedural requirements, execution processes, and logical dependencies.
+
+## Repository layout
+
+- `config/`: runtime paths and model, training, and inference settings.
+- `models/`: language and vision model wrappers and prompt templates.
+- `scripts/inference/`: command-line entrypoints for instruction generation and input recognition.
+- `scripts/evaluation/`: metrics and experiment entrypoints.
+- `src/`: instruction generation, routing, training, baselines, preprocessing, and shared utilities.
+- `docs/`: reproducibility and local artifact guidance.
+- `requirements.txt`: project dependency specification; it is not an exact environment lock.
+
+## Installation
+
+Create and activate an isolated Python environment, then install the dependencies from the repository root:
+
+```bash
+python -m venv .venv
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Use the PyTorch build appropriate for the target operating system and accelerator. The repository does not provide model files or trained checkpoints.
+
+## Usage
+
+The main entrypoint is `scripts/inference/generate_instructions.py`. After installing the dependencies, inspect its verified command-line interface with:
+
+```bash
+python scripts/inference/generate_instructions.py --help
+```
+
+To process the default local input structure and write JSON output:
+
+```bash
+python scripts/inference/generate_instructions.py --input-dir inputs --output-format json
+```
+
+The auxiliary recognition entrypoint accepts a local image or diagram file or directory:
+
+```bash
+python scripts/inference/recognize_inputs.py --help
+python scripts/inference/recognize_inputs.py --input path/to/image.jpg --type image
+```
+
+These commands load the model runtime during startup. Actual inference requires compatible local models and any required local weights or checkpoints configured for the repository.
+
+## Local inputs
+
+The `inputs/` directory is local and ignored by Git. Use the following structure:
+
+```text
+inputs/
+  text/   # .txt requirement files
+  image/  # local .jpg or .png image requirements
+  uml/    # local .jpg or .png diagram requirements
+```
+
+If `inputs/` does not exist, the main entrypoint creates these subdirectories and asks the user to add files. Do not commit confidential, copyrighted, or otherwise non-redistributable inputs.
+
+## Data, models, and artifacts
+
+Datasets, base models, model weights, checkpoints, user inputs, generated outputs, logs, and inference caches are local resources and are not distributed with this repository. They remain subject to their respective licenses and usage terms.
+
+Generated files are written under `outputs/` and are ignored by Git. Cache-backed experiment modes require the corresponding predictions to be generated locally first. The repository does not claim that a source checkout alone provides a complete reproduction environment.
+
+See [Data and artifact policy](docs/data-and-artifacts.md) and [Reproducibility guidance](docs/reproducibility.md).
+
+## Documentation
+
+The documentation index is available at [docs/README.md](docs/README.md).
+
+## Citation
+
+Citation metadata is provided in [CITATION.cff](CITATION.cff). It identifies the manuscript as a preferred citation without asserting publication status or a DOI.
+
+## License
+
+Req2Inst source code is licensed under the [Apache License 2.0](LICENSE). Third-party dependencies, models, datasets, checkpoints, inputs, and generated artifacts remain subject to their own licenses and terms.
