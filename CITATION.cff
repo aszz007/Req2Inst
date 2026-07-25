@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use Req2Inst in your work, please cite the preferred citation below."
+title: Req2Inst
+type: software
+authors:
+  - family-names: Hong
+    given-names: Shuai
+  - family-names: He
+    given-names: Yilin
+  - family-names: Chen
+    given-names: Rong
+repository-code: "https://github.com/aszz007/Req2Inst"
+license: Apache-2.0
+preferred-citation:
+  type: article
+  title: "Req2Inst: Toward Task Instruction Generation for Crowdsourcing from Multimodal Software Requirements"
+  authors:
+    - family-names: Hong
+      given-names: Shuai
+    - family-names: He
+      given-names: Yilin
+    - family-names: Chen
+      given-names: Rong
